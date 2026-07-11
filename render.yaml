@@ -1,0 +1,39 @@
+# render.yaml - Despliegue en Render
+services:
+  # Backend FastAPI
+  - type: web
+    name: lilian-backend
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: cd apps/backend && pip install -r requirements.txt
+    startCommand: cd apps/backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /docs
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "https://lilian-frontend.onrender.com"
+      - key: LLM_PROVIDER
+        value: "minimax"
+
+  # Frontend Next.js
+  - type: web
+    name: lilian-frontend
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: cd apps/frontend && npm install && npm run build
+    startCommand: cd apps/frontend && npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: lilian-backend
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://lilian-backend.onrender.com"
