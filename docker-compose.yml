@@ -1,0 +1,58 @@
+services:
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: legal-ai-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    volumes:
+      - ./apps/backend:/app
+      - document_storage:/app/storage
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: legal-ai-frontend
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
+    command: npm run dev
+
+  worker:
+    build:
+      context: ./workers/document_processor
+      dockerfile: Dockerfile
+    container_name: legal-ai-worker
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    volumes:
+      - ./workers/document_processor:/app
+      - document_storage:/app/storage
+    command: python -m worker
+
+  redis:
+    image: redis:7-alpine
+    container_name: legal-ai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
+  document_storage:
