@@ -11,5 +11,6 @@ from app.models.chat import ChatSession, ChatMessage
 from app.models.template import Template, MatterNote, MatterStatusHistory
 from app.models.subscription import Subscription, UsageEvent, Plan
 from app.models.audit_log import AuditLog
+from app.models.client import Client
 
-__all__ = ["Organization", "User", "OrganizationMember", "Matter", "Document", "DocumentChunk", "LegalSource", "LegalSourceVersion", "AnalysisReport", "RiskItem", "ChatSession", "ChatMessage", "Template", "MatterNote", "MatterStatusHistory", "Subscription", "UsageEvent", "Plan", "AuditLog"]
+__all__ = ["Organization", "User", "OrganizationMember", "Matter", "Document", "DocumentChunk", "LegalSource", "LegalSourceVersion", "AnalysisReport", "RiskItem", "ChatSession", "ChatMessage", "Template", "MatterNote", "MatterStatusHistory", "Subscription", "UsageEvent", "Plan", "AuditLog", "Client"]

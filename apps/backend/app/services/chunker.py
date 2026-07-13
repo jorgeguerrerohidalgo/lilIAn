@@ -1,6 +1,8 @@
 from typing import List, Optional
 import re
 
+from app.models.legal_area import LegalArea
+
 
 def split_text_into_chunks(
     text: str,
@@ -79,7 +81,13 @@ def split_text_into_chunks(
     return chunks
 
 
-def create_chunks_for_document(document_id: int, extracted_text: str, organization_id: int, matter_id: int) -> List[dict]:
+def create_chunks_for_document(
+    document_id: int,
+    extracted_text: str,
+    organization_id: int,
+    matter_id: int,
+    legal_area: Optional[LegalArea] = None
+) -> List[dict]:
     raw_chunks = split_text_into_chunks(extracted_text)
 
     chunks = []
@@ -91,7 +99,8 @@ def create_chunks_for_document(document_id: int, extracted_text: str, organizati
             "content": raw_chunk["content"],
             "chunk_index": raw_chunk["chunk_index"],
             "page_number": raw_chunk["page_number"],
-            "section_title": raw_chunk.get("section_title")
+            "section_title": raw_chunk.get("section_title"),
+            "legal_area": legal_area
         })
 
     return chunks

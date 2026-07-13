@@ -6,6 +6,7 @@ from typing import List, Optional
 from app.core.database import get_db
 from app.models.chat import ChatSession, ChatMessage
 from app.models.matter import Matter
+from app.models.legal_area import LegalArea
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
 from app.api.deps.auth import get_current_user, require_organization
@@ -22,6 +23,7 @@ class CreateSessionRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     session_id: int
     message: str
+    legal_area_override: Optional[str] = None
 
 
 class ChatMessageResponse(BaseModel):
@@ -157,6 +159,18 @@ def send_message(
     if not session:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
 
+    # Obtener matter_type del caso
+    matter = db.query(Matter).filter(Matter.id == session.matter_id).first()
+    matter_type = matter.matter_type.value if matter and matter.matter_type else None
+
+    # Convertir legal_area_override de string a enum si viene
+    legal_area_override = None
+    if request.legal_area_override:
+        try:
+            legal_area_override = LegalArea(request.legal_area_override.lower())
+        except ValueError:
+            pass
+
     chat_service.save_chat_message(
         session_id=request.session_id,
         role="user",
@@ -167,7 +181,9 @@ def send_message(
         session_id=request.session_id,
         matter_id=session.matter_id,
         organization_id=membership.organization_id,
-        user_message=request.message
+        user_message=request.message,
+        matter_type=matter_type,
+        legal_area_override=legal_area_override
     )
 
     saved_message = chat_service.save_chat_message(
@@ -180,7 +196,7 @@ def send_message(
     return MessageResponse(
         content=response_content,
         session_id=request.session_id,
-        message_id=saved_message.id
+        message_id=saved_message["id"]
     )
 
 

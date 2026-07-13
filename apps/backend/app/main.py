@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import auth, organizations, matters, documents, search, analysis, chat, lawyer, templates, saas, admin
+from app.api.endpoints import auth, organizations, matters, documents, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas
 
 app = FastAPI(
     title="lilIAn - API",
@@ -31,6 +31,8 @@ app.include_router(lawyer.router, prefix="/api/v1")
 app.include_router(templates.router, prefix="/api/v1")
 app.include_router(saas.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(clients.router, prefix="/api/v1")
+app.include_router(legal_areas.router, prefix="/api/v1")
 
 
 @app.get("/")
