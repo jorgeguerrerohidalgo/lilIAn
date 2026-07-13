@@ -45,3 +45,6 @@ coverage/
 # Misc
 *.bak
 *.tmp
+.env
+.env.backup
+apps/backend/laws/*.pdf
