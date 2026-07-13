@@ -14,7 +14,7 @@ class MatterBase(BaseModel):
 
 
 class MatterCreate(MatterBase):
-    organization_id: int
+    organization_id: Optional[int] = None
 
 
 class MatterUpdate(BaseModel):

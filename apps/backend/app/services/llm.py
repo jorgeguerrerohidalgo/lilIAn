@@ -150,10 +150,10 @@ class OpenAILLM(LLMProvider):
 
 
 class MiniMaxLLM(LLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "MiniMax-Text-01"):
-        self.api_key = api_key or os.environ.get("MINIMAX_API_KEY")
+    def __init__(self, api_key: Optional[str] = None, model: str = "abab6-chat"):
+        self.api_key = api_key or os.environ.get("LLM_API_KEY")
         self.model = model
-        self.base_url = "https://api.minimax.chat/v1"
+        self.base_url = "https://api.minimax.chat/v1/text"
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
         messages = []
@@ -170,7 +170,7 @@ class MiniMaxLLM(LLMProvider):
 
         with httpx.Client() as client:
             response = client.post(
-                f"{self.base_url}/chat_completions",
+                f"{self.base_url}/chatcompletion_v2",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"

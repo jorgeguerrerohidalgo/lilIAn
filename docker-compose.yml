@@ -10,6 +10,7 @@ services:
       - "8000:8000"
     depends_on:
       - redis
+      - db
     volumes:
       - ./apps/backend:/app
       - document_storage:/app/storage
@@ -33,17 +34,16 @@ services:
 
   worker:
     build:
-      context: ./workers/document_processor
-      dockerfile: Dockerfile
+      context: ./apps/backend
+      dockerfile: Dockerfile.worker
     container_name: legal-ai-worker
     env_file:
       - .env
     depends_on:
       - redis
     volumes:
-      - ./workers/document_processor:/app
       - document_storage:/app/storage
-    command: python -m worker
+    command: python workers/document_processor/doc_worker.py
 
   redis:
     image: redis:7-alpine
@@ -53,6 +53,19 @@ services:
     volumes:
       - redis_data:/data
 
+  db:
+    image: postgres:15-alpine
+    container_name: legal-ai-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lilian
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
   redis_data:
   document_storage:
+  postgres_data:

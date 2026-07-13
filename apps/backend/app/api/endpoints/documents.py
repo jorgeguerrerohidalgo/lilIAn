@@ -84,7 +84,7 @@ async def upload_document(
 
     try:
         document_queue.enqueue(
-            "app.services.document_processor.process_document",
+            "workers.document_processor.doc_worker.process_document",
             document.id,
             job_timeout="10m"
         )
@@ -149,6 +149,12 @@ def delete_document(
 
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    # Eliminar chunks asociados primero
+    from app.models.document_chunk import DocumentChunk
+    db.query(DocumentChunk).filter(
+        DocumentChunk.document_id == document_id
+    ).delete()
 
     if document.storage_path:
         storage.delete_file(document.storage_path)

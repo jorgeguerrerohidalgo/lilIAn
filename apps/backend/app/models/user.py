@@ -25,4 +25,5 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=True)
 
     memberships = relationship("OrganizationMember", back_populates="user")
-    matters = relationship("Matter", back_populates="created_by")
+    matters = relationship("Matter", back_populates="created_by", foreign_keys="Matter.created_by_user_id")
+    clients = relationship("Client", back_populates="created_by")

@@ -43,6 +43,7 @@ class Matter(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     assigned_lawyer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)  # Cliente asociado
     title = Column(String(500), nullable=False)
     matter_type = Column(Enum(MatterType), default=MatterType.OTHER)
     description = Column(Text, nullable=True)
@@ -57,3 +58,4 @@ class Matter(Base):
 
     organization = relationship("Organization", back_populates="matters")
     created_by = relationship("User", back_populates="matters", foreign_keys=[created_by_user_id])
+    client = relationship("Client", back_populates="matters")
