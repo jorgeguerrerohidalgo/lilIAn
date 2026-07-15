@@ -42,7 +42,47 @@ def extract_text_from_pdf(file_path: str) -> str:
         doc.close()
     except Exception:
         return ""
-    return f"--- PDF ({page_count} páginas) ---\n\n" + "\n\n".join(text_parts)
+
+    full_text = "\n\n".join(text_parts)
+
+    # Si no se extrajo texto o es muy poco, usar OCR
+    if len(full_text.strip()) < 100:
+        ocr_text = extract_text_from_pdf_ocr(file_path)
+        if ocr_text:
+            return f"--- PDF ({page_count} páginas - OCR) ---\n\n{ocr_text}"
+
+    return f"--- PDF ({page_count} páginas) ---\n\n{full_text}"
+
+
+def extract_text_from_pdf_ocr(file_path: str) -> str:
+    """Extrae texto de PDFs escaneados usando Tesseract OCR"""
+    try:
+        import pytesseract
+        from PIL import Image
+        import fitz
+
+        doc = fitz.open(file_path)
+        text_parts = []
+
+        for page_num, page in enumerate(doc):
+            # Convertir página a imagen
+            pix = page.get_pixmap(dpi=200)
+            img_data = pix.tobytes("png")
+
+            # Abrir como imagen PIL
+            from io import BytesIO
+            img = Image.open(BytesIO(img_data))
+
+            # OCR con español
+            text = pytesseract.image_to_string(img, lang='spa+eng')
+            text_parts.append(text)
+
+            img.close()
+
+        doc.close()
+        return "\n\n".join(text_parts)
+    except Exception as e:
+        return f"[OCR Error: {str(e)}]"
 
 
 def extract_text_from_docx(file_path: str) -> str:
@@ -160,6 +200,9 @@ def process_document(document_id: int) -> dict:
                     legal_area=legal_area
                 )
 
+                # Clasificar documento de forma async (no bloquea procesamiento)
+                _classify_document_async(document.id)
+
             else:
                 document.status = "failed"
                 db.commit()
@@ -183,3 +226,23 @@ def process_document(document_id: int) -> dict:
         return {"error": str(e)}
     finally:
         db.close()
+
+
+def _classify_document_async(document_id: int) -> None:
+    """Clasifica un documento de forma asíncrona."""
+    import asyncio
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        from app.services.document_classifier import classify_document
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(classify_document(document_id))
+        finally:
+            loop.close()
+    except Exception as e:
+        logger.warning(f"Classification failed for document {document_id}: {e}")

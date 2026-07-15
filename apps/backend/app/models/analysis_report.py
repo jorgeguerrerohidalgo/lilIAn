@@ -20,5 +20,6 @@ class AnalysisReport(Base):
     disclaimer = Column(Text)
     confidence = Column(String(50), default="medium")
     status = Column(String(50), default="generated")
+    validation_summary = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -32,6 +32,7 @@ class AnalysisReportResponse(BaseModel):
     disclaimer: Optional[str] = None
     confidence: str
     status: str
+    validation_summary: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

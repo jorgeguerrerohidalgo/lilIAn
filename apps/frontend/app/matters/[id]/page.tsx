@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { DocumentStatus } from "@/components/document-status";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -351,15 +352,26 @@ export default function MatterDetailPage() {
     });
 
     if (res.ok) {
-      setAnalysisSuccess("El análisis puede tardar entre 30 segundos y 2 minutos...");
+      setAnalysisSuccess("El análisis puede tardar entre 1 y 5 minutos...");
       setAnalyzing(true);
+      // Get the current latest analysis ID to compare later
+      const prevAnalysisId = analysisRef.current?.id;
+
       // Poll for analysis result
       let attempts = 0;
-      const maxAttempts = 24; // 2 minutes max (24 * 5s = 120s)
+      const maxAttempts = 60; // 5 minutes max (60 * 5s = 300s)
       const pollInterval = setInterval(async () => {
         attempts++;
         await fetchAnalysis();
-        if (analysisRef.current || attempts >= maxAttempts) {
+        // Check if we got a NEW analysis (different ID from what we had)
+        if (analysisRef.current && analysisRef.current.id !== prevAnalysisId) {
+          clearInterval(pollInterval);
+          setAnalyzing(false);
+          setAnalysisSuccess("✓ Análisis completado");
+          setAnalysisError("");
+          // Clear success message after 5 seconds
+          setTimeout(() => setAnalysisSuccess(""), 5000);
+        } else if (attempts >= maxAttempts) {
           clearInterval(pollInterval);
           setAnalyzing(false);
           if (!analysisRef.current) {
@@ -583,6 +595,13 @@ export default function MatterDetailPage() {
               <div className="mt-3 p-3 bg-green-50 text-green-600 rounded-lg text-sm">{uploadSuccess}</div>
             )}
           </div>
+
+          {/* Document Status & Validation */}
+          <DocumentStatus
+            documents={documents}
+            validationSummary={analysis?.validation_summary as any}
+            matterType={matter?.matter_type || "other"}
+          />
 
           {/* Documents List */}
           <div className="bg-white rounded-xl shadow-sm border p-6">

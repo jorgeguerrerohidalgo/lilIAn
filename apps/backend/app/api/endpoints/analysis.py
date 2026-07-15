@@ -135,6 +135,15 @@ def get_latest_analysis(
     risk_responses = [RiskItemResponse.model_validate(r) for r in risks]
 
     response_data = AnalysisReportResponse.model_validate(report).model_dump()
+
+    # Deserialize validation_summary from JSON if present
+    if report.validation_summary:
+        import json
+        try:
+            response_data["validation_summary"] = json.loads(report.validation_summary)
+        except:
+            response_data["validation_summary"] = None
+
     response_data["risks"] = risk_responses
 
     return AnalysisReportDetailResponse(**response_data)

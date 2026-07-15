@@ -520,7 +520,8 @@ def create_analysis_report(
     matter_id: int,
     organization_id: int,
     user_id: int,
-    analysis_result: dict
+    analysis_result: dict,
+    validation_summary: dict = None
 ) -> AnalysisReport:
     db = SessionLocal()
     try:
@@ -559,7 +560,8 @@ def create_analysis_report(
             next_steps=json.dumps(pasos if isinstance(pasos, list) else []),
             disclaimer="Este análisis es preliminar y no reemplaza la revisión profesional de un abogado habilitado en Chile.",
             confidence=analysis_result.get("confidence", "medium"),
-            status="generated"
+            status="generated",
+            validation_summary=json.dumps(validation_summary) if validation_summary else None
         )
         db.add(report)
         db.commit()
@@ -618,6 +620,25 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
 
         matter_type_value = matter.matter_type.value if hasattr(matter.matter_type, 'value') else matter.matter_type
 
+        # Ejecutar validación de documentos antes del análisis
+        validation_result = None
+        try:
+            import asyncio
+            from app.services.document_validator import validate_matter_documents
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                validation_result = loop.run_until_complete(
+                    validate_matter_documents(matter_id, organization_id)
+                )
+            finally:
+                loop.close()
+
+            validation_summary = validation_result.validation_summary if validation_result else None
+        except Exception:
+            validation_summary = None
+
         analysis_result = analyze_contract(documents_text, matter_type_value, organization_id)
 
         if "error" in analysis_result and not analysis_result.get("resumen_ejecutivo"):
@@ -625,7 +646,10 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
             db.commit()
             return analysis_result
 
-        report = create_analysis_report(matter_id, organization_id, user_id, analysis_result)
+        report = create_analysis_report(
+            matter_id, organization_id, user_id, analysis_result,
+            validation_summary=validation_summary
+        )
 
         return {
             "report_id": report.id,
