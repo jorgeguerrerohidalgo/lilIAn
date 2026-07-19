@@ -98,31 +98,17 @@
 
 ---
 
-### ⏳ 3. Detección de Conflictos Normativos
-**Prioridad:** Media | **Tiempo estimado:** 6-8 horas | **Complejidad:** Media
+### ⏳ 3. Detección de Conflictos Normativos (Completado: 2026-07-19)
+**Commit:** `87b43d4` - feat: detección de conflictos normativos contractuales
 
-**Descripción:** Analizar si un contrato contradice alguna ley o regulación chilena vigente.
+**Lo que hace:**
+- Función `detect_normative_conflicts()` compara cláusulas con leyes chilenas
+- Detecta conflictos directos (severidad: high/medium/low)
+- Detecta cláusulas en observación
+- Integrada en `analyze_contract()` automáticamente
+- Añadida al schema `RISK_ANALYSIS_SCHEMA`
 
-**Lo que ya existe:**
-- `get_laws_context_for_rag()` en analysis.py
-- RAG de leyes chilenas indexadas
-- Sistema de análisis de documentos
-
-**Lo que falta:**
-- [ ] Motor de comparación contrato vs ley
-- [ ] Detección de cláusulas potencialmente abusivas
-- [ ] Alertas específicas (no solo riesgos generales)
-- [ ] Nueva función `detect_normative_conflicts()` en analysis.py
-
-**Ventajas:**
-- Muy útil para revisión de contratos
-- Conecta análisis con RAG de leyes
-- Detectable con lógica de comparación
-
-**Desventajas:**
-- Requiere que el contrato cite leyes explícitamente
-- Complejidad en interpretar "conflicto"
-- Puede generar falsos positivos
+**Estado:** ✅ Completado
 
 ---
 
@@ -159,17 +145,16 @@
 |---------------|--------|--------|-------------|---------|---------|
 | Chat Mejorado | ✅ | 2-3h | Baja | Alto | Medien |
 | Contratos Inteligentes | ✅ | 4h | Media | Alto | Hoch |
+| Detección Conflictos | ✅ | 2h | Media | Medio | Hoch |
 | Predicción Judicial | ⏳ | 8-12h | Alta | Muy Alto | Unique |
-| Detección Conflictos | ⏳ | 6-8h | Media | Medio | Hoch |
 | Tendencias Jurisprudenciales | ⏳ | 3-4h | Baja | Medio | Medien |
 
 ---
 
 ## Próximos Pasos Recomendados
 
-1. **Corto plazo:** Detección Conflictos (#3) - Conecta con análisis existente
-2. **Largo plazo:** Predicción Judicial (#3) - Más complejo, dejar para después
-3. **Cuando haya datos:** Tendencias (#4) - Simple pero requiere precedentes
+1. **Largo plazo:** Predicción Judicial (#4) - Más complejo, dejar para después
+2. **Cuando haya datos:** Tendencias (#5) - Simple pero requiere precedentes
 
 ---
 
@@ -177,6 +162,7 @@
 
 | Fecha | Commit | Descripción |
 |-------|--------|-------------|
+| 2026-07-19 | 87b43d4 | feat: detección de conflictos normativos contractuales |
 | 2026-07-19 | 570a27a | feat: integrar extracción inteligente de variables en frontend |
 | 2026-07-19 | a7d44d3 | feat: extracción inteligente de variables para generación de contratos |
 | 2026-07-19 | cd517f2 | feat: integración de precedentes judiciales en chat conversacional |
