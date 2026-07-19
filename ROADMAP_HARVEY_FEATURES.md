@@ -112,30 +112,24 @@
 
 ---
 
-### ⏳ 4. Análisis de Tendencias Jurisprudenciales
-**Prioridad:** Baja | **Tiempo estimado:** 3-4 horas | **Complejidad:** Baja
+### ⏳ 4. Análisis de Tendencias Jurisprudenciales (Completado: 2026-07-19)
+**Commits:** `ad872a6` (backend) + `bfdf6c8` (frontend)
 
-**Descripción:** Estadísticas sobre evolución de fallos: distribución por tribunal, tendencia temporal, factores comunes.
+**Backend implementado:**
+- `precedent_analytics.py` con get_precedent_analytics()
+- Endpoint GET /precedents/analytics
+- Endpoint GET /precedents/analytics/filters
+- Métricas: volume_by_year, volume_by_court, volume_by_legal_area
+- Court × Matter heatmap, top_voces, top_ponentes
+- Análisis temporal y opcional de texto
 
-**Lo que ya existe:**
-- `Precedent` model con todos los campos necesarios
-- Endpoint de búsqueda `GET /precedents/search`
-- Datos en Supabase
+**Frontend implementado:**
+- PrecedentAnalyticsDashboard component
+- Gráficos de barras, líneas, heatmap
+- Filtros por tribunal, área legal, año
+- Análisis de texto opcional
 
-**Lo que falta:**
-- [ ] Endpoint: `GET /precedents/analytics`
-- [ ] Aggregation queries (win-rate por tribunal, por año, por materia)
-- [ ] Dashboard de tendencias en frontend
-
-**Ventajas:**
-- Relativamente simple de implementar
-- Queries SQL directas
-- Dashboard visual de alto valor
-
-**Desventajas:**
-- Valor limitado sin muchos precedentes
-- Solo tan bueno como los datos indexados
-- No usa RAG/AI, solo analytics
+**Estado:** ✅ Completado
 
 ---
 
@@ -146,15 +140,14 @@
 | Chat Mejorado | ✅ | 2-3h | Baja | Alto | Medien |
 | Contratos Inteligentes | ✅ | 4h | Media | Alto | Hoch |
 | Detección Conflictos | ✅ | 2h | Media | Medio | Hoch |
+| Tendencias Jurisprudenciales | ✅ | 4h | Baja | Medio | Medien |
 | Predicción Judicial | ⏳ | 8-12h | Alta | Muy Alto | Unique |
-| Tendencias Jurisprudenciales | ⏳ | 3-4h | Baja | Medio | Medien |
 
 ---
 
 ## Próximos Pasos Recomendados
 
-1. **Largo plazo:** Predicción Judicial (#4) - Más complejo, dejar para después
-2. **Cuando haya datos:** Tendencias (#5) - Simple pero requiere precedentes
+1. **Largo plazo:** Predicción Judicial - Más complejo, dejar para después (requiere curacion de datos)
 
 ---
 
@@ -162,6 +155,8 @@
 
 | Fecha | Commit | Descripción |
 |-------|--------|-------------|
+| 2026-07-19 | bfdf6c8 | feat: dashboard de tendencias jurisprudenciales - frontend |
+| 2026-07-19 | ad872a6 | feat: dashboard de tendencias jurisprudenciales - backend |
 | 2026-07-19 | 87b43d4 | feat: detección de conflictos normativos contractuales |
 | 2026-07-19 | 570a27a | feat: integrar extracción inteligente de variables en frontend |
 | 2026-07-19 | a7d44d3 | feat: extracción inteligente de variables para generación de contratos |
