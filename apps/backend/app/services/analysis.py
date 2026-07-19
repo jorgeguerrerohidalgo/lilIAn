@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import json
 
@@ -9,6 +9,62 @@ from app.models.matter import Matter
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.core.config import settings
+
+
+# ==================== QUERIES RAG DINÁMICAS POR TIPO DE MATERIA ====================
+
+QUERIES_RAG_POR_TIPO = {
+    "laboral": "Código del Trabajo Chile obligaciones derechos trabajadores plazos despido Artículos 7 8 9 10",
+    "contract_review": "Código Civil Chile obligaciones contratos arrendamiento Arts. 1915 1916 1917",
+    "lease": "Ley 18.802 arrendamiento bienes raíces Chile obligaciones arrendador arrendatario",
+    "company": "Código Comercio Chile sociedades obligaciones mercantiles representantes legales",
+    "data_protection": "Ley 19.628 protección datos personales Chile derechos titular",
+    "consumer": "Ley 19.496 consumidor cláusulas abusivas derechos obligaciones proveedor",
+    "family": "Ley 19.968 tribunales familia pensiones medidas protección plazos",
+    "debt": "Código Civil Chile obligaciones deudas prescripción Arts. 2514 2515",
+    "other": "legislación chilena vigente contratos obligaciones generales"
+}
+
+
+# ==================== QUERIES RAG DE PRECEDENTES POR TIPO DE MATERIA ====================
+
+QUERIES_PRECEDENT_POR_TIPO = {
+    "laboral": "despido injustificado tutela laboral negociaciones colectivas fuero maternal",
+    "contract_review": "incumplimiento contractual responsabilidad civil daños y perjuicios",
+    "lease": "arrendamiento desalojo morosidad garantías",
+    "company": "responsabilidad social anónima",
+    "consumer": "cláusulas abusivas consumidores garantía legales",
+    "family": "divorcio custodia alimentos régimen relación",
+    "debt": "cobro deudas prescripción obligación",
+    "penal": "delitos investigación criminal procedimiento",
+    "other": "fallos judiciales jurisprudencia chilena"
+}
+
+
+# ==================== SECCIÓN COMÚN PARA TIMELINE Y CITAS ====================
+
+SECTION_TIMELINE_CITAS = """
+
+SECCIÓN ADICIONAL - TIMELINE Y CITAS LEGALES:
+
+IDENTIFICACIÓN DE PLAZOS Y TIMELINE:
+1. Identifica TODAS las fechas mencionadas en el documento (celebración, vigencia, término)
+2. Para cada fecha con plazo asociado, indica:
+   - Número exacto de días del plazo
+   - Fecha de inicio del cómputo
+   - Consecuencia de no cumplir (nulidad, multa, término anticipado, prescripción)
+   - Artículo legal que fundamenta el plazo
+3. Calcula la fecha límite si el plazo está corriendo desde una fecha específica
+
+EXTRACCIÓN DE CITAS LEGALES DEL DOCUMENTO:
+1. Extrae TODOS los artículos y leyes mencionados EXPLÍCITAMENTE en el texto
+2. Para cada cita indica:
+   - El texto EXACTO donde aparece el artículo citado
+   - Si se refiere a una obligación o derecho
+3. SOLO incluye citas que aparezcan en el documento, NO inventes artículos
+4. Si el documento no menciona artículos específicos, indica que no hay citas documentales
+
+"""
 
 
 # ==================== SYSTEM PROMPTS POR ÁREA DEL DERECHO ====================
@@ -47,8 +103,9 @@ FORMATO DE SALIDA:
 - Resumen ejecutivo (2-3 párrafos)
 - Puntos críticos a revisar (lista detallada con prioridad)
 - Obligaciones laborales identificadas
-- Plazos y fechas relevantes
-- Riesgos detectados con nivel y fund茂mento legal
+- Plazos y fechas relevantes (timeline con fechas límite)
+- Artículos citados en el documento (citas documentales exactas)
+- Riesgos detectados con nivel y fundamento legal
 - Contratos y cláusulas relevantes
 - Información faltante
 - Recomendaciones específicas
@@ -89,7 +146,8 @@ FORMATO DE SALIDA:
 - Resumen ejecutivo
 - Puntos críticos a revisar (con prioridad alta, media, baja)
 - Obligaciones de las partes
-- Plazos y condiciones
+- Plazos y condiciones (timeline con fechas límite)
+- Artículos citados en el documento (citas documentales exactas)
 - Cláusulas relevantes o preocupantes
 - Riesgos identificados con fundamento legal
 - Garantías existentes o faltantes
@@ -135,6 +193,8 @@ FORMATO DE SALIDA:
 - Puntos críticos a revisar (con prioridad)
 - Derechos del consumidor potencialmente vulnerados
 - Cláusulas sospechosas de abusividad
+- Plazos y timeline (fechas límite relevantes)
+- Artículos citados en el documento (citas documentales exactas)
 - Obligaciones del proveedor
 - Riesgos identificados con fundamento legal
 - Acciones recomendadas (SERNAC, demanda civil, etc.)
@@ -182,7 +242,8 @@ FORMATO DE SALIDA:
 - Situación de niños, niñas o adolescentes involucrados
 - Medidas de protección necesarias
 - Obligaciones de cuidado
-- Plazos procesales importantes
+- Plazos procesales importantes (timeline con fechas límite)
+- Artículos citados en el documento (citas documentales exactas)
 - Riesgos identificados
 - Recomendaciones de acción
 - Información faltante
@@ -228,6 +289,8 @@ FORMATO DE SALIDA:
 - Tipo de sociedad o entidad
 - Obligaciones mercantiles principales
 - Responsabilidades de los representantes
+- Plazos y timeline (fechas límite relevantes)
+- Artículos citados en el documento (citas documentales exactas)
 - Riesgos comerciales y financieros
 - Cláusulas relevantes o preocupantes
 - Fundamento legal aplicable
@@ -274,7 +337,8 @@ FORMATO DE SALIDA:
 - Calificación jurídica preliminar
 - Medios de prueba relevantes
 - Medidas cautelares aplicadas o recommendadas
-- Plazos procesales importantes
+- Plazos procesales importantes (timeline con fechas límite)
+- Artículos citados en el documento (citas documentales exactas)
 - Estrategia defensiva sugerida
 - Vulneración de derechos, si aplica
 - Riesgos procesales
@@ -304,7 +368,8 @@ FORMATO DE SALIDA:
 - Área jurídica identificada
 - Puntos críticos a revisar (con prioridad)
 - Obligaciones y derechos de las partes
-- Plazos relevantes
+- Plazos relevantes (timeline con fechas límite)
+- Artículos citados en el documento (citas documentales exactas)
 - Riesgos identificados
 - Fundamento legal aplicable
 - Recomendaciones
@@ -344,6 +409,33 @@ RISK_ANALYSIS_SCHEMA = {
             "type": "array",
             "items": {"type": "string"},
             "description": "Fechas y plazos relevantes"
+        },
+        "timeline": {
+            "type": "array",
+            "description": "Timeline estructurado de plazos y fechas importantes",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "evento": {"type": "string", "description": "Nombre del evento o plazo"},
+                    "fecha_contrato": {"type": "string", "description": "Fecha mencionada en el contrato"},
+                    "plazo_dias": {"type": "integer", "description": "Número de días del plazo"},
+                    "fecha_limite": {"type": "string", "description": "Fecha límite calculada (hoy + plazo)"},
+                    "consecuencia": {"type": "string", "description": "Consecuencia de no cumplir"},
+                    "articulo_legal": {"type": "string", "description": "Artículo que fundamenta el plazo"}
+                }
+            }
+        },
+        "citas_documentales": {
+            "type": "array",
+            "description": "Artículos y leyes mencionados explícitamente en el documento",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "articulo_citado": {"type": "string", "description": "Artículo citado (ej: 'Art. 123 Código del Trabajo')"},
+                    "contexto_exacto": {"type": "string", "description": "Texto exacto donde aparece la cita"},
+                    "obligacion_derecho": {"type": "string", "description": "Obligación o derecho que establece"}
+                }
+            }
         },
         "amounts": {
             "type": "array",
@@ -445,16 +537,24 @@ def get_chunks_text_for_analysis(matter_id: int, organization_id: int, max_chars
         db.close()
 
 
-def get_laws_context_for_rag(matter_id: int, organization_id: int) -> str:
-    """Obtiene contexto de leyes chilenas indexadas en RAG si están disponibles."""
+def get_laws_context_for_rag(matter_type: str, organization_id: int) -> str:
+    """Obtiene contexto de leyes chilenas indexadas en RAG si están disponibles.
+
+    Usa queries específicas según el tipo de materia (laboral, civil, etc.)
+    """
     try:
         from app.services.rag import hybrid_search
         from app.services.embeddings import get_embedding_provider
 
         provider = get_embedding_provider()
 
-        # Buscar legislación relevante según el tipo de caso
-        query = "Código del Trabajo Chile obligaciones derechos trabajadores"
+        # Normalizar tipo de materia
+        mt = matter_type.lower() if matter_type else "other"
+
+        # Mapear tipo de materia a query RAG
+        # Por defecto usa "legislación chilena vigente" si no hay mapping específico
+        query = QUERIES_RAG_POR_TIPO.get(mt, "legislación chilena vigente contratos obligaciones")
+
         query_embedding = provider.generate_embedding(query)
 
         results = hybrid_search(
@@ -468,9 +568,31 @@ def get_laws_context_for_rag(matter_id: int, organization_id: int) -> str:
         if results:
             context_parts = ["=== LEGISLACIÓN CHILENA VIGENTE ==="]
             for r in results:
-                context_parts.append(f"- {r['content'][:1000]}")
+                # Incluir el nombre de la ley y artículo si está disponible
+                source = r.get('section_title', 'Fuente legal')
+                context_parts.append(f"- [{source}]\n  {r['content'][:1000]}")
             return "\n\n".join(context_parts)
         return ""
+    except Exception:
+        return ""
+
+
+def get_precedents_context_for_rag(matter_type: str, organization_id: int, top_k: int = 3) -> str:
+    """Obtiene contexto de precedentes judiciales para el análisis."""
+    try:
+        from app.services.precedent_rag import get_precedent_context
+
+        mt = matter_type.lower() if matter_type else "other"
+        query = QUERIES_PRECEDENT_POR_TIPO.get(mt, "fallos judiciales jurisprudencia chilena")
+
+        context = get_precedent_context(
+            query=query,
+            court=None,
+            year=None,
+            legal_area=None,
+            top_k=top_k
+        )
+        return context if context else ""
     except Exception:
         return ""
 
@@ -492,9 +614,14 @@ def analyze_contract(documents_text: str, matter_type: str, organization_id: int
     system_prompt = get_system_prompt_for_matter_type(matter_type)
 
     # Obtener contexto de leyes si está disponible
-    laws_context = get_laws_context_for_rag(0, organization_id)
+    laws_context = get_laws_context_for_rag(matter_type, organization_id)
     if laws_context:
         system_prompt += f"\n\nCONSULTA DE LEGISLACIÓN:\n{laws_context}"
+
+    # Obtener contexto de precedentes judiciales si están disponibles
+    precedents_context = get_precedents_context_for_rag(matter_type, organization_id)
+    if precedents_context:
+        system_prompt += f"\n\nPRECEDENTES JUDICIALES RELEVANTES:\n{precedents_context}"
 
     prompt = f"""Analiza el siguiente documento legal y proporciona un informe estructurado según el esquema JSON solicitado.
 
