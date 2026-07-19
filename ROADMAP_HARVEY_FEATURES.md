@@ -52,39 +52,23 @@
 
 ## Funcionalidades Pendientes
 
-### ⏳ 1. Generación de Contratos Inteligentes (LLM + Templates)
+### ⏳ 1. Generación de Contratos Inteligentes - Integración Frontend
+**Prioridad:** Alta | **Estado backend:** ✅ Completado | **Estado frontend:** ⏳ Pendiente
+
+**Backend implementado (Commit `a7d44d3`):**
+- Función `extract_variables_from_matter()` usa LLM para analizar documentos
+- Endpoint `POST /doc-templates/suggest-variables`
+- Analiza documentos del caso y sugiere valores para templates
+
+**Lo que falta (Frontend):**
+- [ ] Botón "Sugerir desde caso" en DocumentGenerator component
+- [ ] Integrar llamada a `/suggest-variables`
+- [ ] Mostrar variables sugeridas para confirmación
+- [ ] Poder editar antes de generar
 
 ---
 
-### ⏳ 2. Generación de Contratos Inteligentes (LLM + Templates)
-**Prioridad:** Alta | **Tiempo estimado:** 4-6 horas | **Complejidad:** Media
-
-**Descripción:** El LLM llena templates basándose en variables del caso y contexto RAG.
-
-**Lo que ya existe:**
-- `document_generator.py` con motor de templating propio
-- 5 templates (contrato_base, poder_notarial, carta_formal, etc.)
-- Frontend con `DocumentGenerator` component
-
-**Lo que falta:**
-- [ ] Nuevo endpoint: `POST /doc-templates/generate-smart`
-- [ ] Extraer entidades (partes, montos, fechas) via LLM desde documentos del caso
-- [ ] Pre-llenar variables sugeridas
-- [ ] Suggestions de cláusulas basadas en contexto legal
-
-**Ventajas:**
-- Fuerte diferenciador vs otros generators
-- Ahorra tiempo significativo en redacción
-- Conecta casos reales con documentos generados
-
-**Desventajas:**
-- Mayor complejidad en el flujo
-- Requiere testing exhaustivo
-- Riesgo de documentos inexactos
-
----
-
-### ⏳ 3. Predicción de Resultados Judiciales
+### ⏳ 2. Predicción de Resultados Judiciales
 **Prioridad:** Media | **Tiempo estimado:** 8-12 horas | **Complejidad:** Alta
 
 **Descripción:** Basado en precedentes similares, predecir probabilidad de éxito de una estrategia legal.
@@ -112,7 +96,7 @@
 
 ---
 
-### ⏳ 4. Detección de Conflictos Normativos
+### ⏳ 3. Detección de Conflictos Normativos
 **Prioridad:** Media | **Tiempo estimado:** 6-8 horas | **Complejidad:** Media
 
 **Descripción:** Analizar si un contrato contradice alguna ley o regulación chilena vigente.
@@ -140,7 +124,7 @@
 
 ---
 
-### ⏳ 5. Análisis de Tendencias Jurisprudenciales
+### ⏳ 4. Análisis de Tendencias Jurisprudenciales
 **Prioridad:** Baja | **Tiempo estimado:** 3-4 horas | **Complejidad:** Baja
 
 **Descripción:** Estadísticas sobre evolución de fallos: distribución por tribunal, tendencia temporal, factores comunes.
@@ -172,7 +156,8 @@
 | Funcionalidad | Estado | Tiempo | Complejidad | Impacto | Ventaja |
 |---------------|--------|--------|-------------|---------|---------|
 | Chat Mejorado | ✅ | 2-3h | Baja | Alto | Medien |
-| Contratos Inteligentes | ⏳ | 4-6h | Media | Alto | Hoch |
+| Contratos Inteligentes (backend) | ✅ | 2h | Media | Alto | Hoch |
+| Contratos Inteligentes (frontend) | ⏳ | 2h | Media | Alto | Hoch |
 | Predicción Judicial | ⏳ | 8-12h | Alta | Muy Alto | Unique |
 | Detección Conflictos | ⏳ | 6-8h | Media | Medio | Hoch |
 | Tendencias Jurisprudenciales | ⏳ | 3-4h | Baja | Medio | Medien |
@@ -181,10 +166,10 @@
 
 ## Próximos Pasos Recomendados
 
-1. **Corto plazo:** Contratos Inteligentes (#1) - Diferenciador fuerte
-2. **Medio plazo:** Detección Conflictos (#4) - Conecta con análisis existente
+1. **Inmediato:** Integrar frontend de Contratos Inteligentes - Botón "Sugerir desde caso"
+2. **Corto plazo:** Detección Conflictos (#3) - Conecta con análisis existente
 3. **Largo plazo:** Predicción (#3) - Más complejo, dejar para después
-4. **Cuando haya datos:** Tendencias (#5) - Simple pero requiere precedentes
+4. **Cuando haya datos:** Tendencias (#4) - Simple pero requiere precedentes
 
 ---
 
@@ -192,5 +177,6 @@
 
 | Fecha | Commit | Descripción |
 |-------|--------|-------------|
+| 2026-07-19 | a7d44d3 | feat: extracción inteligente de variables para generación de contratos |
 | 2026-07-19 | cd517f2 | feat: integración de precedentes judiciales en chat conversacional |
 | 2026-07-17 | e99b161 | feat: integración de búsqueda de precedentes judiciales en análisis de casos |
