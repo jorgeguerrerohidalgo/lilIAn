@@ -201,7 +201,8 @@ def get_relevant_context(
     organization_id: int,
     query: str,
     top_k: int = 5,
-    legal_area: Optional[LegalArea] = None
+    legal_area: Optional[LegalArea] = None,
+    include_precedents: bool = True
 ) -> str:
     from app.services.rag import hybrid_search
     from app.services.embeddings import get_embedding_provider
@@ -219,25 +220,43 @@ def get_relevant_context(
             legal_area=legal_area
         )
 
-        if not results:
-            return "No se encontró información relevante en los documentos del caso."
-
         context_parts = []
-        for i, result in enumerate(results, 1):
-            doc = None
-            db = SessionLocal()
+
+        # Agregar contexto de documentos
+        if results:
+            for i, result in enumerate(results, 1):
+                doc = None
+                db = SessionLocal()
+                try:
+                    doc = db.query(Document).filter(Document.id == result["document_id"]).first()
+                finally:
+                    db.close()
+
+                doc_name = doc.original_filename if doc else f"Documento {result['document_id']}"
+                page_info = f" (Página {result['page_number']})" if result.get("page_number") else ""
+
+                context_parts.append(
+                    f"[{i}] De: {doc_name}{page_info}\n"
+                    f"Contenido relevante:\n{result['content'][:2000]}"
+                )
+        else:
+            context_parts.append("No se encontró información relevante en los documentos del caso.")
+
+        # Agregar contexto de precedentes judiciales
+        if include_precedents:
             try:
-                doc = db.query(Document).filter(Document.id == result["document_id"]).first()
-            finally:
-                db.close()
-
-            doc_name = doc.original_filename if doc else f"Documento {result['document_id']}"
-            page_info = f" (Página {result['page_number']})" if result.get("page_number") else ""
-
-            context_parts.append(
-                f"[{i}] De: {doc_name}{page_info}\n"
-                f"Contenido relevante:\n{result['content'][:2000]}"
-            )
+                from app.services.precedent_rag import get_precedent_context as get_pc
+                precedent_context = get_pc(
+                    query=query,
+                    court=None,
+                    year=None,
+                    legal_area=legal_area.value if legal_area else None,
+                    top_k=3
+                )
+                if precedent_context:
+                    context_parts.append(f"PRECEDENTES JUDICIALES RELEVANTES:\n{precedent_context}")
+            except Exception:
+                pass  # Silencioso si falla búsqueda de precedentes
 
         return "\n\n---\n\n".join(context_parts)
 
