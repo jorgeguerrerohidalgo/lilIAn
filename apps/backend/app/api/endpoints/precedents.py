@@ -15,6 +15,10 @@ from app.services.precedent_rag import (
     search_precedents_by_keyword,
     get_precedent_context
 )
+from app.services.precedent_analytics import (
+    get_precedent_analytics,
+    get_available_filters
+)
 
 router = APIRouter(prefix="/precedents", tags=["precedents"])
 
@@ -162,6 +166,41 @@ def list_legal_areas_in_precedents(
 
     areas = db.query(Precedent.legal_area).distinct().all()
     return {"legal_areas": [a[0] for a in areas if a[0]]}
+
+
+@router.get("/analytics")
+def get_analytics(
+    legal_area: Optional[str] = Query(None, description="Filter by legal area"),
+    court: Optional[str] = Query(None, description="Filter by court"),
+    year_from: Optional[int] = Query(None, description="From year"),
+    year_to: Optional[int] = Query(None, description="To year"),
+    matter_type: Optional[str] = Query(None, description="Filter by matter type"),
+    include_text_analysis: bool = Query(False, description="Include text analysis (slower)"),
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """Get aggregated analytics and trends for precedents."""
+    result = get_precedent_analytics(
+        organization_id=membership.organization_id,
+        legal_area=legal_area,
+        court=court,
+        year_from=year_from,
+        year_to=year_to,
+        matter_type=matter_type,
+        include_text_analysis=include_text_analysis
+    )
+    return result
+
+
+@router.get("/analytics/filters")
+def get_filter_options(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """Get available filter options based on existing data."""
+    return get_available_filters(membership.organization_id)
 
 
 @router.post("/", response_model=PrecedentResponse, status_code=201)
