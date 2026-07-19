@@ -52,19 +52,21 @@
 
 ## Funcionalidades Pendientes
 
-### ⏳ 1. Generación de Contratos Inteligentes - Integración Frontend
-**Prioridad:** Alta | **Estado backend:** ✅ Completado | **Estado frontend:** ⏳ Pendiente
+### ⏳ 1. Generación de Contratos Inteligentes (Completado: 2026-07-19)
+**Commits:** `a7d44d3` (backend) + `570a27a` (frontend)
 
-**Backend implementado (Commit `a7d44d3`):**
+**Backend implementado:**
 - Función `extract_variables_from_matter()` usa LLM para analizar documentos
 - Endpoint `POST /doc-templates/suggest-variables`
 - Analiza documentos del caso y sugiere valores para templates
 
-**Lo que falta (Frontend):**
-- [ ] Botón "Sugerir desde caso" en DocumentGenerator component
-- [ ] Integrar llamada a `/suggest-variables`
-- [ ] Mostrar variables sugeridas para confirmación
-- [ ] Poder editar antes de generar
+**Frontend implementado:**
+- Botón "Sugerir desde caso" en DocumentGenerator component
+- Llama al endpoint `/doc-templates/suggest-variables`
+- Muestra variables sugeridas y missing_fields
+- Aplica sugerencias automáticamente al formulario
+
+**Estado:** ✅ Completado en backend y frontend
 
 ---
 
@@ -156,8 +158,7 @@
 | Funcionalidad | Estado | Tiempo | Complejidad | Impacto | Ventaja |
 |---------------|--------|--------|-------------|---------|---------|
 | Chat Mejorado | ✅ | 2-3h | Baja | Alto | Medien |
-| Contratos Inteligentes (backend) | ✅ | 2h | Media | Alto | Hoch |
-| Contratos Inteligentes (frontend) | ⏳ | 2h | Media | Alto | Hoch |
+| Contratos Inteligentes | ✅ | 4h | Media | Alto | Hoch |
 | Predicción Judicial | ⏳ | 8-12h | Alta | Muy Alto | Unique |
 | Detección Conflictos | ⏳ | 6-8h | Media | Medio | Hoch |
 | Tendencias Jurisprudenciales | ⏳ | 3-4h | Baja | Medio | Medien |
@@ -166,10 +167,9 @@
 
 ## Próximos Pasos Recomendados
 
-1. **Inmediato:** Integrar frontend de Contratos Inteligentes - Botón "Sugerir desde caso"
-2. **Corto plazo:** Detección Conflictos (#3) - Conecta con análisis existente
-3. **Largo plazo:** Predicción (#3) - Más complejo, dejar para después
-4. **Cuando haya datos:** Tendencias (#4) - Simple pero requiere precedentes
+1. **Corto plazo:** Detección Conflictos (#3) - Conecta con análisis existente
+2. **Largo plazo:** Predicción Judicial (#3) - Más complejo, dejar para después
+3. **Cuando haya datos:** Tendencias (#4) - Simple pero requiere precedentes
 
 ---
 
@@ -177,6 +177,7 @@
 
 | Fecha | Commit | Descripción |
 |-------|--------|-------------|
+| 2026-07-19 | 570a27a | feat: integrar extracción inteligente de variables en frontend |
 | 2026-07-19 | a7d44d3 | feat: extracción inteligente de variables para generación de contratos |
 | 2026-07-19 | cd517f2 | feat: integración de precedentes judiciales en chat conversacional |
 | 2026-07-17 | e99b161 | feat: integración de búsqueda de precedentes judiciales en análisis de casos |
