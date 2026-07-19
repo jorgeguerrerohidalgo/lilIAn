@@ -470,7 +470,40 @@ RISK_ANALYSIS_SCHEMA = {
         "missing_information": {"type": "array", "items": {"type": "string"}},
         "suggested_questions": {"type": "array", "items": {"type": "string"}},
         "next_steps": {"type": "array", "items": {"type": "string"}},
-        "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "normative_conflicts": {
+            "type": "object",
+            "description": "Conflictos detectados entre cláusulas del contrato y legislación chilena",
+            "properties": {
+                "conflicts": {
+                    "type": "array",
+                    "description": "Cláusulas que contradicen directamente la ley",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "clause": {"type": "string"},
+                            "issue": {"type": "string"},
+                            "law": {"type": "string"},
+                            "severity": {"type": "string", "enum": ["high", "medium", "low"]}
+                        }
+                    }
+                },
+                "observations": {
+                    "type": "array",
+                    "description": "Cláusulas en observación",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "clause": {"type": "string"},
+                            "concern": {"type": "string"},
+                            "recommendation": {"type": "string"}
+                        }
+                    }
+                },
+                "summary": {"type": "string"},
+                "confidence": {"type": "string"}
+            }
+        }
     },
     "required": ["resumen_ejecutivo", "puntos_criticos", "risks"]
 }
@@ -597,6 +630,114 @@ def get_precedents_context_for_rag(matter_type: str, organization_id: int, top_k
         return ""
 
 
+def detect_normative_conflicts(
+    documents_text: str,
+    matter_type: str,
+    organization_id: int
+) -> dict:
+    """Detecta conflictos entre cláusulas del contrato y la legislación chilena vigente.
+
+    Compara el contenido del contrato con las leyes relevantes indexadas
+    para identificar posibles contradicciones o cláusulas potencialmente abusivas.
+
+    Returns:
+        dict con:
+        - conflicts: lista de conflictos detectados
+        - observations: lista de cláusulas en observación
+        - confidence: nivel de confianza del análisis
+    """
+    from app.services.llm import get_llm_provider
+
+    if not documents_text or len(documents_text.strip()) < 200:
+        return {
+            "conflicts": [],
+            "observations": [],
+            "confidence": "low",
+            "summary": "Texto insuficiente para análisis de conflictos normativos"
+        }
+
+    try:
+        # Obtener contexto legal relevante
+        laws_context = get_laws_context_for_rag(matter_type, organization_id)
+
+        if not laws_context:
+            return {
+                "conflicts": [],
+                "observations": [],
+                "confidence": "low",
+                "summary": "No se encontró contexto legal para comparar"
+            }
+
+        prompt = f"""Analiza el siguiente contrato y detecta conflictos con la legislación chilena.
+
+Identifica:
+1. CONFLICTOS: Cláusulas que contradicen directamente una ley o regulation chilena vigente
+2. OBSERVACIONES: Cláusulas que podrían ser problematicas o estar en zona gris legal
+
+CONTRATO:
+{documents_text[:15000]}
+
+LEGISLACIÓN APLICABLE:
+{laws_context}
+
+Responde en JSON con este formato exacto:
+{{
+    "conflicts": [
+        {{
+            "clause": "Texto de la cláusula conflictiva",
+            "issue": "Descripción del conflicto",
+            "law": "Ley o artículo que se contradice",
+            "severity": "high|medium|low"
+        }}
+    ],
+    "observations": [
+        {{
+            "clause": "Texto de la cláusula en observación",
+            "concern": "Motivo de preocupación",
+            "recommendation": "Recomendación"
+        }}
+    ],
+    "summary": "Resumen ejecutivo del análisis"
+}}"""
+
+        provider = get_llm_provider()
+        response = provider.generate(
+            prompt=prompt,
+            system_prompt=None,
+            max_tokens=2048,
+            temperature=0.3
+        )
+
+        # Parsear JSON de la respuesta
+        import json
+        import re
+
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            result = json.loads(json_match.group(0))
+            return {
+                "conflicts": result.get("conflicts", []),
+                "observations": result.get("observations", []),
+                "confidence": "high",
+                "summary": result.get("summary", "Análisis completado")
+            }
+        else:
+            return {
+                "conflicts": [],
+                "observations": [],
+                "confidence": "low",
+                "summary": "No se pudo parsear el análisis de conflictos"
+            }
+
+    except Exception as e:
+        return {
+            "conflicts": [],
+            "observations": [],
+            "confidence": "low",
+            "summary": f"Error en análisis de conflictos: {str(e)}"
+        }
+
+
 def analyze_contract(documents_text: str, matter_type: str, organization_id: int) -> dict:
     from app.services.llm import get_llm_provider
 
@@ -632,6 +773,16 @@ Proporciona el análisis en formato JSON siguiendo exactamente el esquema especi
 
     try:
         result = provider.generate_structured(prompt, system_prompt, RISK_ANALYSIS_SCHEMA)
+
+        # Detectar conflictos normativos si hay suficiente contexto legal
+        if laws_context:
+            try:
+                conflicts_result = detect_normative_conflicts(documents_text, matter_type, organization_id)
+                if conflicts_result and (conflicts_result.get("conflicts") or conflicts_result.get("observations")):
+                    result["normative_conflicts"] = conflicts_result
+            except Exception:
+                pass  # No bloquear análisis por error en detección de conflictos
+
         return result
     except Exception as e:
         return {
