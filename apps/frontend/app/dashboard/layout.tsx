@@ -78,6 +78,9 @@ export default function DashboardLayout({
               <Link href="/dashboard/clients" className="text-gray-600 hover:text-primary-600">
                 Clientes
               </Link>
+              <Link href="/precedents" className="text-gray-600 hover:text-primary-600">
+                Precedentes
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4">
