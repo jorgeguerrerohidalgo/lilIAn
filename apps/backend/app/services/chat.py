@@ -216,7 +216,6 @@ def get_relevant_context(
             organization_id=organization_id,
             matter_id=matter_id,
             top_k=top_k,
-            embedding_weight=0.7,
             legal_area=legal_area
         )
 

@@ -28,41 +28,77 @@ def search_chunks_by_embedding(
     organization_id: int,
     matter_id: int,
     top_k: int = 5,
-    similarity_threshold: float = 0.5,
+    similarity_threshold: float = 0.3,  # DEBUG: lowering from 0.5 to 0.3
     legal_area: Optional[LegalArea] = None
 ) -> List[dict]:
     db = SessionLocal()
     try:
-        query = db.query(DocumentChunk).filter(
-            DocumentChunk.organization_id == organization_id,
-            DocumentChunk.matter_id == matter_id
-        )
-        if legal_area is not None:
-            query = query.filter(DocumentChunk.legal_area == legal_area)
+        # Usar SQL directo para evitar problemas con ORM
+        from sqlalchemy import text
+        sql = text("""
+            SELECT id, document_id, organization_id, matter_id, chunk_index,
+                   content, page_number, section_title, embedding, legal_area,
+                   chunk_metadata, created_at
+            FROM document_chunks
+            WHERE organization_id = :org_id AND matter_id = :matter_id
+        """)
+        result = db.execute(sql, {"org_id": organization_id, "matter_id": matter_id})
+        rows = result.fetchall()
 
-        chunks = query.all()
+        print(f"[DEBUG RAG] SQL direct result: {len(rows)} rows")
+
+        # Convertir a objetos similar a chunk
+        chunks = []
+        for row in rows:
+            chunk_dict = {
+                "id": row[0],
+                "document_id": row[1],
+                "organization_id": row[2],
+                "matter_id": row[3],
+                "chunk_index": row[4],
+                "content": row[5],
+                "page_number": row[6],
+                "section_title": row[7],
+                "embedding": row[8],
+                "legal_area": row[9],
+                "chunk_metadata": row[10],
+                "created_at": row[11]
+            }
+            chunks.append(chunk_dict)
+
+        print(f"[DEBUG RAG] Found {len(chunks)} chunks in DB for org={organization_id}, matter={matter_id}")
 
         results = []
+        skipped_no_embedding = 0
+        skipped_threshold = 0
+        errors = 0
+
         for chunk in chunks:
-            if not chunk.embedding:
+            if not chunk["embedding"]:
+                skipped_no_embedding += 1
                 continue
 
             try:
-                stored_embedding = json.loads(chunk.embedding)
+                stored_embedding = json.loads(chunk["embedding"])
                 similarity = cosine_similarity(query_embedding, stored_embedding)
 
                 if similarity >= similarity_threshold:
                     results.append({
-                        "chunk_id": chunk.id,
-                        "document_id": chunk.document_id,
-                        "content": chunk.content,
-                        "page_number": chunk.page_number,
-                        "section_title": chunk.section_title,
+                        "chunk_id": chunk["id"],
+                        "document_id": chunk["document_id"],
+                        "content": chunk["content"],
+                        "page_number": chunk["page_number"],
+                        "section_title": chunk["section_title"],
                         "similarity": similarity,
-                        "chunk_index": chunk.chunk_index
+                        "chunk_index": chunk["chunk_index"]
                     })
-            except (json.JSONDecodeError, TypeError):
+                else:
+                    skipped_threshold += 1
+            except (json.JSONDecodeError, TypeError) as e:
+                errors += 1
                 continue
+
+        print(f"[DEBUG RAG] Chunks processed: {len(results)} passed, {skipped_no_embedding} no embedding, {skipped_threshold} below threshold, {errors} errors")
 
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results[:top_k]
@@ -166,64 +202,118 @@ def hybrid_search(
     organization_id: int,
     matter_id: int,
     top_k: int = 5,
-    embedding_weight: float = 0.7,
     include_laws: bool = True,
     legal_area: Optional[LegalArea] = None
 ) -> List[dict]:
+    """
+    Búsqueda híbrida con Reciprocal Rank Fusion (RRF).
+    Combina resultados de embedding y keyword search usando RRF para mejor ranking.
+    """
     embedding_provider = None
     try:
         from app.services.embeddings import get_embedding_provider
         embedding_provider = get_embedding_provider()
         query_embedding = embedding_provider.generate_embedding(query)
+        print(f"[DEBUG RAG] Query embedding generated, length: {len(query_embedding)}")
         embedding_results = search_chunks_by_embedding(
-            query_embedding, organization_id, matter_id, top_k * 2,
+            query_embedding, organization_id, matter_id, top_k * 3,
             legal_area=legal_area
         )
-    except Exception:
+        print(f"[DEBUG RAG] Document embedding results: {len(embedding_results)}")
+    except Exception as e:
+        print(f"[DEBUG RAG] Embedding search failed: {e}")
+        import traceback
+        traceback.print_exc()
         embedding_results = []
 
     keyword_results = search_chunks_by_keyword(
-        query, organization_id, matter_id, top_k * 2,
+        query, organization_id, matter_id, top_k * 3,
         legal_area=legal_area
     )
+    print(f"[DEBUG RAG] Keyword results: {len(keyword_results)}")
 
-    seen_ids = set()
-    final_results = []
+    # RRF: Reciprocal Rank Fusion para combinar rankings
+    RRF_K = 60  # Constante típica para RRF
 
-    for result in embedding_results:
+    # Crear diccionario de resultados por chunk_id
+    all_results = {}
+
+    # Agregar resultados de embedding search con su ranking
+    for rank, result in enumerate(embedding_results, 1):
         chunk_id = result["chunk_id"]
-        if chunk_id not in seen_ids:
-            result["source"] = "embedding"
-            result["combined_score"] = result["similarity"] * embedding_weight
-            final_results.append(result)
-            seen_ids.add(chunk_id)
+        result["source"] = "embedding"
+        result["embedding_rank"] = rank
+        result["keyword_rank"] = None
+        result["embedding_score"] = result["similarity"]
+        result["keyword_score"] = 0
+        all_results[chunk_id] = result
 
-    max_keyword_count = max((r["keyword_count"] for r in keyword_results), default=1)
-
-    for result in keyword_results:
+    # Agregar/actualizar resultados de keyword search
+    for rank, result in enumerate(keyword_results, 1):
         chunk_id = result["chunk_id"]
-        if chunk_id not in seen_ids:
-            keyword_score = result["keyword_count"] / max_keyword_count
+        if chunk_id in all_results:
+            # Ya existe, actualizar ranks y scores
+            all_results[chunk_id]["keyword_rank"] = rank
+            all_results[chunk_id]["keyword_score"] = result["keyword_count"]
+            all_results[chunk_id]["source"] = "both"  # Aparece en ambos
+        else:
+            # Nuevo resultado solo de keyword
             result["source"] = "keyword"
-            result["combined_score"] = keyword_score * (1 - embedding_weight)
-            final_results.append(result)
-            seen_ids.add(chunk_id)
+            result["embedding_rank"] = None
+            result["keyword_rank"] = rank
+            result["embedding_score"] = 0
+            result["keyword_score"] = result["keyword_count"]
+            all_results[chunk_id] = result
 
-    # Buscar en leyes si está habilitado
-    if include_laws and embedding_provider:
+    # Calcular RRF score para cada resultado
+    final_results = []
+    for chunk_id, result in all_results.items():
+        rrf_score = 0
+
+        # RRF de embedding (si tiene ranking)
+        if result["embedding_rank"]:
+            rrf_score += 1 / (RRF_K + result["embedding_rank"])
+
+        # RRF de keyword (si tiene ranking)
+        if result["keyword_rank"]:
+            rrf_score += 1 / (RRF_K + result["keyword_rank"])
+
+        # Normalizar: documentos que aparecen en ambos rankings得到 bonus
+        if result["source"] == "both":
+            rrf_score *= 1.5  # 50% bonus por estar en ambos
+
+        result["rrf_score"] = rrf_score
+        result["combined_score"] = rrf_score
+        final_results.append(result)
+
+    # Agregar leyes como fallback si hay pocos resultados
+    doc_count = len(final_results)
+    if include_laws and embedding_provider and doc_count < 3:
         try:
             law_results = search_laws_by_embedding(
                 query_embedding, top_k=top_k, legal_area=legal_area
             )
-            for result in law_results:
+            print(f"[DEBUG RAG] Law results (fallback): {len(law_results)}")
+            for rank, result in enumerate(law_results, 1):
                 result["source"] = "law"
                 result["document_id"] = None
                 result["page_number"] = None
                 result["section_title"] = f"{result['law_name']} - Art. {result['article_number']}" if result['article_number'] else result['law_name']
-                result["combined_score"] = result["similarity"] * 0.8  # Prioridad alta para leyes
+                result["rrf_score"] = 1 / (RRF_K + rank) * 0.3  # Peso bajo para leyes
+                result["combined_score"] = result["rrf_score"]
                 final_results.append(result)
         except Exception:
             pass
 
-    final_results.sort(key=lambda x: x["combined_score"], reverse=True)
+    # Ordenar por RRF score
+    final_results.sort(key=lambda x: x["rrf_score"], reverse=True)
+
+    # Debug: print top 5 results
+    print(f"[DEBUG RAG] Final {len(final_results)} results, top 5:")
+    for i, r in enumerate(final_results[:5]):
+        src = r.get('source', 'unknown')
+        score = r.get('rrf_score', 0)
+        title = r.get('section_title', r.get('content', '')[:50])
+        print(f"  {i+1}. source={src}, rrf={score:.4f}, title={title}")
+
     return final_results[:top_k]
