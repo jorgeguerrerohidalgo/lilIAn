@@ -1,0 +1,20 @@
+{
+  "id": "solicitud_tribunal",
+  "name": "Solicitud a Tribunal",
+  "category": "procesal",
+  "description": "Solicitud o requerimiento ante tribunal",
+  "variables": [
+    {"key": "tribunal_nombre", "label": "Nombre del Tribunal", "required": true},
+    {"key": "rit", "label": "RIT/Causa", "required": false},
+    {"key": "demandante_nombre", "label": "Nombre del/D la Demandante", "required": true},
+    {"key": "demandante_rut", "label": "RUT del/D la Demandante", "required": true},
+    {"key": "demandante_domicilio", "label": "Domicilio del/D la Demandante", "required": true},
+    {"key": "demandado_nombre", "label": "Nombre del/D la Demandado/a", "required": true},
+    {"key": "demandado_rut", "label": "RUT del/D la Demandado/a", "required": true},
+    {"key": "demandado_domicilio", "label": "Domicilio del/D la Demandado/a", "required": true},
+    {"key": "petitorio", "label": "Petitorio (lo que se solicita)", "required": true, "type": "textarea"},
+    {"key": "hechos", "label": "Hechos relevantes", "required": true, "type": "textarea"},
+    {"key": "fundamentos", "label": "Fundamentos de derecho", "required": true, "type": "textarea"}
+  ],
+  "template": "SOLICITUD\n========\n\n{{tribunal_nombre}}\n{{#if rit}}RIT: {{rit}}{{/if}}\n\nDemandante: {{demandante_nombre}}, RUT {{demandante_rut}},domiciliado en {{demandante_domicilio}}\n\nDemandado: {{demandado_nombre}}, RUT {{demandado_rut}},domiciliado en {{demandado_domicilio}}\n\nPETITORIO\n---------\n{{petitorio}}\n\nHECHOS\n------\n{{hechos}}\n\nFUNDAMENTOS DE DERECHO\n--------------------\n{{fundamentos}}\n\n{{ciudad}}, {{fecha}}\n\nSolicitante\n_________________________\n{{demandante_nombre}}\nRUT: {{demandante_rut}}"
+}

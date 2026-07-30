@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
+import json
 
 
 class RiskItemResponse(BaseModel):
@@ -35,6 +36,20 @@ class AnalysisReportResponse(BaseModel):
     validation_summary: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('validation_summary', mode='before')
+    @classmethod
+    def parse_validation_summary(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return None
 
     class Config:
         from_attributes = True

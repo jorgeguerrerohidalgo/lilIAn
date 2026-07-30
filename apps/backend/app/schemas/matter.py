@@ -15,6 +15,7 @@ class MatterBase(BaseModel):
 
 class MatterCreate(MatterBase):
     organization_id: Optional[int] = None
+    client_id: Optional[int] = None
 
 
 class MatterUpdate(BaseModel):
@@ -26,12 +27,14 @@ class MatterUpdate(BaseModel):
     counterparty_name: Optional[str] = None
     relevant_date: Optional[datetime] = None
     assigned_lawyer_id: Optional[int] = None
+    client_id: Optional[int] = None
 
 
 class MatterResponse(MatterBase):
     id: int
     organization_id: int
     created_by_user_id: int
+    client_id: Optional[int] = None
     assigned_lawyer_id: Optional[int] = None
     status: str
     created_at: datetime

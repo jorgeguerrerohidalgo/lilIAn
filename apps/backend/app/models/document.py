@@ -22,3 +22,20 @@ class Document(Base):
     detected_document_type = Column(String(100))
     created_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime)
+
+    # Relación con análisis estructurado
+    analysis = relationship(
+        "DocumentAnalysis",
+        back_populates="document",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )
+
+    # Relación con chunks
+    chunks = relationship(
+        "DocumentChunk",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )

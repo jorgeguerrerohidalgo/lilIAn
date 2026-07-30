@@ -1,0 +1,18 @@
+{
+  "id": "carta_formal",
+  "name": "Carta Formal",
+  "category": "comunicacion",
+  "description": "Carta formal para comunicación legal entre partes",
+  "variables": [
+    {"key": "remitente_nombre", "label": "Nombre del Remitente", "required": true},
+    {"key": "remitente_rut", "label": "RUT Remitente", "required": true},
+    {"key": "destinatario_nombre", "label": "Nombre del Destinatario", "required": true},
+    {"key": "destinatario_cargo", "label": "Cargo del Destinatario", "required": false},
+    {"key": "empresa", "label": "Empresa/Institución", "required": false},
+    {"key": "asunto", "label": "Asunto", "required": true},
+    {"key": "contenido", "label": "Contenido de la carta", "required": true, "type": "textarea"},
+    {"key": "ciudad", "label": "Ciudad", "required": true},
+    {"key": "referencia", "label": "Referencia (ej: según nuestra conversación)", "required": false}
+  ],
+  "template": "{{ciudad}}, {{fecha}}\n\nSeñores\n{{destinatario_nombre}}{{#if destinatario_cargo}}, {{destinatario_cargo}}{{/if}}{{#if empresa}}\n{{empresa}}{{/if}}\nPresente\n\nRef.: {{referencia}}\n\nDe mi consideración:\n\n{{contenido}}\n\nSin otro particular, saluda atentamente a usted,\n\n{{remitente_nombre}}\nRUT: {{remitente_rut}}"
+}

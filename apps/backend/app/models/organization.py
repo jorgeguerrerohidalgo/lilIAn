@@ -34,3 +34,4 @@ class Organization(Base):
     members = relationship("OrganizationMember", back_populates="organization")
     matters = relationship("Matter", back_populates="organization")
     clients = relationship("Client", back_populates="organization")
+    precedents = relationship("Precedent", back_populates="organization")

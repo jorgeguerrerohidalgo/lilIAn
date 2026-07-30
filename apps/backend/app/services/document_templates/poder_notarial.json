@@ -1,0 +1,17 @@
+{
+  "id": "poder_notarial",
+  "name": "Poder Notarial Simple",
+  "category": "poderes",
+  "description": "Poder notarial para representación ante terceros",
+  "variables": [
+    {"key": "otorgante_nombre", "label": "Nombre del Otorgante", "required": true},
+    {"key": "otorgante_rut", "label": "RUT del Otorgante", "required": true},
+    {"key": "otorgante_domicilio", "label": "Domicilio del Otorgante", "required": true},
+    {"key": "representante_nombre", "label": "Nombre del Representante", "required": true},
+    {"key": "representante_rut", "label": "RUT del Representante", "required": true},
+    {"key": "facultades", "label": "Facultades otorgadas", "required": true, "type": "textarea"},
+    {"key": "materia", "label": "Materia/Juicio/Trámite", "required": true},
+    {"key": "lugar_entrega", "label": "Lugar de Entrega", "required": false}
+  ],
+  "template": "PODER NOTARIAL\n===============\n\nEn {{ciudad}}, a {{fecha}}\n\nYo, {{otorgante_nombre}}, RUN {{otorgante_rut}},domiciliado en {{otorgante_domicilio}},manifesto:\n\nQue por el presente instrumento doy mi poder SPECIAL Y BASTANTE a {{representante_nombre}}, RUN {{representante_rut}},para que en mi nombre y representación comparezca ante {{materia}},\npudiendo actuar en todos los trámites, girar, percibir, transigir, delegar y ejecutar todos los actos necesarios para el cumplimiento del presente poder.\n\nFacultades específicas:\n{{facultades}}\n\n{{#if lugar_entrega}}\nEl presente poder se entrega en: {{lugar_entrega}}\n{{/if}}\n\nOtorgante\n_________________________\n{{otorgante_nombre}}\nRUN: {{otorgante_rut}}\n\nAceptación del Representante:\n_________________________\n{{representante_nombre}}\nRUN: {{representante_rut}}\n\nNota: Este poder es revocable en cualquier momento, pero se entenderá revocado desde que el representante tenga conocimiento de ello."
+}

@@ -1,8 +1,8 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, JSON, Enum
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
-from app.models.legal_area import LegalArea
 
 
 class DocumentChunk(Base):
@@ -17,6 +17,9 @@ class DocumentChunk(Base):
     page_number = Column(Integer)
     section_title = Column(String(500))
     embedding = Column(Text)
-    legal_area = Column(Enum(LegalArea), nullable=True, index=True)
+    legal_area = Column(String(50), nullable=True, index=True)
     chunk_metadata = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relación con documento
+    document = relationship("Document", back_populates="chunks")

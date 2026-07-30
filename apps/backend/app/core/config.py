@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "anthropic"
     LLM_MODEL: str = "claude-sonnet-4-20250514"
     LLM_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
 
     EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL: str = "text-embedding-3-small"

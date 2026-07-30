@@ -1,0 +1,16 @@
+{
+  "id": "minuta_reunion",
+  "name": "Minuta de Reunión",
+  "category": "administrativo",
+  "description": "Resumen de puntos discutidos en una reunión",
+  "variables": [
+    {"key": "fecha_reunion", "label": "Fecha de Reunión", "required": true},
+    {"key": "hora", "label": "Hora", "required": false},
+    {"key": "lugar", "label": "Lugar", "required": false},
+    {"key": "asistentes", "label": "Asistentes (nombres y roles)", "required": true, "type": "textarea"},
+    {"key": "temas_tratados", "label": "Temas Tratados", "required": true, "type": "textarea"},
+    {"key": "acuerdos", "label": "Acuerdos y Compromisos", "required": true, "type": "textarea"},
+    {"key": "proxima_reunion", "label": "Próxima Reunión (fecha/tema)", "required": false}
+  ],
+  "template": "MINUTA DE REUNIÓN\n==================\n\nFecha: {{fecha_reunion}}{{#if hora}} - Hora: {{hora}}{{/if}}\nLugar: {{lugar}}\n\nASISTENTES\n----------\n{{asistentes}}\n\nTEMAS TRATADOS\n--------------\n{{temas_tratados}}\n\nACUERDOS Y COMPROMISOS\n---------------------\n{{acuerdos}}\n\n{{#if proxima_reunion}}\nPRÓXIMA REUNIÓN\n----------------\n{{proxima_reunion}}\n{{/if}}\n\nFecha de elaboración: {{fecha}}\n\nFirma del elaborador: ________________\n\nNota: Esta minuta tiene carácter interno y confidencial."
+}
