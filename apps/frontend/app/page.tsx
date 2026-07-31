@@ -15,7 +15,7 @@ export default function Home() {
               <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
                 lil<span className="text-coral">I</span>An
               </h1>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI v2</p>
             </div>
           </Link>
           <nav className="flex gap-3">
