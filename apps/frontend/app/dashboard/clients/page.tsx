@@ -387,7 +387,11 @@ export default function ClientsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {clients.map((client) => (
-                    <tr key={client.id} className="hover:bg-gray-50">
+                    <tr
+                      key={client.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold">
@@ -412,7 +416,7 @@ export default function ClientsPage() {
                         {client.email && <p className="text-sm text-gray-500">{client.email}</p>}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => handleEdit(client)}
                             className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"

@@ -48,3 +48,4 @@ coverage/
 .env
 .env.backup
 apps/backend/laws/*.pdf
+.vercel

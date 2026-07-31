@@ -34,6 +34,9 @@
 #   013_create_chat_sessions.sql
 #   014_create_templates.sql
 #   015_create_subscriptions_and_usage.sql
+#   016_create_law_chunks.sql
+#   017_add_validation_summary_to_analysis_reports.sql
+#   018_create_document_analyses.sql
 #
 # ============================================
 

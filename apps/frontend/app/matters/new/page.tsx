@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -26,15 +26,36 @@ const urgencyOptions = [
 
 export default function NewMatterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const clientIdFromUrl = searchParams.get("client_id");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [clientName, setClientName] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     matter_type: "contract_review",
     description: "",
     urgency: "medium",
     counterparty_name: "",
+    client_id: clientIdFromUrl ? parseInt(clientIdFromUrl) : undefined,
   });
+
+  useEffect(() => {
+    if (clientIdFromUrl) {
+      const token = localStorage.getItem("token");
+      if (token) {
+        fetch(`${API_URL}/api/v1/clients/${clientIdFromUrl}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((res) => res.ok ? res.json() : null)
+          .then((data) => {
+            if (data) setClientName(data.name);
+          })
+          .catch(() => {});
+      }
+    }
+  }, [clientIdFromUrl]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,24 +93,35 @@ export default function NewMatterPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Crear nuevo caso</h1>
-        <p className="text-gray-600 mt-1">
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">
+          Crear nuevo caso
+        </h1>
+        <p className="text-slate-500 mt-1">
           Ingresa la información básica de tu caso legal
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6">
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-200">
           {error}
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      {clientName && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <p className="text-sm text-slate-700">
+            <strong>Cliente:</strong> {clientName}
+          </p>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-1.5">
               Título del caso *
             </label>
             <input
@@ -97,21 +129,21 @@ export default function NewMatterPage() {
               id="title"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all"
               placeholder="Ej: Revisión contrato de prestación de servicios"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="matter_type" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="matter_type" className="block text-sm font-medium text-slate-700 mb-1.5">
               Materia legal *
             </label>
             <select
               id="matter_type"
               value={form.matter_type}
               onChange={(e) => setForm({ ...form, matter_type: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all bg-white"
               required
             >
               {matterTypes.map((type) => (
@@ -123,28 +155,28 @@ export default function NewMatterPage() {
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-1.5">
               Descripción
             </label>
             <textarea
               id="description"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={4}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              rows={3}
+              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all resize-none"
               placeholder="Describe brevemente tu situación legal..."
             />
           </div>
 
           <div>
-            <label htmlFor="urgency" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="urgency" className="block text-sm font-medium text-slate-700 mb-1.5">
               Urgencia *
             </label>
             <select
               id="urgency"
               value={form.urgency}
               onChange={(e) => setForm({ ...form, urgency: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all bg-white"
               required
             >
               {urgencyOptions.map((opt) => (
@@ -156,7 +188,7 @@ export default function NewMatterPage() {
           </div>
 
           <div>
-            <label htmlFor="counterparty_name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="counterparty_name" className="block text-sm font-medium text-slate-700 mb-1.5">
               Contraparte (opcional)
             </label>
             <input
@@ -164,30 +196,30 @@ export default function NewMatterPage() {
               id="counterparty_name"
               value={form.counterparty_name}
               onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all"
               placeholder="Nombre de la otra parte involucrada"
             />
           </div>
 
-          <div className="bg-primary-50 p-4 rounded-lg">
-            <p className="text-sm text-primary-800">
+          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <p className="text-sm text-slate-600">
               <strong>Nota:</strong> Este análisis es preliminar y no reemplaza la revisión
               profesional de un abogado habilitado en Chile.
             </p>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+              className="px-4 py-2.5 border border-slate-200 rounded-lg text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              className="px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium text-sm hover:bg-slate-800 disabled:opacity-50 transition-colors"
             >
               {loading ? "Creando..." : "Crear caso"}
             </button>

@@ -3,8 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui";
+import { Input } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { getApiUrl } from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = getApiUrl();
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,7 +27,8 @@ export default function LoginPage() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const res = await fetch(`${API_URL}/api/v1/auth/login`, {
+      const loginUrl = API_URL ? `${API_URL}/api/v1/auth/login` : "/api/v1/auth/login";
+      const res = await fetch(loginUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
@@ -47,59 +52,64 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border p-8">
-      <h2 className="text-2xl font-bold mb-6 text-center">Iniciar sesión</h2>
-
-      {error && (
-        <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">
-          {error}
+    <div className="min-h-screen bg-soft flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-8">
+        <div className="text-center mb-8">
+          {/* Logo */}
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
+              <span className="text-2xl font-heading font-bold text-white">L</span>
+            </div>
+            <div className="text-left">
+              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+                lil<span className="text-coral">I</span>An
+              </h1>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI</p>
+            </div>
+          </div>
+          <h2 className="text-2xl font-heading font-bold text-ink">Iniciar sesión</h2>
+          <p className="text-ink/60 mt-2">Accede a tu cuenta de LILIAN</p>
         </div>
-      )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
+        {error && (
+          <div className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Input
+            label="Email"
             type="email"
             id="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="tu@email.com"
             required
           />
-        </div>
 
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-            Contraseña
-          </label>
-          <input
+          <Input
+            label="Contraseña"
             type="password"
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="••••••••"
             required
           />
-        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-        >
-          {loading ? "Iniciando sesión..." : "Iniciar sesión"}
-        </button>
-      </form>
+          <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
+            {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+          </Button>
+        </form>
 
-      <p className="mt-4 text-center text-sm text-gray-600">
-        ¿No tienes cuenta?{" "}
-        <Link href="/auth/register" className="text-primary-600 hover:text-primary-700">
-          Regístrate
-        </Link>
-      </p>
+        <p className="mt-6 text-center text-sm text-ink/60">
+          ¿No tienes cuenta?{" "}
+          <Link href="/auth/register" className="text-coral font-semibold hover:text-coral-dark">
+            Regístrate
+          </Link>
+        </p>
+      </Card>
     </div>
   );
 }

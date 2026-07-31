@@ -69,7 +69,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         setTemplates(data);
 
         // Extraer categorías únicas
-        const cats = [...new Set(data.map((t: Template) => t.category))];
+        const cats = [...new Set<string>(data.map((t: Template) => t.category))];
         setCategories(cats);
       }
     } catch (error) {
@@ -177,9 +177,9 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold mb-4">Generador de Documentos Legales</h2>
-        <p className="text-gray-600 mb-6">
+      <div className="bg-cream rounded-xl border border-border p-6">
+        <h2 className="text-lg font-semibold text-ink mb-2">Generador de Documentos Legales</h2>
+        <p className="text-ink2 text-sm mb-6">
           Selecciona un tipo de documento y completa los campos para generar un documento personalizado.
         </p>
 
@@ -189,8 +189,8 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
             onClick={() => setSelectedCategory(null)}
             className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
               !selectedCategory
-                ? "bg-gray-800 text-white border-gray-800"
-                : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                ? "bg-ink text-white border-ink"
+                : "bg-cream text-ink2 border-border hover:border-ink/30"
             }`}
           >
             Todos
@@ -201,8 +201,8 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                 selectedCategory === cat
-                  ? "bg-gray-800 text-white border-gray-800"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                  ? "bg-ink text-white border-ink"
+                  : "bg-cream text-ink2 border-border hover:border-ink/30"
               }`}
             >
               {categoryLabels[cat] || cat}
@@ -214,7 +214,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {loading ? (
             <div className="col-span-full text-center py-8">
-              <div className="animate-spin h-8 w-8 border-2 border-primary-600 border-t-transparent rounded-full mx-auto" />
+              <div className="w-8 h-8 border-3 border-soft border-t-ink rounded-full animate-spin mx-auto" />
             </div>
           ) : (
             filteredTemplates.map((template) => (
@@ -223,22 +223,22 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                 onClick={() => handleSelectTemplate(template)}
                 className={`p-4 rounded-xl border text-left transition-all ${
                   selectedTemplate?.id === template.id
-                    ? "border-primary-600 bg-primary-50 ring-2 ring-primary-600"
-                    : "border-gray-200 hover:border-primary-300 hover:shadow-md"
+                    ? "border-ink bg-soft ring-2 ring-ink"
+                    : "border-border hover:border-ink/30 hover:shadow-md"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">
+                  <span className="text-lg text-ink/60">
                     {template.category === "comunicacion" && "📧"}
                     {template.category === "administrativo" && "📋"}
                     {template.category === "procesal" && "⚖️"}
                     {template.category === "poderes" && "📜"}
                     {template.category === "contratos" && "📄"}
                   </span>
-                  <span className="font-medium text-gray-900">{template.name}</span>
+                  <span className="font-medium text-ink">{template.name}</span>
                 </div>
-                <p className="text-sm text-gray-500 line-clamp-2">{template.description}</p>
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-sm text-ink2 line-clamp-2">{template.description}</p>
+                <p className="text-xs text-ink/40 mt-2">
                   {template.variables.filter((v) => v.required).length} campos requeridos
                 </p>
               </button>
@@ -248,20 +248,20 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
         {/* Variable Form */}
         {selectedTemplate && (
-          <div className="bg-gray-50 rounded-xl p-6 border">
+          <div className="bg-soft rounded-xl p-6 border border-border">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">
+              <h3 className="font-semibold text-ink">
                 Completar: {selectedTemplate.name}
               </h3>
               {matterId && (
                 <button
                   onClick={handleSuggestVariables}
                   disabled={suggesting}
-                  className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+                  className="px-3 py-1.5 text-sm bg-purple text-white rounded-lg hover:bg-purple/90 disabled:opacity-50 flex items-center gap-2 transition-colors"
                 >
                   {suggesting ? (
                     <>
-                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       Analizando caso...
                     </>
                   ) : (
@@ -277,11 +277,11 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
             </div>
 
             {suggestedResult && suggestedResult.success && (
-              <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <p className="text-sm text-purple-700 font-medium mb-1">Variables sugeridas</p>
-                <p className="text-xs text-purple-600">{suggestedResult.reasoning}</p>
+              <div className="mb-4 p-3 bg-purple-pale border border-purple/20 rounded-lg">
+                <p className="text-sm text-purple font-medium mb-1">Variables sugeridas</p>
+                <p className="text-xs text-purple/80">{suggestedResult.reasoning}</p>
                 {suggestedResult.missing_fields.length > 0 && (
-                  <p className="text-xs text-orange-600 mt-1">
+                  <p className="text-xs text-amber mt-1">
                     Campos sin inferir: {suggestedResult.missing_fields.join(", ")}
                   </p>
                 )}
@@ -291,9 +291,9 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
             <div className="space-y-4">
               {selectedTemplate.variables.map((variable) => (
                 <div key={variable.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-ink2 mb-1">
                     {variable.label}
-                    {variable.required && <span className="text-red-500 ml-1">*</span>}
+                    {variable.required && <span className="text-coral ml-1">*</span>}
                   </label>
                   {variable.type === "textarea" ? (
                     <textarea
@@ -304,8 +304,8 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                           [variable.key]: e.target.value,
                         }))
                       }
-                      rows={4}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      rows={3}
+                      className="w-full px-3.5 py-2.5 border border-border rounded-lg text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink/40 transition-all"
                       placeholder={`Ingrese ${variable.label.toLowerCase()}`}
                     />
                   ) : (
@@ -318,7 +318,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                           [variable.key]: e.target.value,
                         }))
                       }
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3.5 py-2.5 border border-border rounded-lg text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-ink/20 focus:border-ink/40 transition-all"
                       placeholder={`Ingrese ${variable.label.toLowerCase()}`}
                     />
                   )}
@@ -330,11 +330,11 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
               <button
                 onClick={handleGenerate}
                 disabled={generating}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2.5 bg-ink text-white rounded-lg font-medium text-sm hover:bg-ink/90 disabled:opacity-50 flex items-center gap-2 transition-colors"
               >
                 {generating ? (
                   <>
-                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     Generando...
                   </>
                 ) : (
@@ -343,14 +343,14 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
               </button>
               <button
                 onClick={() => setSelectedTemplate(null)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2.5 border border-border text-ink2 rounded-lg font-medium text-sm hover:bg-cream transition-colors"
               >
                 Cancelar
               </button>
             </div>
 
             {generatedDoc && !generatedDoc.success && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div className="mt-4 p-3 bg-coral-pale border border-coral/20 rounded-lg text-coral-dark text-sm">
                 {generatedDoc.errors.map((err, i) => (
                   <p key={i}>{err}</p>
                 ))}
@@ -362,30 +362,30 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
       {/* Preview Modal */}
       {showModal && generatedDoc && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-xl font-semibold">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-cream rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-border">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <h2 className="text-lg font-semibold text-ink">
                 {generatedDoc.document_name}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
+                className="p-2 hover:bg-soft rounded-lg transition-colors"
               >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-5 w-5 text-ink/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
-              <pre className="whitespace-pre-wrap font-mono text-sm text-gray-700 bg-gray-50 p-4 rounded-lg">
+              <pre className="whitespace-pre-wrap font-mono text-sm text-ink2 bg-soft p-4 rounded-lg border border-border">
                 {generatedDoc.content}
               </pre>
             </div>
-            <div className="p-6 border-t flex gap-3">
+            <div className="p-6 border-t border-border flex gap-3">
               <button
                 onClick={handleDownload}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                className="px-5 py-2.5 bg-green text-white rounded-lg font-medium text-sm hover:bg-green/90 flex items-center gap-2 transition-colors"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h14a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4v12m-4-4l4-4m0 0l4 4" />
@@ -394,7 +394,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
               </button>
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2.5 border border-border text-ink2 rounded-lg font-medium text-sm hover:bg-cream transition-colors"
               >
                 Cerrar
               </button>

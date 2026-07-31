@@ -3,6 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui";
+import { Input } from "@/components/ui";
+import { Card } from "@/components/ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -58,87 +61,84 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border p-8">
-      <h2 className="text-2xl font-bold mb-6 text-center">Crear cuenta</h2>
-
-      {error && (
-        <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">
-          {error}
+    <div className="min-h-screen bg-soft flex items-center justify-center p-4">
+      <Card className="w-full max-w-md p-8">
+        <div className="text-center mb-8">
+          {/* Logo */}
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
+              <span className="text-2xl font-heading font-bold text-white">L</span>
+            </div>
+            <div className="text-left">
+              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+                lil<span className="text-coral">I</span>An
+              </h1>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI</p>
+            </div>
+          </div>
+          <h2 className="text-2xl font-heading font-bold text-ink">Crear cuenta</h2>
+          <p className="text-ink/60 mt-2">Regístrate en LILIAN</p>
         </div>
-      )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
-            Nombre completo
-          </label>
-          <input
+        {error && (
+          <div className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <Input
+            label="Nombre completo"
             type="text"
             id="fullName"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="Tu nombre completo"
             required
           />
-        </div>
 
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-            Email
-          </label>
-          <input
+          <Input
+            label="Email"
             type="email"
             id="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="tu@email.com"
             required
           />
-        </div>
 
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-            Contraseña
-          </label>
-          <input
+          <Input
+            label="Contraseña"
             type="password"
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="••••••••"
             required
           />
-        </div>
 
-        <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-            Confirmar contraseña
-          </label>
-          <input
+          <Input
+            label="Confirmar contraseña"
             type="password"
             id="confirmPassword"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            placeholder="••••••••"
             required
           />
-        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-        >
-          {loading ? "Creando cuenta..." : "Crear cuenta"}
-        </button>
-      </form>
+          <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
+            {loading ? "Creando cuenta..." : "Crear cuenta"}
+          </Button>
+        </form>
 
-      <p className="mt-4 text-center text-sm text-gray-600">
-        ¿Ya tienes cuenta?{" "}
-        <Link href="/auth/login" className="text-primary-600 hover:text-primary-700">
-          Inicia sesión
-        </Link>
-      </p>
+        <p className="mt-6 text-center text-sm text-ink/60">
+          ¿Ya tienes cuenta?{" "}
+          <Link href="/auth/login" className="text-coral font-semibold hover:text-coral-dark">
+            Inicia sesión
+          </Link>
+        </p>
+      </Card>
     </div>
   );
 }

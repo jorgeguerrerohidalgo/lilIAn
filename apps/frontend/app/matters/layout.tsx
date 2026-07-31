@@ -1,7 +1,1 @@
-export default function MattersLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <>{children}</>;
-}
+export { default } from "@/components/layout/dashboard-layout";

@@ -10,11 +10,10 @@ services:
       - "8000:8000"
     depends_on:
       - redis
-      - db
     volumes:
       - ./apps/backend:/app
       - document_storage:/app/storage
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host "::" --port 8000
 
   frontend:
     build:
@@ -42,6 +41,7 @@ services:
     depends_on:
       - redis
     volumes:
+      - ./apps/backend:/app
       - document_storage:/app/storage
     command: python workers/document_processor/doc_worker.py
 
@@ -69,3 +69,11 @@ volumes:
   redis_data:
   document_storage:
   postgres_data:
+
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
+        - subnet: fd00:abcd::/64

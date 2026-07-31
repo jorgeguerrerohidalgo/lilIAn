@@ -22,6 +22,7 @@ interface Matter {
 interface Document {
   id: number;
   original_filename: string;
+  detected_document_type: string | null;
   mime_type: string;
   file_size: number;
   status: string;
@@ -39,6 +40,18 @@ interface AnalysisReport {
   status: string;
   created_at: string;
   risks: RiskItem[];
+  validation_summary?: {
+    total_documents: number;
+    document_types_found: Record<string, number>;
+    required_types: string[];
+    required_found: string[];
+    required_missing: string[];
+    recommended_found: string[];
+    recommended_missing: string[];
+    total_inconsistencies: number;
+    errors: number;
+    warnings: number;
+  };
 }
 
 interface RiskItem {
