@@ -4,8 +4,6 @@ services:
       context: ./apps/backend
       dockerfile: Dockerfile
     container_name: legal-ai-backend
-    env_file:
-      - .env
     ports:
       - "8000:8000"
     depends_on:
@@ -13,6 +11,16 @@ services:
     volumes:
       - ./apps/backend:/app
       - document_storage:/app/storage
+    env_file:
+      - apps/backend/.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8000}
     command: uvicorn app.main:app --host "::" --port 8000
 
   frontend:
@@ -21,7 +29,9 @@ services:
       dockerfile: Dockerfile
     container_name: legal-ai-frontend
     env_file:
-      - .env
+      - apps/frontend/.env.local
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     depends_on:
@@ -29,7 +39,6 @@ services:
     volumes:
       - ./apps/frontend:/app
       - /app/node_modules
-    command: npm run dev
 
   worker:
     build:
@@ -37,7 +46,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: legal-ai-worker
     env_file:
-      - .env
+      - apps/backend/.env
     depends_on:
       - redis
     volumes:
@@ -57,9 +66,9 @@ services:
     image: postgres:15-alpine
     container_name: legal-ai-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: lilian
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-lilian}
     ports:
       - "5432:5432"
     volumes:
