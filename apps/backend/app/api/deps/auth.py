@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.user import User
-from app.models.organization_member import OrganizationMember
+from app.models.organization_member import OrganizationMember, MemberRole
 from typing import Optional
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -61,5 +61,23 @@ def require_organization(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="El usuario no pertenece a ninguna organización"
+        )
+    return membership
+
+
+def get_platform_admin_membership(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> OrganizationMember:
+    """Verifica que el usuario es PLATFORM_ADMIN en alguna organización."""
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.role == MemberRole.PLATFORM_ADMIN
+    ).first()
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el administrador de plataforma puede realizar esta acción"
         )
     return membership

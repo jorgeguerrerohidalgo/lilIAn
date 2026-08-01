@@ -87,6 +87,7 @@ def search_precedents(
 
             results = search_precedents_by_embedding(
                 query_embedding,
+                organization_id=membership.organization_id,
                 court=court,
                 year=year,
                 legal_area=legal_area,
@@ -101,6 +102,7 @@ def search_precedents(
     if not results and (search_type == "keyword" or search_type == "hybrid"):
         results = search_precedents_by_keyword(
             q,
+            organization_id=membership.organization_id,
             court=court,
             year=year,
             legal_area=legal_area,
@@ -130,6 +132,7 @@ def get_precedents_context(
     """Obtiene contexto de precedentes para integracion con RAG."""
     context = get_precedent_context(
         query=q,
+        organization_id=membership.organization_id,
         court=court,
         year=year,
         legal_area=legal_area,
@@ -151,7 +154,9 @@ def list_courts(
     """Lista tribunales disponibles."""
     from app.models.precedent import Precedent
 
-    courts = db.query(Precedent.court).distinct().all()
+    courts = db.query(Precedent.court).filter(
+        Precedent.organization_id == membership.organization_id
+    ).distinct().all()
     return {"courts": [c[0] for c in courts if c[0]]}
 
 
@@ -164,7 +169,9 @@ def list_legal_areas_in_precedents(
     """Lista areas legales disponibles en precedentes."""
     from app.models.precedent import Precedent
 
-    areas = db.query(Precedent.legal_area).distinct().all()
+    areas = db.query(Precedent.legal_area).filter(
+        Precedent.organization_id == membership.organization_id
+    ).distinct().all()
     return {"legal_areas": [a[0] for a in areas if a[0]]}
 
 

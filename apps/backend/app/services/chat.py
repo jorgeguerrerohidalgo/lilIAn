@@ -247,6 +247,7 @@ def get_relevant_context(
                 from app.services.precedent_rag import get_precedent_context as get_pc
                 precedent_context = get_pc(
                     query=query,
+                    organization_id=organization_id,
                     court=None,
                     year=None,
                     legal_area=legal_area.value if legal_area else None,

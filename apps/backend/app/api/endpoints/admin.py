@@ -10,9 +10,9 @@ from app.core.database import get_db
 from app.models.audit_log import AuditLog
 from app.models.organization import Organization
 from app.models.user import User
-from app.models.organization_member import OrganizationMember, MemberRole
+from app.models.organization_member import OrganizationMember
 from app.models.matter import Matter
-from app.api.deps.auth import get_current_user, require_organization
+from app.api.deps.auth import get_current_user, get_platform_admin_membership
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -62,11 +62,9 @@ def list_audit_logs(
     days: int = 7,
     limit: int = 100,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
     db: Session = Depends(get_db)
 ):
-    if membership.role != MemberRole.OWNER:
-        raise HTTPException(status_code=403, detail="Solo el owner puede ver logs de auditoría")
 
     since = datetime.utcnow() - timedelta(days=days)
 
@@ -102,11 +100,9 @@ def list_audit_logs(
 @router.get("/organizations", response_model=List[OrganizationAdminResponse])
 def list_all_organizations(
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
     db: Session = Depends(get_db)
 ):
-    if membership.role != MemberRole.OWNER:
-        raise HTTPException(status_code=403, detail="Solo el owner puede ver organizaciones")
 
     orgs = db.query(Organization).order_by(Organization.created_at.desc()).all()
 
@@ -137,11 +133,9 @@ def list_all_organizations(
 @router.get("/stats", response_model=DashboardStats)
 def get_platform_stats(
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
     db: Session = Depends(get_db)
 ):
-    if membership.role != MemberRole.OWNER:
-        raise HTTPException(status_code=403, detail="Solo el owner puede ver estadísticas")
 
     total_organizations = db.query(func.count(Organization.id)).scalar() or 0
     total_users = db.query(func.count(User.id)).scalar() or 0
@@ -175,11 +169,9 @@ def get_platform_stats(
 def suspend_organization(
     org_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
     db: Session = Depends(get_db)
 ):
-    if membership.role != MemberRole.OWNER:
-        raise HTTPException(status_code=403, detail="Solo el owner puede suspender organizaciones")
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
@@ -196,11 +188,9 @@ def suspend_organization(
 def activate_organization(
     org_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
     db: Session = Depends(get_db)
 ):
-    if membership.role != MemberRole.OWNER:
-        raise HTTPException(status_code=403, detail="Solo el owner puede activar organizaciones")
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:

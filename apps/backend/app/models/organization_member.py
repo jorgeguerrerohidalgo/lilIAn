@@ -6,6 +6,7 @@ from app.core.database import Base
 
 
 class MemberRole(str, enum.Enum):
+    PLATFORM_ADMIN = "platform_admin"  # Admin de toda la plataforma
     OWNER = "owner"
     ADMIN = "admin"
     LAWYER = "lawyer"

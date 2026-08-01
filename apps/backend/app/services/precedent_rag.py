@@ -22,6 +22,7 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
 
 def search_precedents_by_embedding(
     query_embedding: List[float],
+    organization_id: int,
     court: Optional[str] = None,
     year: Optional[int] = None,
     legal_area: Optional[str] = None,
@@ -29,10 +30,10 @@ def search_precedents_by_embedding(
     top_k: int = 5,
     similarity_threshold: float = 0.7
 ) -> List[dict]:
-    """Search precedents by semantic similarity."""
+    """Search precedents by semantic similarity within an organization."""
     db = SessionLocal()
     try:
-        query = db.query(Precedent)
+        query = db.query(Precedent).filter(Precedent.organization_id == organization_id)
 
         if court:
             query = query.filter(Precedent.court.ilike(f"%{court}%"))
@@ -82,18 +83,20 @@ def search_precedents_by_embedding(
 
 def search_precedents_by_keyword(
     query: str,
+    organization_id: int,
     court: Optional[str] = None,
     year: Optional[int] = None,
     legal_area: Optional[str] = None,
     matter_type: Optional[str] = None,
     top_k: int = 10
 ) -> List[dict]:
-    """Search precedents by keyword in summary/decision."""
+    """Search precedents by keyword in summary/decision within an organization."""
     db = SessionLocal()
     try:
         search_pattern = f"%{query}%"
 
         q = db.query(Precedent).filter(
+            Precedent.organization_id == organization_id,
             (Precedent.summary.ilike(search_pattern)) |
             (Precedent.decision.ilike(search_pattern)) |
             (Precedent.reasoning.ilike(search_pattern)) |
@@ -131,19 +134,21 @@ def search_precedents_by_keyword(
 
 def get_precedent_context(
     query: str,
+    organization_id: int,
     court: Optional[str] = None,
     year: Optional[int] = None,
     legal_area: Optional[str] = None,
     top_k: int = 3
 ) -> str:
-    """Returns formatted precedent context for RAG integration."""
+    """Returns formatted precedent context for RAG integration within an organization."""
     try:
         provider = get_embedding_provider()
         query_embedding = provider.generate_embedding(query)
     except Exception:
         # Fallback to keyword search if embedding fails
         results = search_precedents_by_keyword(
-            query, court=court, year=year, legal_area=legal_area, top_k=top_k
+            query, organization_id,
+            court=court, year=year, legal_area=legal_area, top_k=top_k
         )
         if not results:
             return ""
@@ -158,6 +163,7 @@ def get_precedent_context(
 
     results = search_precedents_by_embedding(
         query_embedding,
+        organization_id,
         court=court,
         year=year,
         legal_area=legal_area,
@@ -167,7 +173,8 @@ def get_precedent_context(
     if not results:
         # Try keyword search as fallback
         results = search_precedents_by_keyword(
-            query, court=court, year=year, legal_area=legal_area, top_k=top_k
+            query, organization_id,
+            court=court, year=year, legal_area=legal_area, top_k=top_k
         )
         if not results:
             return ""
@@ -177,7 +184,7 @@ def get_precedent_context(
         context_parts.append(
             f"[Precedente {i}] {r['court']}, {r['year']}, Rol {r['roll_number']}\n"
             f"Materia: {r.get('legal_area', 'N/A')} | Tipo: {r.get('matter_type', 'N/A')}\n"
-            f"Resumen: {r['summary'][:800]}...\n"
+            f"Resumen: {r['summary'][:800]}\n"
             f"Fallo: {r.get('decision', 'N/A')[:400]}..."
         )
 
