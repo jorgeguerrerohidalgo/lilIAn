@@ -27,3 +27,5 @@ class User(Base):
     memberships = relationship("OrganizationMember", back_populates="user")
     matters = relationship("Matter", back_populates="created_by", foreign_keys="Matter.created_by_user_id")
     clients = relationship("Client", back_populates="created_by")
+    reviews_created = relationship("Review", foreign_keys="Review.created_by_user_id", back_populates="creator")
+    reviews_done = relationship("Review", foreign_keys="Review.reviewed_by_user_id", back_populates="reviewer")

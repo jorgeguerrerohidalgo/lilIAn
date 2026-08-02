@@ -1,0 +1,53 @@
+{
+  "id": "contrato_arriendo_001",
+  "tipo_caso": "lease",
+  "dificultad": "baja",
+  "descripcion": "Contrato de arrendamiento de vivienda con garantía de tres meses",
+  "texto_fuente": "CONTRATO DE ARRENDAMIENTO\n\nEn Santiago, a 1 de junio de 2024, entre PROPIETARIOS INMOBILIARIA SA, RUT 78.987.654-3, representada por Carlos Rodríguez, RUN 11.222.333-4, en adelante 'EL ARRENDADOR', y ARRENDATARIO Juan Sánchez Lima, RUN 11.111.222-3, RUT 12.345.678-K, en adelante 'EL ARRENDATARIO'.\n\nSe arrienda el inmueble ubicado en Avenida Las Flores 456, Depto 12, Santiago, de 65 metros cuadrados, dos dormitorios, para uso habitacional exclusivamente.\n\nEl Canon de arrendamiento se pacta en la suma de $850.000 mensuales, pagadero anticipadamente el día primero de cada mes.\n\nGarantía: EL ARRENDATARIO entrega en este acto la suma de $2.550.000 corresponding to tres meses de canon, la que será devuelta al término del contrato, una vez hecho el estado de entregas del inmueble.\n\nDuración: El presente contrato regirá por 24 meses desde el 1 de junio de 2024 hasta el 31 de mayo de 2026.\n\nCLÁUSULA PRIMERA: El inmueble se arrienda en el estado en que se encuentra, reconociendo EL ARRENDATARIO haberlo visitado y recibirlo en buenas condiciones.\n\nCLÁUSULA SEGUNDA: EL ARRENDATARIO no podrá subarrendar total ni parcialmente sin consentimiento escrito del ARRENDADOR.\n\nCLÁUSULA TERCERA: Los gastos comunes serán de cargo del ARRENDATARIO hasta por un máximo de $80.000 mensuales.",
+  "metadata": {
+    "tipo_inmueble": "departamento",
+    "direccion": "Avenida Las Flores 456, Depto 12, Santiago",
+    "superficie_m2": 65,
+    "habitaciones": 2,
+    "destino": "habitacional",
+    "canon_mensual": 850000,
+    "garantia_meses": 3,
+    "duracion_meses": 24,
+    "fecha_inicio": "2024-06-01",
+    "fecha_termino": "2026-05-31",
+    "partes_relacionadas": false
+  },
+  "expected_analysis": {
+    "tipo_contrato": "Arrendamiento de vivienda",
+    "partes_identificadas": [
+      {"nombre": "PROPIETARIOS INMOBILIARIA SA", "rol": "Arrendador", "rut": "78.987.654-3"},
+      {"nombre": "Juan Sánchez Lima", "rol": "Arrendatario", "rut": "11.111.222-3"}
+    ],
+    "inmueble": {
+      "direccion": "Avenida Las Flores 456, Depto 12, Santiago",
+      "superficie": "65 m2",
+      "habitaciones": 2,
+      "destino": "habitacional"
+    },
+    "condiciones_economicas": {
+      "canon_mensual": 850000,
+      "garantia": 2550000,
+      "gastos_comunes_max": 80000
+    },
+    "duracion": "24 meses",
+    "clausulas_peligrosas": [],
+    "observaciones": [
+      "Garantía de tres meses es excesiva - Ley de Arrendamientos permite máximo dos meses",
+      "No hay clause de reajuste de canon",
+      "No hay clause de término anticipado por incumplimiento",
+      "Gastos comunes sin tope real"
+    ],
+    "confidence": "high"
+  },
+  "test_expectations": {
+    "debe_detectar": ["garantia_excesiva", "sin_reajuste"],
+    "debe_identificar_partes": true,
+    "debe_calcular_garantia": true,
+    "debe_validar_garantia_legal": true
+  }
+}

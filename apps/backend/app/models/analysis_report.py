@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
 
@@ -21,5 +22,9 @@ class AnalysisReport(Base):
     confidence = Column(String(50), default="medium")
     status = Column(String(50), default="generated")
     validation_summary = Column(Text, nullable=True)
+    requires_human_review = Column(Boolean, default=False)
+    review_approved = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    reviews = relationship("Review", back_populates="analysis_report")

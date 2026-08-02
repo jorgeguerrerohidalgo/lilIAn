@@ -1,0 +1,63 @@
+{
+  "id": "demanda_laboral_001",
+  "tipo_caso": "labor",
+  "dificultad": "alta",
+  "descripcion": "Demanda laboral por despido injustificado con cláusulas de confidencialidad",
+  "texto_fuente": "CITACIÓN Y DEMANDA LABORAL\n\nEn lo Principal: Comparece don ALEJANDRO VEGA MUÑOZ, RUN 9.876.543-2, ante US. Juzgado de Letras del Trabajo, demanda a SOCIEDAD COMERCIAL CHILE LTDA, RUT 76.543.210-9, representada por Pedro Fernández Silva, RUN 12.345.678-5.\n\nHECHOS:\n1. El actor se desempeñó para la demandada desde el 1 de marzo de 2019 hasta el 30 de septiembre de 2023, desempeñando funciones de jefe de ventas.\n2. Durante toda la relación laboral, el actor trabajó bajo subordinación y dependencia, cumpliendo horario de lunes a viernes de 9:00 a 18:00 horas.\n3. El actor percibía una remuneración líquida mensual de $2.350.000.\n4. El 30 de septiembre de 2023, fue citado a una reunión donde se le informó que su contrato de trabajo terminaba por necesidades de la empresa, sin más explicaciones.\n5. La empresa no le pagó las indemnizaciones legales correspondientes.\n6. Además, la empresa le hizo firmar un documento de 'acuerdo de confidencialidad' donde se establece que no puede trabajar en el rubro por 2 años y debe mantener estricta reserva sobre información de clientes.\n\nPRIMERO: La demandada ha incurrido en despido injustificado, debiendo pagar las indemnizaciones del artículo 163 del Código del Trabajo.\nSEGUNDO: Se deben las cotizaciones previsionales adeudadas.\nTERCERO: La cláusula de confidencialidad impuesta es abusive y debe declararse nula.\n\nPOR TANTO: Solicito a US. se sirva acoger la presente demanda, declarando que el despido es injustificado y condenando a la demandada al pago de:\n- Indemnización por años de servicios: $16.450.000 (7 años x 30 días x $78.333)\n- Indemnización sustitutiva por falta de aviso previo: $2.350.000\n- Feriado proporcional: $1.175.000\n- Cotizaciones impagas: $847.000",
+  "metadata": {
+    "tipo_documento": "demanda_laboral",
+    "demandante": "ALEJANDRO VEGA MUÑOZ",
+    "demandado": "SOCIEDAD COMERCIAL CHILE LTDA",
+    "rut_demandante": "9.876.543-2",
+    "rut_demandado": "76.543.210-9",
+    "fecha_ingreso": "2019-03-01",
+    "fecha_termino": "2023-09-30",
+    "antigüedad_años": 4.5,
+    "ultimo_sueldo_liquido": 2350000,
+    "motivo_termino": "despido_injustificado",
+    "indemnizacion_solicitada": 20822000,
+    "clausulas_cuestionadas": ["confidencialidad_excesiva", "no_compete"]
+  },
+  "expected_analysis": {
+    "tipo_caso": "Despido Injustificado",
+    "partes_identificadas": [
+      {"nombre": "ALEJANDRO VEGA MUÑOZ", "rol": "Trabajador/Demandante", "rut": "9.876.543-2"},
+      {"nombre": "SOCIEDAD COMERCIAL CHILE LTDA", "rol": "Empleador/Demandado", "rut": "76.543.210-9"}
+    ],
+    "antecedentes_laborales": {
+      "fecha_ingreso": "2019-03-01",
+      "fecha_termino": "2023-09-30",
+      "antigüedad": "4 años y 7 meses",
+      "cargo": "Jefe de ventas",
+      "ultima_remuneracion": 2350000
+    },
+    "pretensiones": {
+      "indemnizacion_anos_servicios": 16450000,
+      "indemnizacion_sustitutiva": 2350000,
+      "feriado_proporcional": 1175000,
+      "cotizaciones_impagas": 847000,
+      "total": 20822000
+    },
+    "cuestiones_legales": [
+      {
+        "tipo": "Cláusula de confidencialidad excesiva",
+        "riesgo": "Alto",
+        "problema": "La restricción de 2 años sin compensación es desproporcionada",
+        "articulo_relevante": "Código del Trabajo, Art. 4 bis - Libre competencia laboral"
+      },
+      {
+        "tipo": "Cláusula de no competencia post-contrato",
+        "riesgo": "Alto",
+        "problema": "Cláusula de no competencia sin compensación es nula",
+        "articulo_relevante": "Código Civil, Art. 1686"
+      }
+    ],
+    "confidence": "high"
+  },
+  "test_expectations": {
+    "debe_detectar": ["despido_injustificado", "clausula_no_compete", "confidencialidad_excesiva"],
+    "debe_calcular_indemnizaciones": true,
+    "debe_identificar_pretensiones": true,
+    "debe_citar_articulos_laborales": true
+  }
+}

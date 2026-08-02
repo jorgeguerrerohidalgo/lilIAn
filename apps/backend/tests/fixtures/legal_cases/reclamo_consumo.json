@@ -1,0 +1,65 @@
+{
+  "id": "reclamo_consumo_001",
+  "tipo_caso": "consumer",
+  "dificultad": "baja",
+  "descripcion": "Reclamo por producto defectuoso y negativa de garantía",
+  "texto_fuente": "RECLAMO CONSUMIDOR - SALA CDA\n\nRECLAMO N° 2024-0892-CCOO-001\n\nCOMERCIANTE: ELECTRODOMÉSTICOS CHILE SA\nRUT: 78.123.456-9\nDIRECCIÓN: Av. Libertador 2345, Santiago\n\nCONSUMMADOR: MARÍA ELENA ROJAS PÉREZ\nRUN: 10.234.567-8\nDIRECCIÓN: Los Aromos 890, Santiago\n\nANTECEDENTES DEL RECLAMO:\nEl día 15 de enero de 2024, compré un refrigerador marca Nordic, modelo RF-550, serial 12345678, por un valor de $890.000 en la tienda de ELECTRODOMÉSTICOS CHILE SA ubicada en Mall Center.\n\nEl producto presentó fallas de funcionamiento a los 45 días de uso (10 de marzo de 2024): el motor hace ruido excesivo y no enfria correctamente.\n\nEl 12 de marzo de 2024, acerqué el producto a la tienda para solicitar la garantía. Me indicaron que debía llamar a un servicio técnico, el que nunca llegó pese a tres llamadas.\n\nEl 5 de abril de 2024, radiqué reclamo por escrito. La empresa no me ha dado respuesta hasta la fecha (25 de abril de 2024).\n\nHe invertido $120.000 en技师 eléctrico particular que me dijo que el problema es de fábrica.\n\nRESOLUCIÓN DESEADA:\n1. Reposición del producto por uno nuevo, o\n2. Devolución del dinero pagado ($890.000)\n3. Indemnización por daños emergentes ($120.000)\n4. Daño moral ($200.000)\n\nDOCUMENTOS ADJUNTOS:\n- Boleta de compra\n- Tres fotografías del defecto\n- Cotización de reparación particular\n- Registro de llamadas al servicio técnico",
+  "metadata": {
+    "tipo_caso": "reclamo_sernac",
+    "reclamante": "MARÍA ELENA ROJAS PÉREZ",
+    "reclamado": "ELECTRODOMÉSTICOS CHILE SA",
+    "rut_consumidor": "10.234.567-8",
+    "rut_proveedor": "78.123.456-9",
+    "fecha_compra": "2024-01-15",
+    "fecha_defecto": "2024-03-10",
+    "fecha_reclamo": "2024-04-05",
+    "dias_desde_compra": 60,
+    "dias_sin_respuesta": 20,
+    "producto": {
+      "nombre": "Refrigerador Nordic RF-550",
+      "serial": "12345678",
+      "valor": 890000
+    },
+    "prejudice": {
+      "gasto_reparacion": 120000,
+      "dano_moral": 200000
+    }
+  },
+  "expected_analysis": {
+    "tipo_caso": "Reclamo por Producto Defectuoso - Ley 19.496",
+    "partes_identificadas": [
+      {"nombre": "MARÍA ELENA ROJAS PÉREZ", "rol": "Consumidor/Reclamante", "rut": "10.234.567-8"},
+      {"nombre": "ELECTRODOMÉSTICOS CHILE SA", "rol": "Proveedor/Reclamado", "rut": "78.123.456-9"}
+    ],
+    "producto": {
+      "descripcion": "Refrigerador Nordic RF-550",
+      "serial": "12345678",
+      "valor": 890000,
+      "fecha_compra": "2024-01-15",
+      "defecto": "Motor con ruido excesivo y no enfria"
+    },
+    "timeline": {
+      "compra": "2024-01-15",
+      "defecto_detectado": "2024-03-10",
+      "reclamo_escrito": "2024-04-05",
+      "respuesta_vencida": "2024-04-19"
+    },
+    "derechos_invocados": [
+      "Garantía legal de 3 meses para productos usados (Art. 21 Ley 19.496)",
+      "Derecho a reposición o devolución del precio (Art. 20 Ley 19.496)",
+      "Indemnización por daños (Art. 52 Ley 19.496)"
+    ],
+    "observaciones": [
+      "Proveedor no respondió en plazo legal de 30 días",
+      "El defecto se manifestó dentro del período de garantía",
+      "Gasto en reparación particular podría ser reembolsable"
+    ],
+    "confidence": "high"
+  },
+  "test_expectations": {
+    "debe_detectar": ["garantia_legal", "silencio_administrativo", "derecho_reposicion"],
+    "debe_identificar_plazos": true,
+    "debe_calcular_prejuicios": true,
+    "debe_citar_ley_consumo": true
+  }
+}

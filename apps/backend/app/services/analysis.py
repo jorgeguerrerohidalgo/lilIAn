@@ -653,7 +653,9 @@ def detect_normative_conflicts(
             "conflicts": [],
             "observations": [],
             "confidence": "low",
-            "summary": "Texto insuficiente para análisis de conflictos normativos"
+            "summary": "Texto insuficiente para análisis de conflictos normativos",
+            "warnings": ["Documento con texto insuficiente para análisis de conflictos"],
+            "requires_human_review": True
         }
 
     try:
@@ -665,7 +667,9 @@ def detect_normative_conflicts(
                 "conflicts": [],
                 "observations": [],
                 "confidence": "low",
-                "summary": "No se encontró contexto legal para comparar"
+                "summary": "No se encontró contexto legal para comparar",
+                "warnings": ["Contexto legal no disponible - análisis de conflictos limitado"],
+                "requires_human_review": True
             }
 
         prompt = f"""Analiza el siguiente contrato y detecta conflictos con la legislación chilena.
@@ -726,7 +730,9 @@ Responde en JSON con este formato exacto:
                 "conflicts": [],
                 "observations": [],
                 "confidence": "low",
-                "summary": "No se pudo parsear el análisis de conflictos"
+                "summary": "No se pudo parsear el análisis de conflictos",
+                "warnings": ["Error al parsear respuesta del LLM"],
+                "requires_human_review": True
             }
 
     except Exception as e:
@@ -734,7 +740,9 @@ Responde en JSON con este formato exacto:
             "conflicts": [],
             "observations": [],
             "confidence": "low",
-            "summary": f"Error en análisis de conflictos: {str(e)}"
+            "summary": f"Error en análisis de conflictos: {str(e)}",
+            "warnings": [f"Error en análisis de conflictos: {str(e)}"],
+            "requires_human_review": True
         }
 
 
@@ -747,7 +755,9 @@ def analyze_contract(documents_text: str, matter_type: str, organization_id: int
             "resumen_ejecutivo": "Información insuficiente para realizar análisis.",
             "puntos_criticos": [],
             "risks": [],
-            "confidence": "low"
+            "confidence": "low",
+            "warnings": ["Documento sin texto suficiente para análisis completo"],
+            "requires_human_review": True
         }
 
     provider = get_llm_provider()
@@ -790,7 +800,9 @@ Proporciona el análisis en formato JSON siguiendo exactamente el esquema especi
             "resumen_ejecutivo": f"Error al generar análisis: {str(e)}",
             "puntos_criticos": [],
             "risks": [],
-            "confidence": "low"
+            "confidence": "low",
+            "warnings": [f"Error en generación de análisis: {str(e)}"],
+            "requires_human_review": True
         }
 
 
@@ -938,3 +950,125 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
 
     finally:
         db.close()
+
+
+# =============================================================================
+# GATE DE REVISIÓN - Análisis no aprobado no debe usarse para decisiones
+# =============================================================================
+
+def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> Dict[str, Any]:
+    """
+    Verifica si un análisis puede ser usado para decisiones automatizadas.
+
+    Args:
+        analysis_report_id: ID del análisis a verificar
+        db: sesión de base de datos
+
+    Returns:
+        Dict con:
+        - can_use: bool indicating if analysis is approved for automated use
+        - requires_review: bool indicating if human review is required
+        - reason: str explaining why analysis cannot be used
+        - review_status: str with current review status if any
+    """
+    from app.models.review import Review, ReviewStatus
+
+    report = db.query(AnalysisReport).filter(
+        AnalysisReport.id == analysis_report_id
+    ).first()
+
+    if not report:
+        return {
+            "can_use": False,
+            "requires_review": False,
+            "reason": "Analysis not found",
+            "review_status": None
+        }
+
+    # Si el análisis no requiere revisión humana, puede usarse directamente
+    if not report.requires_human_review and not report.review_approved:
+        return {
+            "can_use": True,
+            "requires_review": False,
+            "reason": None,
+            "review_status": "auto_approved"
+        }
+
+    # Si requiere revisión pero ya está aprobado, puede usarse
+    if report.requires_human_review and report.review_approved:
+        return {
+            "can_use": True,
+            "requires_review": True,
+            "reason": None,
+            "review_status": "approved"
+        }
+
+    # Si requiere revisión y no está aprobado, buscar último review
+    latest_review = db.query(Review).filter(
+        Review.analysis_report_id == analysis_report_id
+    ).order_by(Review.created_at.desc()).first()
+
+    if not latest_review:
+        return {
+            "can_use": False,
+            "requires_review": True,
+            "reason": "Analysis requires human review but no review has been submitted",
+            "review_status": None
+        }
+
+    if latest_review.status == ReviewStatus.PENDING:
+        return {
+            "can_use": False,
+            "requires_review": True,
+            "reason": "Analysis is pending review",
+            "review_status": "pending"
+        }
+
+    if latest_review.status == ReviewStatus.REJECTED:
+        return {
+            "can_use": False,
+            "requires_review": True,
+            "reason": f"Analysis was rejected: {latest_review.rejection_reason}",
+            "review_status": "rejected",
+            "suggested_changes": latest_review.suggested_changes
+        }
+
+    if latest_review.status == ReviewStatus.DRAFT:
+        return {
+            "can_use": False,
+            "requires_review": True,
+            "reason": "Analysis review is still in draft state",
+            "review_status": "draft"
+        }
+
+    # Por defecto, no permitir uso automatizado
+    return {
+        "can_use": False,
+        "requires_review": True,
+        "reason": "Analysis cannot be used for automated decisions",
+        "review_status": latest_review.status if latest_review else None
+    }
+
+
+def update_analysis_review_status(analysis_report_id: int, review_status: str, db) -> None:
+    """
+    Actualiza el campo review_approved del análisis basado en el estado del review.
+
+    Args:
+        analysis_report_id: ID del análisis
+        review_status: Estado del review (approved/rejected/pending)
+        db: sesión de base de datos
+    """
+    report = db.query(AnalysisReport).filter(
+        AnalysisReport.id == analysis_report_id
+    ).first()
+
+    if not report:
+        return
+
+    if review_status == "approved":
+        report.review_approved = True
+    elif review_status in ["pending", "draft", "rejected"]:
+        report.review_approved = False
+
+    db.commit()

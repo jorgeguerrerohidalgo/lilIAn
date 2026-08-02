@@ -1,0 +1,50 @@
+{
+  "id": "contrato_servicios_001",
+  "tipo_caso": "contract_review",
+  "dificultad": "media",
+  "descripcion": "Contrato de prestación de servicios profesionales con cláusula de exclusivity",
+  "texto_fuente": "CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES\n\nEn Santiago, a 15 de marzo de 2024, entre EMPRESA TECNOLOGÍA SPA, RUT 76.123.456-7, representada por Juan Pérez Méndez, RUN 12.345.678-9, ambos con domicilio en Av. Providencia 1234, Santiago, en adelante 'EL CLIENTE', y PROFESIONAL CONSULTOR SPA, RUT 77.654.321-0, representada por María González López, RUN 98.765.432-1, con domicilio en Calle Principal 567, Santiago, en adelante 'EL PROFESIONAL'.\n\nCLÁUSULA PRIMERA: El PROFESIONAL se obliga a prestar servicios de consultoría tecnológica consistentes en desarrollo, implementación y mantención de sistema informativo empresarial, por un período de 12 meses renovables.\n\nCLÁUSULA SEGUNDA: El precio por los servicios será la suma de $3.500.000 mensuales, pagaderos el último día de cada mes vencido, mediante transferencia electrónica a la cuenta que indique EL PROFESIONAL.\n\nCLÁUSULA TERCERA: EL PROFESIONAL se obliga a prestar sus servicios de manera EXCLUSIVA para EL CLIENTE durante toda la vigencia del contrato, no pudiendo prestar servicios a otras empresas del mismo rubro sin autorización escrita.\n\nCLÁUSULA CUARTA: El presente contrato podrá ser terminado anticipadamente por cualquiera de las partes, sin expresión de causa, mediante aviso escrito con 60 días de anticipación.",
+  "metadata": {
+    "partes": ["EMPRESA TECNOLOGÍA SPA", "PROFESIONAL CONSULTOR SPA"],
+    "rut_emisor": "76.123.456-7",
+    "tipo_contrato": "prestacion_servicios",
+    "monto": 3500000,
+    "moneda": "CLP",
+    "fecha_contrato": "2024-03-15",
+    "duracion_meses": 12,
+    "clausulas_sospechosas": ["clausula_exclusividad"],
+    "partes_relacionadas": false
+  },
+  "expected_analysis": {
+    "tipo_contrato": "Contrato de Prestación de Servicios Profesionales",
+    "partes_identificadas": [
+      {"nombre": "EMPRESA TECNOLOGÍA SPA", "rol": "Cliente", "rut": "76.123.456-7"},
+      {"nombre": "PROFESIONAL CONSULTOR SPA", "rol": "Prestador", "rut": "77.654.321-0"}
+    ],
+    "objeto_contrato": "Prestación de servicios de consultoría tecnológica",
+    "monto_total_estimado": 42000000,
+    "duracion": "12 meses renovables",
+    " clausulas_peligrosas": [
+      {
+        "clausula": "CLÁUSULA TERCERA - EXCLUSIVIDAD",
+        "tipo": "Restricción excesiva de competencia",
+        "riesgo": "Alto",
+        "problema": "La cláusula de exclusividad absoluta sin compensación adicional podría ser declarada nula por ser desproporcionada",
+        "articulo_relevante": "Código Civil, Art. 1686 - Del contrato de prestación de servicios",
+        "recomendacion": "Negociar que la exclusividad aplique solo a clientes directos o agregar compensación adicional por la restricción"
+      }
+    ],
+    "observaciones": [
+      "Contrato no especifica lugar de prestación de servicios",
+      "No hay clause de termino anticipado por causa justificada",
+      "Falta clause de confidencialidad"
+    ],
+    "confidence": "high"
+  },
+  "test_expectations": {
+    "debe_detectar": ["clausula_exclusividad"],
+    "debe_identificar_partes": true,
+    "debe_calcular_monto": true,
+    "debe_emitir_warning_exclusividad": true
+  }
+}

@@ -1,279 +1,243 @@
-# lilIAn
+# lilIAn 2.0
 
-Plataforma legaltech chilena asistida por inteligencia artificial para revisión documental, detección de riesgos y preevaluación de casos legales.
+Plataforma legaltech chilena asistida por inteligencia artificial para revisión documental, detección de riesgos, análisis de precedentes judiciales y preevaluación de casos legales.
 
-## Características principales
+## Características
 
-- **Análisis documental**: Sube contratos y documentos (PDF, DOCX, TXT) para recibir un análisis preliminar estructurado.
-- **Detección de riesgos**: Identifica cláusulas riesgosas con semáforo de riesgo (verde/amarillo/rojo/gris).
-- **Chat contextual**: Pregunta sobre tus documentos y recibe respuestas basadas en su contenido mediante RAG.
-- **Multi-tenancy**: Soporte para múltiples organizaciones (estudios jurídicos, empresas, usuarios individuales).
-- **Panel de abogado**: Gestiona casos entrantes, prioriza y genera respuestas para captación de clientes.
-- **Plantillas y playbooks**: Plantillas de prompts, emails y checklists para flujo de trabajo legal.
-- **SaaS completo**: Planes, métricas de uso, límites por organización.
+### Análisis Documental Inteligente
+- **Procesamiento de documentos**: PDF, DOCX, TXT con OCR automático
+- **Extracción de datos**: Identificación automática de partes, montos, fechas, cláusulas
+- **Detección de riesgos**: Cláusulas sospechosas con semáforo de riesgo
+- **Validación multi-documento**: Consistencia entre documentos de un caso
 
-## Stack técnico
+### Sistema RAG (Retrieval Augmented Generation)
+- **Búsqueda híbrida**: Embeddings + keyword search con Reciprocal Rank Fusion
+- **Contexto legal**: Precedentes judiciales y legislación chilena indexada
+- **Trazabilidad**: Cada afirmación del análisis linkeada a su fuente original
+
+### Workflow de Revisión
+- **Estados**: draft → pending → approved/rejected
+- **Gate de revisión**: Análisis con `requires_human_review=True` necesita aprobación
+- **Citaciones navegables**: Click para abrir el documento fuente
+
+### Seguridad Multi-Tenant
+- **Aislamiento por organización**: Todos los recursos filtrados por `organization_id`
+- **RBAC**: 7 roles con permisos diferenciados (PLATFORM_ADMIN, OWNER, ADMIN, LAWYER, COMPANY_USER, CLIENT, VIEWER)
+- **Auditoría**: Logs de todas las acciones
+
+## Stack Técnico
 
 | Componente | Tecnología |
 |------------|-------------|
 | Frontend | Next.js 14 + TypeScript + Tailwind CSS |
-| Backend | FastAPI (Python) |
-| Base de datos | Supabase Online (PostgreSQL + pgvector) |
+| Backend | FastAPI (Python 3.12) |
+| Base de datos | Supabase (PostgreSQL + pgvector) |
 | Worker | Redis + RQ |
-| IA/LLM | Interfaz abstracta (Anthropic, OpenAI, MiniMax, Dummy) |
-| Containerización | Docker + Docker Compose |
+| Storage | Supabase Storage o filesystem local |
+| IA/LLM | Interfaz abstracta (Anthropic, OpenAI, MiniMax) |
 
-## Requisitos previos
+## 快速开始
 
-- Docker y Docker Compose instalados
-- Cuenta de Supabase con proyecto creado
-- API keys de proveedores de IA (opcional para desarrollo)
-
-## Configuración
-
-### 1. Variables de entorno
+### 1. Clonar y configurar
 
 ```bash
-cp .env.example .env
+git clone https://github.com/Jorge-Guerrero-Hidalgo/lilian.git
+cd lilian
+
+# Variables de entorno
+cp apps/backend/.env.example apps/backend/.env
+# Editar .env con tus credenciales
 ```
 
-Edita `.env` con tus credenciales de Supabase:
-
-```env
-DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
-SUPABASE_URL=https://[PROJECT_REF].supabase.co
-SUPABASE_ANON_KEY=tu_anon_key
-SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
-JWT_SECRET=tu_jwt_secret_seguro
-```
-
-### 2. Ejecutar migraciones en Supabase
+### 2. Docker Compose
 
 ```bash
-psql $DATABASE_URL -f infra/supabase/migrations/001_enable_extensions.sql
-psql $DATABASE_URL -f infra/supabase/migrations/002_create_organizations.sql
-psql $DATABASE_URL -f infra/supabase/migrations/003_create_users.sql
-psql $DATABASE_URL -f infra/supabase/migrations/004_create_organization_members.sql
-psql $DATABASE_URL -f infra/supabase/migrations/005_create_matters.sql
-psql $DATABASE_URL -f infra/supabase/migrations/006_create_documents.sql
-psql $DATABASE_URL -f infra/supabase/migrations/007_create_audit_logs.sql
-psql $DATABASE_URL -f infra/supabase/migrations/008_create_pgvector.sql
-psql $DATABASE_URL -f infra/supabase/migrations/009_create_document_chunks.sql
-psql $DATABASE_URL -f infra/supabase/migrations/010_create_legal_sources.sql
-psql $DATABASE_URL -f infra/supabase/migrations/011_create_analysis_reports.sql
-psql $DATABASE_URL -f infra/supabase/migrations/012_create_risk_items.sql
-psql $DATABASE_URL -f infra/supabase/migrations/013_create_chat_sessions.sql
-psql $DATABASE_URL -f infra/supabase/migrations/014_create_templates.sql
-psql $DATABASE_URL -f infra/supabase/migrations/015_create_subscriptions_and_usage.sql
+docker-compose up -d
 ```
 
-### 3. Levantar servicios
+### 3. Acceso
 
-```bash
-docker compose up -d
-```
-
-Servicios:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
-- **Documentación API**: http://localhost:8000/docs
-- **Redis**: puerto 6379
+- **API Docs**: http://localhost:8000/docs
 
-## Desarrollo local sin Docker
+## Arquitectura
 
-```bash
-# Backend
-cd apps/backend && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8000
-
-# Frontend
-cd apps/frontend && npm install && npm run dev
-
-# Worker
-cd workers/document_processor && pip install -r requirements.txt && python -m worker
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Frontend  │────▶│   Backend  │────▶│  Supabase   │
+│  (Next.js) │     │  (FastAPI) │     │  (PostgreSQL)│
+└─────────────┘     └──────┬──────┘     └─────────────┘
+                           │
+                    ┌─────▼─────┐
+                    │   Worker   │
+                    │  (Redis)   │
+                    └─────────────┘
 ```
 
-## Estructura del proyecto
+## Estructura del Proyecto
 
 ```
 lilian/
 ├── apps/
-│   ├── frontend/          # Next.js 14
-│   │   ├── app/          # App router pages
-│   │   ├── public/images/ # Logo e imágenes
-│   │   └── components/   # Componentes React
-│   └── backend/          # FastAPI
+│   ├── frontend/                    # Next.js 14
+│   │   ├── app/                    # App router pages
+│   │   ├── components/             # Componentes React
+│   │   │   ├── citation-link.tsx   # Citaciones navegables
+│   │   │   └── document-analysis-view.tsx
+│   │   └── lib/                   # Utilidades
+│   └── backend/                    # FastAPI
 │       ├── app/
-│       │   ├── api/endpoints/  # Routers de API
-│       │   ├── core/           # Config, security, database
-│       │   ├── models/        # Modelos SQLAlchemy
-│       │   ├── schemas/       # Schemas Pydantic
-│       │   └── services/      # Lógica de negocio (LLM, RAG, etc.)
-│       └── requirements.txt
+│       │   ├── api/endpoints/      # Routers de API
+│       │   │   ├── matters.py       # Casos
+│       │   │   ├── documents.py     # Documentos
+│       │   │   ├── analysis.py      # Análisis IA
+│       │   │   ├── review.py        # Workflow de revisión
+│       │   │   ├── precedents.py    # Precedentes
+│       │   │   └── admin.py         # Admin
+│       │   ├── models/              # Modelos SQLAlchemy
+│       │   │   ├── review.py        # Review model
+│       │   │   └── ...
+│       │   ├── services/            # Lógica de negocio
+│       │   │   ├── analysis.py      # Análisis de documentos
+│       │   │   ├── evidence.py      # EvidenceBundle
+│       │   │   ├── document_processor.py
+│       │   │   ├── storage.py       # Storage abstracto
+│       │   │   └── precedent_rag.py
+│       │   └── deps/               # Dependencies
+│       │       └── tenant.py       # TenantContext
+│       └── tests/                  # Tests
+│           ├── fixtures/legal_cases/ # Dataset golden
+│           └── test_isolation.py   # Tests de aislamiento
 ├── workers/
-│   └── document_processor/  # Worker de procesamiento
+│   └── document_processor/         # Worker de procesamiento
 ├── infra/
-│   └── supabase/migrations/  # Migraciones SQL
-├── scripts/
-│   └── migrate_supabase.sh   # Script de migración
-├── images/                    # Logo original
-├── docker-compose.yml
-├── .env.example
-└── README.md
+│   └── supabase/migrations/        # Migraciones SQL
+├── docs/
+│   ├── schema.md                   # Documentación de BD
+│   └── rbac-matrix.md             # Matriz RBAC
+└── docker-compose.yml
 ```
 
-## API Endpoints
+## API Endpoints Principales
 
-### Autenticación
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/register` | Registro de usuario |
-| POST | `/api/v1/auth/login` | Inicio de sesión |
-| GET | `/api/v1/auth/me` | Usuario actual |
+### Análisis de Documentos
+- `POST /api/v1/analysis/matters/{id}` - Genera análisis
+- `GET /api/v1/analysis/matters/{id}/latest` - Último análisis
 
-### Organizaciones
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/organizations` | Listar organizaciones |
-| POST | `/api/v1/organizations` | Crear organización |
-| GET | `/api/v1/organizations/me` | Mi organización |
-| GET | `/api/v1/organizations/me/members` | Miembros de organización |
+### Workflow de Revisión
+- `POST /api/v1/reviews` - Crear review (draft)
+- `POST /api/v1/reviews/{id}/submit` - Enviar para revisión
+- `POST /api/v1/reviews/{id}/approve` - Aprobar
+- `POST /api/v1/reviews/{id}/reject` - Rechazar
 
-### Casos (Matters)
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/matters` | Listar casos |
-| POST | `/api/v1/matters` | Crear caso |
-| GET | `/api/v1/matters/{id}` | Ver caso |
-| PATCH | `/api/v1/matters/{id}` | Actualizar caso |
-| DELETE | `/api/v1/matters/{id}` | Eliminar caso |
+### Precedentes y RAG
+- `GET /api/v1/precedents` - Listar precedentes
+- `POST /api/v1/precedents/search` - Búsqueda híbrida
 
-### Documentos
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/documents/matters/{matter_id}/documents` | Subir documento |
-| GET | `/api/v1/documents/matters/{matter_id}/documents` | Listar documentos del caso |
-| GET | `/api/v1/documents/{id}` | Ver documento |
-| DELETE | `/api/v1/documents/{id}` | Eliminar documento |
-| POST | `/api/v1/documents/{id}/process` | Reprocesar documento |
+## Modelos de Datos
 
-### Análisis IA
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/analysis` | Generar análisis (background) |
-| GET | `/api/v1/analysis/matters/{matter_id}` | Lista de análisis del caso |
-| GET | `/api/v1/analysis/matters/{matter_id}/latest` | Último análisis |
-| GET | `/api/v1/analysis/matters/{matter_id}/risks` | Riesgos del caso |
-| GET | `/api/v1/analysis/reports/{report_id}` | Ver informe completo |
-| PATCH | `/api/v1/analysis/risks/{risk_id}/review` | Actualizar estado de revisión |
+24 tablas incluyendo:
+- `organizations`, `users`, `organization_members`
+- `clients`, `matters`, `documents`, `document_chunks`
+- `analysis_reports`, `risk_items`
+- `precedents`, `legal_sources`
+- `reviews` (nuevo - workflow)
+- `audit_logs`, `chat_sessions`, `templates`
 
-### Búsqueda RAG
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/search` | Búsqueda híbrida en documentos |
-
-### Chat
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/api/v1/chat/sessions` | Crear sesión de chat |
-| GET | `/api/v1/chat/sessions` | Listar sesiones |
-| GET | `/api/v1/chat/sessions/{id}/messages` | Mensajes de sesión |
-| POST | `/api/v1/chat/message` | Enviar mensaje |
-| DELETE | `/api/v1/chat/sessions/{id}` | Eliminar sesión |
-
-### Panel de Abogado
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/lawyer/cases` | Casos entrantes |
-| POST | `/api/v1/lawyer/matters/{id}/notes` | Agregar nota |
-| GET | `/api/v1/lawyer/matters/{id}/notes` | Ver notas |
-| PATCH | `/api/v1/lawyer/matters/{id}/status` | Cambiar estado |
-| POST | `/api/v1/lawyer/matters/{id}/assign` | Asignar abogado |
-| GET | `/api/v1/lawyer/matters/{id}/summary` | Resumen para abogado |
-
-### Plantillas
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/templates` | Listar plantillas |
-| POST | `/api/v1/templates` | Crear plantilla |
-| GET | `/api/v1/templates/{id}` | Ver plantilla |
-| DELETE | `/api/v1/templates/{id}` | Eliminar plantilla |
-
-### SaaS
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/saas/plans` | Listar planes disponibles |
-| GET | `/api/v1/saas/subscription` | Mi suscripción |
-| POST | `/api/v1/saas/subscription` | Crear/actualizar suscripción |
-| GET | `/api/v1/saas/metrics` | Métricas de organización |
-| GET | `/api/v1/saas/usage/events` | Eventos de uso |
-
-### Admin
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/v1/admin/audit-logs` | Logs de auditoría |
-| GET | `/api/v1/admin/organizations` | Todas las organizaciones |
-| GET | `/api/v1/admin/stats` | Estadísticas de plataforma |
-| POST | `/api/v1/admin/organizations/{id}/suspend` | Suspender org |
-| POST | `/api/v1/admin/organizations/{id}/activate` | Activar org |
-
-## Modelo de datos
-
-### Tablas principales
-- `organizations` - Organizaciones/Empresas
-- `users` - Usuarios
-- `organization_members` - Relación usuario-organización con roles
-- `matters` - Casos legales
-- `documents` - Documentos cargados
-- `document_chunks` - Fragmentos para búsqueda RAG
-- `analysis_reports` - Informes de análisis IA
-- `risk_items` - Riesgos detectados
-- `chat_sessions` / `chat_messages` - Conversaciones
-- `templates` - Plantillas
-- `matter_notes` - Notas de abogado
-- `subscriptions` - Suscripciones SaaS
-- `usage_events` - Eventos de uso
-- `audit_logs` - Logs de auditoría
-
-### Roles de usuario
-- `owner` - Dueño de organización
-- `admin` - Administrador
-- `lawyer` - Abogado
-- `company_user` - Usuario de empresa
-- `client` - Cliente
-- `viewer` - Solo lectura
+Ver [docs/schema.md](./docs/schema.md) para diagrama completo.
 
 ## Seguridad
 
-- Contraseñas hasheadas con bcrypt
-- JWT para autenticación con expiración
-- Separación multi-tenant por `organization_id`
-- Logs de auditoría para acciones sensibles
-- Rate limiting configurable
-- Variables de entorno para secrets
-- `SUPABASE_SERVICE_ROLE_KEY` solo en backend/worker
+### Roles y Permisos
 
-## Disclaimer legal
+| Rol | Descripción |
+|-----|-------------|
+| PLATFORM_ADMIN | Administrador global (multi-tenant) |
+| OWNER | Propietario de organización |
+| ADMIN | Administrador de organización |
+| LAWYER | Abogado (gestión de casos) |
+| COMPANY_USER | Usuario corporativo |
+| CLIENT | Cliente (solo ve sus casos) |
+| VIEWER | Solo lectura |
+
+Ver [docs/rbac-matrix.md](./docs/rbac-matrix.md) para matriz completa.
+
+### Aislamiento
+
+- Todos los endpoints filtran por `organization_id`
+- Validación FK: `client_id` debe pertenecer a la organización
+- RLS policies deshabilitadas (incompatibles con auth.uid())
+
+## Testing
+
+```bash
+# Tests de aislamiento multi-tenant
+cd apps/backend
+pytest tests/test_isolation.py -v
+
+# Tests de dataset golden
+pytest tests/test_golden_dataset.py -v
+```
+
+## Variables de Entorno
+
+```env
+# Base de datos
+DATABASE_URL=postgresql://...
+SUPABASE_URL=https://...
+SUPABASE_SERVICE_KEY=...
+
+# Seguridad
+JWT_SECRET=...
+ENCRYPTION_KEY=...
+
+# LLM
+LLM_PROVIDER=openai
+LLM_API_KEY=sk-...
+
+# Storage (local o supabase)
+STORAGE_BACKEND=local
+STORAGE_PATH=/app/storage/documents
+SUPABASE_STORAGE_BUCKET=documents
+```
+
+## Changelog v2.0
+
+### Nuevas Features
+- Sistema RAG con búsqueda híbrida (RRF)
+- Workflow de revisión de análisis (draft → approved/rejected)
+- Gate de revisión para decisiones automatizadas
+- Citaciones navegables con EvidenceBundle
+- Idempotencia en procesamiento de documentos
+- Storage abstracto (Supabase o local)
+- Dataset golden para evaluación
+- TenantContext como dependencia inyectable
+
+### Seguridad
+- RBAC implementado en todos los endpoints
+- Aislamiento multi-tenant completo
+- Modelo Review para auditoría de decisiones
+
+### Fixes
+- Secretos removidos de docker-compose.yml
+- RLS policies deshabilitadas (usaban auth.uid() roto)
+- Endpoints debug eliminados
+
+## Deployment
+
+Ver [DEPLOYMENT.md](./DEPLOYMENT.md) para instrucciones detalladas.
+
+## Disclaimer Legal
 
 Toda respuesta generada incluye automáticamente:
 
 > Este análisis es preliminar y no reemplaza la revisión profesional de un abogado habilitado en Chile.
 
-## Configuración de IA
-
-El sistema soporta múltiples proveedores de LLM mediante interfaz abstracta:
-
-```env
-# Proveedores soportados: anthropic, openai, minimax
-LLM_PROVIDER=anthropic
-LLM_MODEL=claude-sonnet-4-20250514
-# Para MiniMax: LLM_MODEL=MiniMax-Text-01
-LLM_API_KEY=tu_api_key
-
-EMBEDDING_PROVIDER=openai
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_API_KEY=tu_api_key
-```
-
 ## Licencia
 
 Privado - Todos los derechos reservados
+
+## Autores
+
+- Jorge Guerrero Hidalgo

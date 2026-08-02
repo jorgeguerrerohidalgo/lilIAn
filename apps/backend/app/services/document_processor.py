@@ -112,21 +112,83 @@ def create_chunks_for_document(
     organization_id: int,
     matter_id: int,
     db,
-    legal_area: Optional[str] = None
-) -> int:
+    legal_area: Optional[str] = None,
+    force: bool = False
+) -> dict:
+    """
+    Crea chunks para un documento de forma idempotente.
+
+    Args:
+        force: Si True, recrea los chunks incluso si ya existen.
+               Si False, solo crea si no existen.
+
+    Returns:
+        dict con 'created' (int), 'skipped' (bool), 'status' (str)
+    """
     from app.services.chunker import split_text_into_chunks
     from app.services.embeddings import get_embedding_provider
+    import hashlib
 
-    db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete()
+    # Verificar si ya existen chunks
+    existing_chunks = db.query(DocumentChunk).filter(
+        DocumentChunk.document_id == document_id
+    ).first()
 
-    raw_chunks = split_text_into_chunks(extracted_text)
+    if existing_chunks is not None and not force:
+        # Ya existen chunks y no se pidió reprocesamiento forzado
+        chunk_count = db.query(DocumentChunk).filter(
+            DocumentChunk.document_id == document_id
+        ).count()
+        return {
+            "created": 0,
+            "skipped": True,
+            "status": "skipped",
+            "message": f"Chunks ya existen ({chunk_count}), usa force=True para recrear"
+        }
 
-    # Get embedding provider
+    # Generar hash del contenido para verificar si cambió
+    content_hash = hashlib.sha256(extracted_text.encode()).hexdigest()[:16]
+
+    # Obtener chunks existentes para comparar
+    existing_content_hash = None
+    first_chunk = db.query(DocumentChunk).filter(
+        DocumentChunk.document_id == document_id
+    ).first()
+    if first_chunk and first_chunk.chunk_metadata:
+        try:
+            existing_content_hash = json.loads(first_chunk.chunk_metadata).get("content_hash")
+        except Exception:
+            pass
+
+    # Si el contenido no cambió, no recrear
+    if existing_content_hash == content_hash and not force:
+        chunk_count = db.query(DocumentChunk).filter(
+            DocumentChunk.document_id == document_id
+        ).count()
+        return {
+            "created": 0,
+            "skipped": True,
+            "status": "skipped",
+            "message": f"Contenido no cambió (hash: {content_hash}), usa force=True para recrear"
+        }
+
+    # Obtener embedding provider
     try:
         embedding_provider = get_embedding_provider()
     except Exception:
         embedding_provider = None
 
+    # Dividir en chunks
+    raw_chunks = split_text_into_chunks(extracted_text)
+
+    # Eliminar chunks antiguos SOLO si hay nuevo contenido
+    if force or existing_chunks:
+        db.query(DocumentChunk).filter(
+            DocumentChunk.document_id == document_id
+        ).delete()
+
+    # Crear nuevos chunks
+    created = 0
     for raw_chunk in raw_chunks:
         chunk = DocumentChunk(
             document_id=document_id,
@@ -136,7 +198,11 @@ def create_chunks_for_document(
             content=raw_chunk["content"],
             page_number=raw_chunk["page_number"],
             section_title=raw_chunk.get("section_title"),
-            legal_area=legal_area
+            legal_area=legal_area,
+            chunk_metadata=json.dumps({
+                "content_hash": content_hash,
+                "created_at": datetime.utcnow().isoformat()
+            })
         )
 
         # Generate embedding if provider is available
@@ -148,18 +214,48 @@ def create_chunks_for_document(
                 pass
 
         db.add(chunk)
+        created += 1
 
     db.commit()
-    return len(raw_chunks)
+    return {
+        "created": created,
+        "skipped": False,
+        "status": "created",
+        "content_hash": content_hash
+    }
 
 
-def process_document(document_id: int) -> dict:
+def process_document(document_id: int, force: bool = False) -> dict:
+    """
+    Procesa un documento de forma idempotente.
+
+    Args:
+        document_id: ID del documento a procesar
+        force: Si True, fuerza el reprocesamiento incluso si ya fue procesado
+
+    Returns:
+        dict con estado del procesamiento
+    """
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == document_id).first()
 
         if not document:
-            return {"error": "Documento no encontrado"}
+            return {"error": "Documento no encontrado", "status": "error"}
+
+        # Verificar si ya fue procesado (y no es forzado)
+        if document.status == "processed" and not force:
+            existing_chunks = db.query(DocumentChunk).filter(
+                DocumentChunk.document_id == document_id
+            ).count()
+            if existing_chunks > 0:
+                return {
+                    "document_id": document_id,
+                    "status": "already_processed",
+                    "skipped": True,
+                    "message": "Documento ya fue procesado, usa force=True para reprocesar",
+                    "chunk_count": existing_chunks
+                }
 
         document.status = "processing"
         db.commit()
@@ -191,31 +287,38 @@ def process_document(document_id: int) -> dict:
                 document.processed_at = datetime.utcnow()
                 db.commit()
 
-                chunk_count = create_chunks_for_document(
+                # Crear chunks de forma idempotente
+                chunk_result = create_chunks_for_document(
                     document_id=document.id,
                     extracted_text=extracted_text,
                     organization_id=document.organization_id,
                     matter_id=document.matter_id,
                     db=db,
-                    legal_area=legal_area
+                    legal_area=legal_area,
+                    force=force
                 )
 
                 # Clasificar documento de forma async (no bloquea procesamiento)
                 _classify_document_async(document.id)
 
+                return {
+                    "document_id": document_id,
+                    "status": document.status,
+                    "extracted_length": len(document.extracted_text) if document.extracted_text else 0,
+                    "legal_area": legal_area.value if legal_area else None,
+                    "chunks_created": chunk_result.get("created", 0),
+                    "chunks_skipped": chunk_result.get("skipped", False),
+                    "content_hash": chunk_result.get("content_hash")
+                }
+
             else:
                 document.status = "failed"
                 db.commit()
+                return {"error": "Storage path no encontrado", "status": "failed"}
         else:
             document.status = "failed"
             db.commit()
-
-        return {
-            "document_id": document_id,
-            "status": document.status,
-            "extracted_length": len(document.extracted_text) if document.extracted_text else 0,
-            "legal_area": legal_area.value if legal_area else None
-        }
+            return {"error": "No tiene storage_path", "status": "failed"}
 
     except Exception as e:
         try:
@@ -223,7 +326,7 @@ def process_document(document_id: int) -> dict:
             db.commit()
         except Exception:
             pass
-        return {"error": str(e)}
+        return {"error": str(e), "status": "failed"}
     finally:
         db.close()
 
