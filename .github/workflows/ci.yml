@@ -1,138 +1,111 @@
 name: CI
 
-  on:
-    push:
-      branches:
-        - main
-    pull_request:
+on:
+  push:
+    branches:
+      - main
+  pull_request:
 
-  permissions:
-    contents: read
+permissions:
+  contents: read
 
-  concurrency:
-    group: ci-${{ github.workflow }}-${{ github.ref }}
-    cancel-in-progress: true
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
-  jobs:
-    lint-python:
-      name: Lint Python
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-        - name: Set up Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: "3.11"
-            cache: pip
-            cache-dependency-path: |
-              apps/backend/requirements.txt
-              workers/document_processor/requirements.txt
-        - name: Install Ruff
-          run: python -m pip install ruff
-        - name: Run Ruff
-          run: ruff check apps/backend workers/document_processor
+jobs:
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            apps/backend/requirements.txt
+            workers/document_processor/requirements.txt
+      - name: Install Ruff
+        run: python -m pip install ruff
+      - name: Run Ruff
+        run: ruff check apps/backend workers/document_processor
 
-    lint-frontend:
-      name: Lint Frontend
-      runs-on: ubuntu-latest
-      defaults:
-        run:
-          working-directory: apps/frontend
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-        - name: Set up Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: "20"
-            cache: npm
-            cache-dependency-path: apps/frontend/package-lock.json
-        - name: Install dependencies
-          run: npm ci
-        - name: Run ESLint
-          run: npm run lint
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint
 
-    test-backend:
-      name: Test Backend
-      runs-on: ubuntu-latest
-      defaults:
-        run:
-          working-directory: apps/backend
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lilian_test
-        JWT_SECRET: ci-only-secret-with-at-least-32-characters
-        REDIS_URL: redis://localhost:6379/0
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-        - name: Set up Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: "3.11"
-            cache: pip
-            cache-dependency-path: apps/backend/requirements.txt
-        - name: Install dependencies
-          run: python -m pip install -r requirements.txt pytest aiosqlite
-        - name: Run backend tests
-          run: python -m pytest
+  test-backend:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lilian_test
+      JWT_SECRET: ci-only-secret-with-at-least-32-characters
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pytest aiosqlite
+      - name: Run backend tests
+        run: pytest
 
-    test-frontend:
-      name: Test Frontend
-      runs-on: ubuntu-latest
-      defaults:
-        run:
-          working-directory: apps/frontend
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-        - name: Set up Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: "20"
-            cache: npm
-            cache-dependency-path: apps/frontend/package-lock.json
-        - name: Install dependencies
-          run: npm ci
-        - name: Run frontend tests
-          run: |
-            if npm pkg get scripts.test | grep -qv '^{}$'; then
-              npm test -- --runInBand
-            else
-              echo "::warning::No hay script test configurado en apps/frontend/package.json"
-            fi
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile backend
+        run: python -m compileall -q apps/backend workers/document_processor
 
-    build-backend:
-      name: Build Backend
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-        - name: Set up Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: "3.11"
-        - name: Compile backend
-          env:
-            PYTHONPYCACHEPREFIX: /tmp/lilian-pycache
-          run: python -m compileall -q apps/backend workers/document_processor
-
-    build-frontend:
-      name: Build Frontend
-      runs-on: ubuntu-latest
-      defaults:
-        run:
-          working-directory: apps/frontend
-      steps:
-        - name: Checkout repository
-          uses: actions/checkout@v4
-        - name: Set up Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: "20"
-            cache: npm
-            cache-dependency-path: apps/frontend/package-lock.json
-        - name: Install dependencies
-          run: npm ci
-        - name: Build frontend
-          run: npm run build
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
