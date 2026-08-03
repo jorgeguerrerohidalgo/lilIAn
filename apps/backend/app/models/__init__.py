@@ -14,5 +14,6 @@ from app.models.subscription import Subscription, UsageEvent, Plan
 from app.models.audit_log import AuditLog
 from app.models.client import Client
 from app.models.deadline_alert import DeadlineAlert
+from app.models.review import Review
 
-__all__ = ["Organization", "User", "OrganizationMember", "Matter", "Document", "DocumentChunk", "DocumentAnalysis", "LegalSource", "LegalSourceVersion", "AnalysisReport", "RiskItem", "ChatSession", "ChatMessage", "Template", "MatterNote", "MatterStatusHistory", "Subscription", "UsageEvent", "Plan", "AuditLog", "Client", "DeadlineAlert"]
+__all__ = ["Organization", "User", "OrganizationMember", "Matter", "Document", "DocumentChunk", "DocumentAnalysis", "LegalSource", "LegalSourceVersion", "AnalysisReport", "RiskItem", "ChatSession", "ChatMessage", "Template", "MatterNote", "MatterStatusHistory", "Subscription", "UsageEvent", "Plan", "AuditLog", "Client", "DeadlineAlert", "Review"]
