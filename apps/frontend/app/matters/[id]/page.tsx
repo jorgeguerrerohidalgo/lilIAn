@@ -384,13 +384,34 @@ export default function MatterDetailPage() {
     });
 
     if (res.ok) {
-      // Actualizar el documento en la lista para mostrar que está procesando
-      fetchDocuments();
+      // polling para verificar cuando termina el procesamiento
+      let attempts = 0;
+      const maxAttempts = 60; // 5 minutos
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (checkRes.ok) {
+          const data = await checkRes.json();
+          if (data.status === "processed" || data.extracted_text) {
+            clearInterval(pollInterval);
+            fetchDocuments(); // Actualizar la lista de documentos
+            setProcessingDocId(null);
+          }
+        }
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          setDocProcessError("El procesamiento está tardando más de lo esperado.");
+          fetchDocuments();
+          setProcessingDocId(null);
+        }
+      }, 5000);
     } else {
       const data = await res.json();
       setDocProcessError(data.detail || "Error al procesar documento");
+      setProcessingDocId(null);
     }
-    setProcessingDocId(null);
   };
 
   const handleAnalyzeDocument = async (docId: number) => {
@@ -404,32 +425,78 @@ export default function MatterDetailPage() {
     });
 
     if (res.ok) {
-      fetchDocuments();
+      // Mostrar mensaje de que está analizando
+      setDocAnalyzeError(""); // Limpiar errores
+      // polling para verificar cuando termina el análisis
+      let attempts = 0;
+      const maxAttempts = 60; // 5 minutos
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (checkRes.ok) {
+          const data = await checkRes.json();
+          if (data.has_analysis) {
+            clearInterval(pollInterval);
+            fetchDocuments(); // Actualizar la lista de documentos
+            setAnalyzingDocId(null);
+            // Abrir el modal de análisis automáticamente
+            handleViewAnalysis(docId);
+          }
+        }
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          setDocAnalyzeError("El análisis está tardando más de lo esperado. Puedes verificar manualmente más tarde.");
+          setAnalyzingDocId(null);
+        }
+      }, 5000);
     } else {
       const data = await res.json();
       setDocAnalyzeError(data.detail || "Error al analizar documento");
+      setAnalyzingDocId(null);
     }
-    setAnalyzingDocId(null);
   };
 
   const handleViewAnalysis = async (docId: number) => {
     setLoadingAnalysis(true);
     setShowAnalysisModal(true);
+    setSelectedDocForAnalysis(null);
 
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
 
-    if (res.ok) {
-      const data = await res.json();
-      setSelectedDocForAnalysis(data);
-    } else {
-      const data = await res.json();
-      setDocAnalyzeError(data.detail || "Error al obtener análisis");
-      setSelectedDocForAnalysis(null);
-    }
+    // Función para obtener el análisis
+    const fetchAnalysis = async () => {
+      const res = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedDocForAnalysis(data);
+        return data.has_analysis;
+      }
+      return false;
+    };
+
+    // Intentar obtener el análisis inmediatamente
+    const hasAnalysis = await fetchAnalysis();
     setLoadingAnalysis(false);
+
+    // Si no tiene análisis, hacer polling por si el análisis está en proceso
+    if (!hasAnalysis) {
+      let attempts = 0;
+      const maxAttempts = 60; // 5 minutos
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        const result = await fetchAnalysis();
+        if (result || attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          if (!result) {
+            setDocAnalyzeError("El análisis está tardando más de lo esperado.");
+          }
+        }
+      }, 5000);
+    }
   };
 
   const handleRequestAnalysis = async () => {
@@ -761,8 +828,28 @@ export default function MatterDetailPage() {
                         </button>
                       )}
 
-                      {/* Botón Ver Análisis */}
-                      {(doc.status === "analyzed" || doc.extracted_text) && (
+                      {/* Botón Reanalizar - para documentos ya analizados */}
+                      {(doc.status === "analyzed" || (doc.extracted_text && doc.status !== "uploaded")) && (
+                        <button
+                          onClick={() => handleAnalyzeDocument(doc.id)}
+                          disabled={analyzingDocId === doc.id}
+                          className="px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors disabled:opacity-50"
+                          title="Reanalizar documento con IA"
+                        >
+                          {analyzingDocId === doc.id ? (
+                            <span className="flex items-center gap-1">
+                              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Analizando...
+                            </span>
+                          ) : "Reanalizar"}
+                        </button>
+                      )}
+
+                      {/* Botón Ver Análisis - aparece si hay texto extraído */}
+                      {doc.extracted_text && (
                         <button
                           onClick={() => handleViewAnalysis(doc.id)}
                           className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
@@ -822,11 +909,12 @@ export default function MatterDetailPage() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
                   {loadingAnalysis ? (
-                    <div className="flex items-center justify-center py-12">
-                      <svg className="animate-spin h-8 w-8 text-primary-600" viewBox="0 0 24 24">
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <svg className="animate-spin h-10 w-10 text-primary-600 mb-4" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
+                      <p className="text-gray-600 font-medium">Cargando análisis...</p>
                     </div>
                   ) : selectedDocForAnalysis && selectedDocForAnalysis.has_analysis ? (
                     <DocumentAnalysisView analysis={selectedDocForAnalysis} />
@@ -837,6 +925,18 @@ export default function MatterDetailPage() {
                       </svg>
                       <p className="text-lg font-medium text-gray-700 mb-2">Documento no analizado</p>
                       <p className="text-gray-500">Este documento aún no ha sido procesado o analizado.</p>
+                      <button
+                        onClick={() => {
+                          // Encontrar el documento seleccionado y procesarlo
+                          const docId = selectedDocForAnalysis?.document_id;
+                          if (docId) {
+                            handleProcessDocument(docId);
+                          }
+                        }}
+                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Procesar documento
+                      </button>
                     </div>
                   )}
                 </div>
