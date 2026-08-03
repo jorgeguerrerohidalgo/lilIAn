@@ -1,5 +1,0 @@
-# Playwright artifacts (kept out of the repo)
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
