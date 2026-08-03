@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { DocumentStatus } from "@/components/document-status";
+import { DocumentAnalysisView } from "@/components/document-analysis-view";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -26,7 +27,23 @@ interface Document {
   mime_type: string;
   file_size: number;
   status: string;
+  extracted_text?: string | null;
   created_at: string;
+}
+
+interface DocumentAnalysis {
+  has_analysis: boolean;
+  document_id: number;
+  document_type?: string;
+  participants?: any[];
+  financial_terms?: Record<string, any>;
+  obligations?: any[];
+  clauses_by_type?: Record<string, any[]>;
+  unusual_clauses?: any[];
+  risk_assessment?: any[];
+  contract_timeline?: any[];
+  legal_references?: any[];
+  indexed_content?: string;
 }
 
 interface AnalysisReport {
@@ -181,6 +198,13 @@ export default function MatterDetailPage() {
   const [uploadSuccess, setUploadSuccess] = useState("");
   const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [processingDocId, setProcessingDocId] = useState<number | null>(null);
+  const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null);
+  const [docProcessError, setDocProcessError] = useState("");
+  const [docAnalyzeError, setDocAnalyzeError] = useState("");
+  const [selectedDocForAnalysis, setSelectedDocForAnalysis] = useState<DocumentAnalysis | null>(null);
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
 
   // Analysis state
   const [analysis, setAnalysis] = useState<AnalysisReport | null>(null);
@@ -347,6 +371,65 @@ export default function MatterDetailPage() {
       setDeleteError(data.detail || "Error al eliminar documento");
     }
     setDeletingDocId(null);
+  };
+
+  const handleProcessDocument = async (docId: number) => {
+    setProcessingDocId(docId);
+    setDocProcessError("");
+
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/v1/documents/${docId}/process`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.ok) {
+      // Actualizar el documento en la lista para mostrar que está procesando
+      fetchDocuments();
+    } else {
+      const data = await res.json();
+      setDocProcessError(data.detail || "Error al procesar documento");
+    }
+    setProcessingDocId(null);
+  };
+
+  const handleAnalyzeDocument = async (docId: number) => {
+    setAnalyzingDocId(docId);
+    setDocAnalyzeError("");
+
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/v1/documents/${docId}/analyze`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.ok) {
+      fetchDocuments();
+    } else {
+      const data = await res.json();
+      setDocAnalyzeError(data.detail || "Error al analizar documento");
+    }
+    setAnalyzingDocId(null);
+  };
+
+  const handleViewAnalysis = async (docId: number) => {
+    setLoadingAnalysis(true);
+    setShowAnalysisModal(true);
+
+    const token = getToken();
+    const res = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      setSelectedDocForAnalysis(data);
+    } else {
+      const data = await res.json();
+      setDocAnalyzeError(data.detail || "Error al obtener análisis");
+      setSelectedDocForAnalysis(null);
+    }
+    setLoadingAnalysis(false);
   };
 
   const handleRequestAnalysis = async () => {
@@ -584,7 +667,7 @@ export default function MatterDetailPage() {
                 type="file"
                 id="file-upload"
                 className="hidden"
-                accept=".pdf,.docx,.doc,.txt"
+                accept=".pdf,.docx,.doc,.txt,image/*"
                 onChange={handleFileUpload}
                 disabled={uploading}
               />
@@ -598,7 +681,7 @@ export default function MatterDetailPage() {
                 <span className="text-gray-600">
                   {uploading ? "Subiendo..." : "Arrastra un archivo o haz clic para seleccionar"}
                 </span>
-                <span className="text-sm text-gray-400 mt-1">PDF, DOCX, DOC, TXT (máx. 50MB)</span>
+                <span className="text-sm text-gray-400 mt-1">PDF, DOCX, DOC, TXT, Imágenes (máx. 50MB)</span>
               </label>
             </div>
             {uploadError && (
@@ -633,34 +716,133 @@ export default function MatterDetailPage() {
                         <p className="font-medium text-gray-900">{doc.original_filename}</p>
                         <p className="text-sm text-gray-500">
                           {(doc.file_size / 1024).toFixed(1)} KB • {doc.status}
+                          {doc.detected_document_type && ` • ${doc.detected_document_type}`}
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteDocument(doc.id)}
-                      disabled={deletingDocId === doc.id}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="Eliminar documento"
-                    >
-                      {deletingDocId === doc.id ? (
-                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                      ) : (
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                    <div className="flex items-center gap-2">
+                      {/* Botón Procesar */}
+                      {doc.status === "uploaded" && (
+                        <button
+                          onClick={() => handleProcessDocument(doc.id)}
+                          disabled={processingDocId === doc.id}
+                          className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50"
+                          title="Extraer texto del documento"
+                        >
+                          {processingDocId === doc.id ? (
+                            <span className="flex items-center gap-1">
+                              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Procesando...
+                            </span>
+                          ) : "Procesar"}
+                        </button>
                       )}
-                    </button>
+
+                      {/* Botón Analizar */}
+                      {doc.status === "processed" && (
+                        <button
+                          onClick={() => handleAnalyzeDocument(doc.id)}
+                          disabled={analyzingDocId === doc.id}
+                          className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50"
+                          title="Analizar documento con IA"
+                        >
+                          {analyzingDocId === doc.id ? (
+                            <span className="flex items-center gap-1">
+                              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Analizando...
+                            </span>
+                          ) : "Analizar"}
+                        </button>
+                      )}
+
+                      {/* Botón Ver Análisis */}
+                      {(doc.status === "analyzed" || doc.extracted_text) && (
+                        <button
+                          onClick={() => handleViewAnalysis(doc.id)}
+                          className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
+                          title="Ver análisis del documento"
+                        >
+                          Ver análisis
+                        </button>
+                      )}
+
+                      {/* Botón Eliminar */}
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        disabled={deletingDocId === doc.id}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Eliminar documento"
+                      >
+                        {deletingDocId === doc.id ? (
+                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                        ) : (
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 ))}
-                {deleteError && (
-                  <div className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{deleteError}</div>
+                {(deleteError || docProcessError || docAnalyzeError) && (
+                  <div className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+                    {deleteError || docProcessError || docAnalyzeError}
+                  </div>
                 )}
               </div>
             )}
           </div>
+
+          {/* Modal de Análisis de Documento */}
+          {showAnalysisModal && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b">
+                  <h2 className="text-lg font-semibold">Análisis de Documento</h2>
+                  <button
+                    onClick={() => {
+                      setShowAnalysisModal(false);
+                      setSelectedDocForAnalysis(null);
+                    }}
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {loadingAnalysis ? (
+                    <div className="flex items-center justify-center py-12">
+                      <svg className="animate-spin h-8 w-8 text-primary-600" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    </div>
+                  ) : selectedDocForAnalysis && selectedDocForAnalysis.has_analysis ? (
+                    <DocumentAnalysisView analysis={selectedDocForAnalysis} />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-lg font-medium text-gray-700 mb-2">Documento no analizado</p>
+                      <p className="text-gray-500">Este documento aún no ha sido procesado o analizado.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

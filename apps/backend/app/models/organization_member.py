@@ -6,13 +6,13 @@ from app.core.database import Base
 
 
 class MemberRole(str, enum.Enum):
-    PLATFORM_ADMIN = "platform_admin"  # Admin de toda la plataforma
-    OWNER = "owner"
-    ADMIN = "admin"
-    LAWYER = "lawyer"
-    COMPANY_USER = "company_user"
-    CLIENT = "client"
-    VIEWER = "viewer"
+    PLATFORM_ADMIN = "PLATFORM_ADMIN"
+    OWNER = "OWNER"
+    ADMIN = "ADMIN"
+    LAWYER = "LAWYER"
+    COMPANY_USER = "COMPANY_USER"
+    CLIENT = "CLIENT"
+    VIEWER = "VIEWER"
 
 
 class OrganizationMember(Base):
