@@ -175,9 +175,7 @@ def reprocess_document(
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = None
 ):
-    """Procesa un documento de forma síncrona para debugging."""
-    from app.services.document_processor import process_document
-
+    """Procesa un documento en background, retorna inmediatamente."""
     document = db.query(Document).filter(
         Document.id == document_id,
         Document.organization_id == membership.organization_id
@@ -186,18 +184,58 @@ def reprocess_document(
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    document.status = "uploaded"
+    document.status = "queued"
     document.processed_at = None
     db.commit()
 
-    # Procesar de forma síncrona para ver errores
+    # Procesar en background si BackgroundTasks está disponible
+    if background_tasks:
+        background_tasks.add_task(_process_document_background, document_id)
+
+    return {
+        "message": "Documento encolado para procesamiento",
+        "document_id": document_id,
+        "status": "queued"
+    }
+
+
+def _process_document_background(document_id: int) -> None:
+    """Función que se ejecuta en background para procesar documentos."""
+    from app.services.document_processor import process_document
+    from app.core.database import SessionLocal
+
+    db = SessionLocal()
     try:
+        # Actualizar estado a processing
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document:
+            document.status = "processing"
+            db.commit()
+
+        # Procesar
         result = process_document(document_id, force=True)
-        return {"message": "Documento procesado", "document_id": document_id, "result": result}
+
+        # Actualizar estado final
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if document:
+            if result.get("status") == "error":
+                document.status = "failed"
+            else:
+                document.status = "processed"
+            db.commit()
+        logger.info(f"Document {document_id} processed: {result.get('status')}")
     except Exception as e:
-        import traceback
-        logger.error(f"Error processing document: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Error processing: {str(e)}")
+        logger.error(f"Background processing failed: {type(e).__name__}: {str(e)}", exc_info=True)
+        # Marcar como failed
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if document:
+                document.status = "failed"
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 @router.post("/{document_id}/analyze")
