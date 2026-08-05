@@ -47,7 +47,7 @@ class OpenAIEmbedding(EmbeddingProvider):
 
         from app.services.retry_utils import with_retry, is_retryable
 
-        @with_retry(max_retries=5, initial_delay=2.0, backoff_factor=2.0)
+        @with_retry(max_retries=10, initial_delay=5.0, backoff_factor=2.0)
         def retry_wrapper():
             return self._do_generate_embedding(text)
 
@@ -87,7 +87,7 @@ class OpenAIEmbedding(EmbeddingProvider):
 
         from app.services.retry_utils import with_retry, is_retryable
 
-        @with_retry(max_retries=3, initial_delay=1.0, backoff_factor=2.0)
+        @with_retry(max_retries=10, initial_delay=5.0, backoff_factor=2.0)
         def retry_wrapper():
             return self._do_generate_embeddings(texts)
 

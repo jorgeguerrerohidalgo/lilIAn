@@ -123,7 +123,7 @@ class OpenAILLM(LLMProvider):
             data = response.json()
             return data["choices"][0]["message"]["content"]
 
-    @with_retry(max_retries=5, initial_delay=3.0)
+    @with_retry(max_retries=10, initial_delay=5.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         if not self.api_key:
             return {"error": "OPENAI_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
