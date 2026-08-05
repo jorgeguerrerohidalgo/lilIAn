@@ -358,19 +358,24 @@ export default function MatterDetailPage() {
     setDeletingDocId(docId);
     setDeleteError("");
 
-    const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/documents/${docId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    try {
+      const token = getToken();
+      const res = await fetch(`${API_URL}/api/v1/documents/${docId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (res.ok) {
-      setDocuments(documents.filter((d) => d.id !== docId));
-    } else {
-      const data = await res.json();
-      setDeleteError(data.detail || "Error al eliminar documento");
+      if (res.ok) {
+        setDocuments(documents.filter((d) => d.id !== docId));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setDeleteError(data.detail || `Error ${res.status} al eliminar documento`);
+      }
+    } catch (err) {
+      setDeleteError(`Error de conexión: no se puede conectar al servidor`);
+    } finally {
+      setDeletingDocId(null);
     }
-    setDeletingDocId(null);
   };
 
   const handleProcessDocument = async (docId: number) => {
