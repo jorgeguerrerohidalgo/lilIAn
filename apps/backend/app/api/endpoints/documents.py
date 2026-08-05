@@ -93,7 +93,8 @@ async def upload_document(
     db.commit()
     db.refresh(document)
 
-    background_tasks.add_task(process_document_background, document.id)
+    # NOTE: Background processing removed - user must click "Procesar" manually
+    # background_tasks.add_task(process_document_background, document.id)
 
     return document
 
