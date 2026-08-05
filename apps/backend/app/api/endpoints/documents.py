@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from redis import Redis
-from rq import Queue
 import json
+import logging
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -17,6 +16,8 @@ from app.services import storage
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
+logger = logging.getLogger(__name__)
+
 ALLOWED_MIME_TYPES = [
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -26,14 +27,23 @@ ALLOWED_MIME_TYPES = [
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
-redis_conn = Redis.from_url(settings.REDIS_URL)
-document_queue = Queue("document_processing", connection=redis_conn)
+
+def process_document_background(document_id: int) -> None:
+    """Background task that creates its own DB session."""
+    from app.services.document_processor import process_document as process_doc
+    try:
+        logger.info(f"Starting background processing for document {document_id}")
+        result = process_doc(document_id)
+        logger.info(f"Background processing completed: {result.get('status')}")
+    except Exception as e:
+        logger.error(f"Background processing failed: {type(e).__name__}: {str(e)}")
 
 
 @router.post("/matters/{matter_id}/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     matter_id: int,
     file: UploadFile = File(...),
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
@@ -82,14 +92,7 @@ async def upload_document(
     db.commit()
     db.refresh(document)
 
-    try:
-        document_queue.enqueue(
-            "workers.document_processor.doc_worker.process_document",
-            document.id,
-            job_timeout="10m"
-        )
-    except Exception:
-        pass
+    background_tasks.add_task(process_document_background, document.id)
 
     return document
 
@@ -166,6 +169,7 @@ def delete_document(
 @router.post("/{document_id}/process")
 def reprocess_document(
     document_id: int,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
@@ -182,16 +186,9 @@ def reprocess_document(
     document.processed_at = None
     db.commit()
 
-    try:
-        document_queue.enqueue(
-            "app.services.document_processor.process_document",
-            document.id,
-            job_timeout="10m"
-        )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Error al encolar procesamiento")
+    background_tasks.add_task(process_document_background, document_id)
 
-    return {"message": "Documento encolado para procesamiento", "document_id": document_id}
+    return {"message": "Documento en procesamiento", "document_id": document_id}
 
 
 @router.post("/{document_id}/analyze")
