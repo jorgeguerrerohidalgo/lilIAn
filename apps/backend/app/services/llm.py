@@ -21,6 +21,8 @@ class AnthropicLLM(LLMProvider):
         self.model = model
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        if not self.api_key:
+            return "Error: LLM_API_KEY not configured"
         messages = []
         if system_prompt:
             messages.append({"role": "user", "content": system_prompt})
@@ -49,6 +51,8 @@ class AnthropicLLM(LLMProvider):
             return data["content"][0]["text"]
 
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
+        if not self.api_key:
+            return {"error": "LLM_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
         system_with_schema = f"{system_prompt or ''}\n\nResponde SOLO con JSON válido siguiendo este esquema: {json.dumps(schema)}"
 
         messages = [
