@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 import os
 import logging
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class OpenAIEmbedding(EmbeddingProvider):
 
         from app.services.retry_utils import with_retry, is_retryable
 
-        @with_retry(max_retries=3, initial_delay=1.0, backoff_factor=2.0)
+        @with_retry(max_retries=5, initial_delay=2.0, backoff_factor=2.0)
         def retry_wrapper():
             return self._do_generate_embedding(text)
 
