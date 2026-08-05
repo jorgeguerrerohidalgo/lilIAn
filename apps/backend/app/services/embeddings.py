@@ -21,6 +21,8 @@ class OpenAIEmbedding(EmbeddingProvider):
         self.dimensions = 1536
 
     def generate_embedding(self, text: str) -> List[float]:
+        if text is None:
+            text = ""
         response = httpx.post(
             "https://api.openai.com/v1/embeddings",
             headers={
@@ -41,7 +43,7 @@ class OpenAIEmbedding(EmbeddingProvider):
         if not texts:
             return []
 
-        truncated_texts = [text[:8000] for text in texts]
+        truncated_texts = [(text[:8000] if text else "") for text in texts]
 
         response = httpx.post(
             "https://api.openai.com/v1/embeddings",
