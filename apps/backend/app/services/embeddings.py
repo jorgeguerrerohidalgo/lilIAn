@@ -66,7 +66,9 @@ class DummyEmbedding(EmbeddingProvider):
 
     def generate_embedding(self, text: str) -> List[float]:
         import hashlib
-        hash_value = int(hashlib.md5(text.encode()).hexdigest(), 16)
+        if text is None:
+            text = ""
+        hash_value = int(hashlib.md5(str(text).encode()).hexdigest(), 16)
         return [(hash_value % 1000) / 1000.0 for _ in range(self.dimensions)]
 
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
