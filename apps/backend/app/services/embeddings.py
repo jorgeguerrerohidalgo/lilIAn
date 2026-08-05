@@ -16,7 +16,7 @@ class EmbeddingProvider(ABC):
 
 class OpenAIEmbedding(EmbeddingProvider):
     def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-3-small"):
-        self.api_key = api_key or os.environ.get("EMBEDDING_API_KEY") or os.environ.get("LLM_API_KEY")
+        self.api_key = api_key or os.environ.get("EMBEDDING_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY")
         self.model = model
         self.dimensions = 1536
 
@@ -84,7 +84,7 @@ def get_embedding_provider() -> EmbeddingProvider:
 
     if provider == "openai":
         return OpenAIEmbedding(
-            api_key=settings.EMBEDDING_API_KEY,
+            api_key=settings.resolved_embedding_api_key,
             model=settings.EMBEDDING_MODEL
         )
     else:

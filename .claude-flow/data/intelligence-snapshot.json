@@ -1,0 +1,346 @@
+[
+  {
+    "timestamp": 1784658410479,
+    "nodes": 0,
+    "edges": 0,
+    "pageRankSum": 0,
+    "confidences": [],
+    "accessCounts": [],
+    "topPatterns": []
+  },
+  {
+    "timestamp": 1784691981921,
+    "nodes": 1,
+    "edges": 0,
+    "pageRankSum": 1,
+    "confidences": [
+      0.5
+    ],
+    "accessCounts": [
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1784691981919-fkoe",
+        "summary": "Frequently edited: rag.py (9x)",
+        "confidence": 0.5,
+        "pageRank": 1,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1784693127051,
+    "nodes": 1,
+    "edges": 0,
+    "pageRankSum": 1,
+    "confidences": [
+      0.5
+    ],
+    "accessCounts": [
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1784691981919-fkoe",
+        "summary": "Frequently edited: rag.py (9x)",
+        "confidence": 0.5,
+        "pageRank": 1,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1785419547699,
+    "nodes": 3,
+    "edges": 3,
+    "pageRankSum": 1,
+    "confidences": [
+      0.8500000000000003,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      7,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1785419547698-pfgn",
+        "summary": "Frequently edited: Dockerfile (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.5208692975273159,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1784691981919-fkoe",
+        "summary": "Frequently edited: rag.py (9x)",
+        "confidence": 0.8500000000000003,
+        "pageRank": 0.19757959373228626,
+        "accessCount": 7
+      },
+      {
+        "id": "insight-1785419547698-5nmi",
+        "summary": "Frequently edited: Dockerfile (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.28155110874039796,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1785466169013,
+    "nodes": 3,
+    "edges": 3,
+    "pageRankSum": 1,
+    "confidences": [
+      0.7000000000000002,
+      0.7000000000000002,
+      0.7000000000000002
+    ],
+    "accessCounts": [
+      4,
+      4,
+      4
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1785419547698-pfgn",
+        "summary": "Frequently edited: Dockerfile (3x)",
+        "confidence": 0.7000000000000002,
+        "pageRank": 0.5208692975273159,
+        "accessCount": 4
+      },
+      {
+        "id": "insight-1785419547698-5nmi",
+        "summary": "Frequently edited: Dockerfile (5x)",
+        "confidence": 0.7000000000000002,
+        "pageRank": 0.28155110874039796,
+        "accessCount": 4
+      },
+      {
+        "id": "insight-1784691981919-fkoe",
+        "summary": "Frequently edited: rag.py (9x)",
+        "confidence": 0.7000000000000002,
+        "pageRank": 0.19757959373228626,
+        "accessCount": 4
+      }
+    ]
+  },
+  {
+    "timestamp": 1785466693973,
+    "nodes": 3,
+    "edges": 3,
+    "pageRankSum": 1,
+    "confidences": [
+      0.7000000000000002,
+      0.7000000000000002,
+      0.7000000000000002
+    ],
+    "accessCounts": [
+      4,
+      4,
+      4
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1785419547698-pfgn",
+        "summary": "Frequently edited: Dockerfile (3x)",
+        "confidence": 0.7000000000000002,
+        "pageRank": 0.5208692975273159,
+        "accessCount": 4
+      },
+      {
+        "id": "insight-1785419547698-5nmi",
+        "summary": "Frequently edited: Dockerfile (5x)",
+        "confidence": 0.7000000000000002,
+        "pageRank": 0.28155110874039796,
+        "accessCount": 4
+      },
+      {
+        "id": "insight-1784691981919-fkoe",
+        "summary": "Frequently edited: rag.py (9x)",
+        "confidence": 0.7000000000000002,
+        "pageRank": 0.19757959373228626,
+        "accessCount": 4
+      }
+    ]
+  },
+  {
+    "timestamp": 1785558866393,
+    "nodes": 6,
+    "edges": 15,
+    "pageRankSum": 1,
+    "confidences": [
+      0.6500000000000001,
+      0.6500000000000001,
+      0.6500000000000001,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      3,
+      3,
+      3,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1785558866391-5sy5",
+        "summary": "Frequently edited: precedent_rag.py (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.37487163927411216,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1785419547698-pfgn",
+        "summary": "Frequently edited: Dockerfile (3x)",
+        "confidence": 0.6500000000000001,
+        "pageRank": 0.11080430766993951,
+        "accessCount": 3
+      },
+      {
+        "id": "insight-1785558866391-ohdo",
+        "summary": "Frequently edited: admin.py (7x)",
+        "confidence": 0.5,
+        "pageRank": 0.2026334131836222,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1785419547698-5nmi",
+        "summary": "Frequently edited: Dockerfile (5x)",
+        "confidence": 0.6500000000000001,
+        "pageRank": 0.09138496613996563,
+        "accessCount": 3
+      },
+      {
+        "id": "insight-1784691981919-fkoe",
+        "summary": "Frequently edited: rag.py (9x)",
+        "confidence": 0.6500000000000001,
+        "pageRank": 0.07810678167036422,
+        "accessCount": 3
+      },
+      {
+        "id": "insight-1785558866391-rl9e",
+        "summary": "Frequently edited: buzzing-mapping-duckling.md (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.1421988920619963,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1785765605513,
+    "nodes": 14,
+    "edges": 91,
+    "pageRankSum": 1.0000000000000002,
+    "confidences": [
+      0.7400000000000002,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.5
+    ],
+    "accessCounts": [
+      6,
+      18,
+      40,
+      29,
+      29,
+      29,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "insight-1785558866391-5sy5",
+        "summary": "Frequently edited: precedent_rag.py (3x)",
+        "confidence": 1,
+        "pageRank": 0.039319276734954965,
+        "accessCount": 29
+      },
+      {
+        "id": "insight-1785558866391-ohdo",
+        "summary": "Frequently edited: admin.py (7x)",
+        "confidence": 1,
+        "pageRank": 0.0359262431473265,
+        "accessCount": 29
+      },
+      {
+        "id": "insight-1785558866391-rl9e",
+        "summary": "Frequently edited: buzzing-mapping-duckling.md (4x)",
+        "confidence": 1,
+        "pageRank": 0.03311174450534111,
+        "accessCount": 29
+      },
+      {
+        "id": "insight-1785419547698-pfgn",
+        "summary": "Frequently edited: Dockerfile (3x)",
+        "confidence": 1,
+        "pageRank": 0.030736639598109995,
+        "accessCount": 40
+      },
+      {
+        "id": "insight-1785419547698-5nmi",
+        "summary": "Frequently edited: Dockerfile (5x)",
+        "confidence": 1,
+        "pageRank": 0.028703475428531654,
+        "accessCount": 18
+      },
+      {
+        "id": "insight-1785765605509-jc3t",
+        "summary": "Frequently edited: openapi.md (5x)",
+        "confidence": 0.5,
+        "pageRank": 0.26727788169810063,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1784691981919-fkoe",
+        "summary": "Frequently edited: rag.py (9x)",
+        "confidence": 0.7400000000000002,
+        "pageRank": 0.026941888812755048,
+        "accessCount": 6
+      },
+      {
+        "id": "insight-1785765605509-2jod",
+        "summary": "Frequently edited: main.py (6x)",
+        "confidence": 0.5,
+        "pageRank": 0.1444745269574329,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1785765605509-c84s",
+        "summary": "Frequently edited: rate_limit.py (4x)",
+        "confidence": 0.5,
+        "pageRank": 0.10138565133548769,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1785765605509-iohz",
+        "summary": "Frequently edited: logging.py (3x)",
+        "confidence": 0.5,
+        "pageRank": 0.07900182278594503,
+        "accessCount": 0
+      }
+    ]
+  }
+]

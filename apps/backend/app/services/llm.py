@@ -251,7 +251,7 @@ def get_llm_provider() -> LLMProvider:
         )
     elif provider == "openai":
         return OpenAILLM(
-            api_key=settings.OPENAI_API_KEY or settings.LLM_API_KEY,
+            api_key=settings.resolved_llm_api_key,
             model=settings.LLM_MODEL
         )
     elif provider == "minimax":

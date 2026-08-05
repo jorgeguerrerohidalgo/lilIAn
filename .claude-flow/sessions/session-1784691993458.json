@@ -1,0 +1,19 @@
+{
+  "id": "session-1784691993458",
+  "startedAt": "2026-07-22T03:46:33.458Z",
+  "cwd": "/home/jorge-guerrero-hidalgo/Desarrollo/legal_lilIAn/lilian",
+  "context": {
+    "lastMatchedPatterns": [
+      "insight-1784691981919-fkoe"
+    ]
+  },
+  "metrics": {
+    "edits": 0,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "updatedAt": "2026-07-22T03:51:42.678Z",
+  "endedAt": "2026-07-22T04:05:27.053Z",
+  "duration": 1133595
+}

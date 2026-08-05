@@ -18,14 +18,22 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 60 * 24
 
-    LLM_PROVIDER: str = "anthropic"
-    LLM_MODEL: str = "claude-sonnet-4-20250514"
+    LLM_PROVIDER: str = "openai"
+    LLM_MODEL: str = "gpt-4o-mini"
     LLM_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
 
     EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_API_KEY: Optional[str] = None
+
+    @property
+    def resolved_llm_api_key(self) -> Optional[str]:
+        return self.LLM_API_KEY or self.OPENAI_API_KEY
+
+    @property
+    def resolved_embedding_api_key(self) -> Optional[str]:
+        return self.EMBEDDING_API_KEY or self.OPENAI_API_KEY
 
     ALLOWED_ORIGINS: str = "*"
 
