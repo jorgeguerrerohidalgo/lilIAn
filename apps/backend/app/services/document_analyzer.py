@@ -400,7 +400,6 @@ def analyze_document_full(document_id: int) -> DocumentAnalysis:
         # Generate and store markdown info in metadata
         try:
             from app.services.markdown_generator import analysis_to_markdown, generate_document_markdown_filename
-            import json
             markdown_content = analysis_to_markdown(analysis, document)
             filename = generate_document_markdown_filename(document)
             raw_metadata = analysis.analysis_metadata
