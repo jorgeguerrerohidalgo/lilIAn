@@ -175,6 +175,9 @@ def reprocess_document(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    """Procesa un documento de forma síncrona para debugging."""
+    from app.services.document_processor import process_document
+
     document = db.query(Document).filter(
         Document.id == document_id,
         Document.organization_id == membership.organization_id
@@ -187,9 +190,14 @@ def reprocess_document(
     document.processed_at = None
     db.commit()
 
-    background_tasks.add_task(process_document_background, document_id)
-
-    return {"message": "Documento en procesamiento", "document_id": document_id}
+    # Procesar de forma síncrona para ver errores
+    try:
+        result = process_document(document_id, force=True)
+        return {"message": "Documento procesado", "document_id": document_id, "result": result}
+    except Exception as e:
+        import traceback
+        logger.error(f"Error processing document: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error processing: {str(e)}")
 
 
 @router.post("/{document_id}/analyze")
