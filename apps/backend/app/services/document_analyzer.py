@@ -397,6 +397,21 @@ def analyze_document_full(document_id: int) -> DocumentAnalysis:
             logger.error(f"Error comparing clauses to templates: {e}", exc_info=True)
             pass  # Don't fail analysis if comparison fails
 
+        # Generate and store markdown info in metadata
+        try:
+            from app.services.markdown_generator import analysis_to_markdown, generate_document_markdown_filename
+            markdown_content = analysis_to_markdown(analysis, document)
+            filename = generate_document_markdown_filename(document)
+            metadata = analysis.analysis_metadata or {}
+            metadata['markdown_filename'] = filename
+            metadata['markdown_generated_at'] = datetime.utcnow().isoformat()
+            metadata['markdown_size'] = len(markdown_content)
+            analysis.analysis_metadata = metadata
+            db.commit()
+            logger.info(f"Generated markdown for document {document_id}: {filename}")
+        except Exception as e:
+            logger.warning(f"Failed to generate markdown for document {document_id}: {e}")
+
         return analysis
 
     finally:

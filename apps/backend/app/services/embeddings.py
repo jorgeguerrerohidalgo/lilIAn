@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 import os
-import httpx
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingProvider(ABC):
@@ -20,9 +22,8 @@ class OpenAIEmbedding(EmbeddingProvider):
         self.model = model
         self.dimensions = 1536
 
-    def generate_embedding(self, text: str) -> List[float]:
-        if text is None:
-            text = ""
+    def _do_generate_embedding(self, text: str) -> List[float]:
+        """Internal method that makes the actual API call."""
         response = httpx.post(
             "https://api.openai.com/v1/embeddings",
             headers={
@@ -39,12 +40,30 @@ class OpenAIEmbedding(EmbeddingProvider):
         data = response.json()
         return data["data"][0]["embedding"]
 
-    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
-        if not texts:
-            return []
+    def generate_embedding(self, text: str) -> List[float]:
+        if text is None:
+            text = ""
 
+        from app.services.retry_utils import with_retry, is_retryable
+
+        @with_retry(max_retries=3, initial_delay=1.0, backoff_factor=2.0)
+        def retry_wrapper():
+            return self._do_generate_embedding(text)
+
+        try:
+            return retry_wrapper()
+        except Exception as e:
+            is_retry, code = is_retryable(e)
+            if not is_retry:
+                logger.warning(f"OpenAI embedding auth error, using dummy: {e}")
+            else:
+                logger.warning(f"OpenAI embedding failed after retries, using dummy: {e}")
+            dummy = DummyEmbedding(dimensions=self.dimensions)
+            return dummy.generate_embedding(text)
+
+    def _do_generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Internal method that makes the actual API call."""
         truncated_texts = [(text[:8000] if text else "") for text in texts]
-
         response = httpx.post(
             "https://api.openai.com/v1/embeddings",
             headers={
@@ -60,6 +79,27 @@ class OpenAIEmbedding(EmbeddingProvider):
         response.raise_for_status()
         data = response.json()
         return [item["embedding"] for item in data["data"]]
+
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+
+        from app.services.retry_utils import with_retry, is_retryable
+
+        @with_retry(max_retries=3, initial_delay=1.0, backoff_factor=2.0)
+        def retry_wrapper():
+            return self._do_generate_embeddings(texts)
+
+        try:
+            return retry_wrapper()
+        except Exception as e:
+            is_retry, code = is_retryable(e)
+            if not is_retry:
+                logger.warning(f"OpenAI embeddings auth error, using dummy: {e}")
+            else:
+                logger.warning(f"OpenAI embeddings failed after retries, using dummy: {e}")
+            dummy = DummyEmbedding(dimensions=self.dimensions)
+            return dummy.generate_embeddings(texts)
 
 
 class DummyEmbedding(EmbeddingProvider):

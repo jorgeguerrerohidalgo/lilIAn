@@ -4,6 +4,8 @@ import os
 import json
 import httpx
 
+from app.services.retry_utils import with_retry
+
 
 class LLMProvider(ABC):
     @abstractmethod
@@ -50,6 +52,7 @@ class AnthropicLLM(LLMProvider):
             data = response.json()
             return data["content"][0]["text"]
 
+    @with_retry(max_retries=3, initial_delay=2.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         if not self.api_key:
             return {"error": "LLM_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
@@ -120,6 +123,7 @@ class OpenAILLM(LLMProvider):
             data = response.json()
             return data["choices"][0]["message"]["content"]
 
+    @with_retry(max_retries=3, initial_delay=2.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         if not self.api_key:
             return {"error": "OPENAI_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
@@ -190,6 +194,7 @@ class MiniMaxLLM(LLMProvider):
             data = response.json()
             return data["choices"][0]["message"]["content"]
 
+    @with_retry(max_retries=3, initial_delay=2.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         messages = []
         if system_prompt:

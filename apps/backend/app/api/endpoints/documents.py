@@ -321,6 +321,43 @@ def get_document_analysis(
     }
 
 
+@router.get("/{document_id}/analysis/markdown")
+def get_document_analysis_markdown(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db)
+):
+    """Obtiene el análisis de un documento en formato markdown."""
+    from app.services.document_analyzer import get_document_analysis as get_doc_analysis
+    from app.services.markdown_generator import analysis_to_markdown
+
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.organization_id == membership.organization_id
+    ).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    analysis = get_doc_analysis(document_id)
+
+    if not analysis:
+        raise HTTPException(
+            status_code=404,
+            detail="El documento no tiene análisis disponible"
+        )
+
+    markdown_content = analysis_to_markdown(analysis, document)
+
+    return {
+        "document_id": document_id,
+        "filename": f"{document.original_filename.rsplit('.', 1)[0]}_analysis.md",
+        "content": markdown_content,
+        "content_type": "text/markdown"
+    }
+
+
 @router.get("/matters/{matter_id}/risk-dashboard")
 def get_matter_risk_dashboard(
     matter_id: int,
