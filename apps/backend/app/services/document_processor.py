@@ -119,12 +119,19 @@ def create_chunks_for_document(
     Crea chunks para un documento de forma idempotente.
 
     Args:
+        extracted_text: Texto extraído del documento (no debe ser None)
         force: Si True, recrea los chunks incluso si ya existen.
                Si False, solo crea si no existen.
 
     Returns:
         dict con 'created' (int), 'skipped' (bool), 'status' (str)
     """
+    # Asegurar que extracted_text no sea None
+    if not extracted_text:
+        extracted_text = ""
+    if not isinstance(extracted_text, str):
+        extracted_text = str(extracted_text) if extracted_text else ""
+
     from app.services.chunker import split_text_into_chunks
     from app.services.embeddings import get_embedding_provider
     import hashlib

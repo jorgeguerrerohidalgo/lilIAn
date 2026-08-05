@@ -276,13 +276,16 @@ def analyze_document_full(document_id: int) -> DocumentAnalysis:
         if not document.extracted_text:
             raise ValueError("El documento no tiene texto extraído aún")
 
+        # Asegurar que extracted_text es string
+        extracted_text = str(document.extracted_text) if document.extracted_text else ""
+
         # Obtener contexto RAG basado en tipo de documento
         doc_type = document.detected_document_type or "unknown"
         rag_context = get_rag_context_for_document_type(doc_type, document.organization_id)
 
         # Generar análisis con LLM
         provider = get_llm_provider()
-        base_prompt = PROMPT_ANALYSIS.replace("{text}", document.extracted_text[:50000])
+        base_prompt = PROMPT_ANALYSIS.replace("{text}", extracted_text[:50000] if extracted_text else "")
 
         # Incluir contexto RAG si está disponible
         if rag_context:
