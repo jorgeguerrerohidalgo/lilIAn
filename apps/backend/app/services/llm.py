@@ -87,11 +87,13 @@ class AnthropicLLM(LLMProvider):
 
 
 class OpenAILLM(LLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.model = model
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+        if not self.api_key:
+            return "Error: OPENAI_API_KEY not configured"
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -119,6 +121,8 @@ class OpenAILLM(LLMProvider):
             return data["choices"][0]["message"]["content"]
 
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
+        if not self.api_key:
+            return {"error": "OPENAI_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
