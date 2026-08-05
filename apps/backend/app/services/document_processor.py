@@ -1,8 +1,11 @@
 from datetime import datetime
 from typing import Optional
+import logging
 import fitz
 from docx import Document as DocxDocument
 import json
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import SessionLocal
 from app.models.document import Document
@@ -12,41 +15,56 @@ from app.models.legal_area import get_legal_area_from_matter_type
 
 
 def extract_text_from_file(file_path: str, mime_type: Optional[str]) -> str:
+    logger.info(f"[EXTRACT] extract_text_from_file: path={file_path}, mime={mime_type}")
     if not file_path or not mime_type:
+        logger.warning("[EXTRACT] Missing file_path or mime_type")
         return ""
 
     try:
         if mime_type == "application/pdf":
-            return extract_text_from_pdf(file_path)
+            result = extract_text_from_pdf(file_path)
+            logger.info(f"[EXTRACT] PDF extraction result length: {len(result)}")
+            return result
         elif mime_type in [
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/msword"
         ]:
-            return extract_text_from_docx(file_path)
+            result = extract_text_from_docx(file_path)
+            logger.info(f"[EXTRACT] DOCX extraction result length: {len(result)}")
+            return result
         elif mime_type == "text/plain":
-            return extract_text_from_txt(file_path)
+            result = extract_text_from_txt(file_path)
+            logger.info(f"[EXTRACT] TXT extraction result length: {len(result)}")
+            return result
         else:
+            logger.warning(f"[EXTRACT] Unsupported mime_type: {mime_type}")
             return ""
     except Exception as e:
+        logger.error(f"[EXTRACT] Error extracting text: {type(e).__name__}: {str(e)}", exc_info=True)
         return f"Error extracting text: {str(e)}"
 
 
 def extract_text_from_pdf(file_path: str) -> str:
+    logger.info(f"[EXTRACT] extract_text_from_pdf: path={file_path}")
     text_parts = []
     page_count = 0
     try:
         doc = fitz.open(file_path)
         page_count = len(doc)
+        logger.info(f"[EXTRACT] PDF opened, {page_count} pages")
         for page in doc:
             text_parts.append(page.get_text())
         doc.close()
-    except Exception:
+    except Exception as e:
+        logger.error(f"[EXTRACT] Error opening PDF: {type(e).__name__}: {str(e)}")
         return ""
 
     full_text = "\n\n".join(text_parts)
+    logger.info(f"[EXTRACT] PDF text extracted, length={len(full_text)}")
 
     # Si no se extrajo texto o es muy poco, usar OCR
     if len(full_text.strip()) < 100:
+        logger.info("[EXTRACT] Text too short, attempting OCR")
         ocr_text = extract_text_from_pdf_ocr(file_path)
         if ocr_text:
             return f"--- PDF ({page_count} páginas - OCR) ---\n\n{ocr_text}"
@@ -56,6 +74,7 @@ def extract_text_from_pdf(file_path: str) -> str:
 
 def extract_text_from_pdf_ocr(file_path: str) -> str:
     """Extrae texto de PDFs escaneados usando Tesseract OCR"""
+    logger.info(f"[EXTRACT] extract_text_from_pdf_ocr: path={file_path}")
     try:
         import pytesseract
         from PIL import Image
@@ -86,23 +105,33 @@ def extract_text_from_pdf_ocr(file_path: str) -> str:
 
 
 def extract_text_from_docx(file_path: str) -> str:
+    logger.info(f"[EXTRACT] extract_text_from_docx: path={file_path}")
     try:
         doc = DocxDocument(file_path)
         text = "\n\n".join([para.text for para in doc.paragraphs])
+        logger.info(f"[EXTRACT] DOCX extracted, length={len(text)}")
         return f"--- DOCX ---\n\n{text}"
-    except Exception:
+    except Exception as e:
+        logger.error(f"[EXTRACT] DOCX error: {type(e).__name__}: {str(e)}")
         return ""
 
 
 def extract_text_from_txt(file_path: str) -> str:
+    logger.info(f"[EXTRACT] extract_text_from_txt: path={file_path}")
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except Exception:
+            content = f.read()
+            logger.info(f"[EXTRACT] TXT (utf-8) extracted, length={len(content)}")
+            return content
+    except Exception as e:
+        logger.warning(f"[EXTRACT] TXT utf-8 failed: {e}, trying latin-1")
         try:
             with open(file_path, "r", encoding="latin-1") as f:
-                return f.read()
-        except Exception:
+                content = f.read()
+                logger.info(f"[EXTRACT] TXT (latin-1) extracted, length={len(content)}")
+                return content
+        except Exception as e2:
+            logger.error(f"[EXTRACT] TXT latin-1 also failed: {e2}")
             return ""
 
 
@@ -243,12 +272,16 @@ def process_document(document_id: int, force: bool = False) -> dict:
     Returns:
         dict con estado del procesamiento
     """
+    logger.info(f"[PROCESS] Starting process_document for document_id={document_id}, force={force}")
     db = SessionLocal()
     try:
         document = db.query(Document).filter(Document.id == document_id).first()
 
         if not document:
+            logger.error(f"[PROCESS] Document {document_id} not found")
             return {"error": "Documento no encontrado", "status": "error"}
+
+        logger.info(f"[PROCESS] Document {document_id}: status={document.status}, mime_type={document.mime_type}, storage_path={document.storage_path}")
 
         # Verificar si ya fue procesado (y no es forzado)
         if document.status == "processed" and not force:
@@ -256,6 +289,7 @@ def process_document(document_id: int, force: bool = False) -> dict:
                 DocumentChunk.document_id == document_id
             ).count()
             if existing_chunks > 0:
+                logger.info(f"[PROCESS] Document {document_id} already processed, skipping")
                 return {
                     "document_id": document_id,
                     "status": "already_processed",
@@ -266,6 +300,7 @@ def process_document(document_id: int, force: bool = False) -> dict:
 
         document.status = "processing"
         db.commit()
+        logger.info(f"[PROCESS] Document {document_id} status changed to 'processing'")
 
         # Inferir legal_area desde el matter
         legal_area = None
@@ -273,28 +308,35 @@ def process_document(document_id: int, force: bool = False) -> dict:
             matter = db.query(Matter).filter(Matter.id == document.matter_id).first()
             if matter and matter.matter_type:
                 legal_area = get_legal_area_from_matter_type(matter.matter_type.value)
+                logger.info(f"[PROCESS] Document {document_id}: legal_area={legal_area}")
 
         if document.storage_path:
             from app.services.storage import get_file_path
             file_path = get_file_path(document.storage_path)
+            logger.info(f"[PROCESS] Document {document_id}: file_path={file_path}")
 
             if file_path:
+                logger.info(f"[PROCESS] Document {document_id}: Calling extract_text_from_file")
                 extracted_text = extract_text_from_file(file_path, document.mime_type)
                 document.extracted_text = extracted_text
+                logger.info(f"[PROCESS] Document {document_id}: extracted_text length={len(extracted_text) if extracted_text else 0}")
 
                 if document.mime_type == "application/pdf":
                     try:
                         doc = fitz.open(file_path)
                         document.page_count = len(doc)
                         doc.close()
-                    except Exception:
-                        pass
+                        logger.info(f"[PROCESS] Document {document_id}: PDF page_count={document.page_count}")
+                    except Exception as e:
+                        logger.error(f"[PROCESS] Document {document_id}: Error getting page count: {e}")
 
                 document.status = "processed"
                 document.processed_at = datetime.utcnow()
                 db.commit()
+                logger.info(f"[PROCESS] Document {document_id}: status changed to 'processed', extracted_text saved")
 
                 # Crear chunks de forma idempotente
+                logger.info(f"[PROCESS] Document {document_id}: Creating chunks")
                 chunk_result = create_chunks_for_document(
                     document_id=document.id,
                     extracted_text=extracted_text,
@@ -304,8 +346,10 @@ def process_document(document_id: int, force: bool = False) -> dict:
                     legal_area=legal_area,
                     force=force
                 )
+                logger.info(f"[PROCESS] Document {document_id}: chunk_result={chunk_result}")
 
                 # Clasificar documento de forma async (no bloquea procesamiento)
+                logger.info(f"[PROCESS] Document {document_id}: Calling _classify_document_async")
                 _classify_document_async(document.id)
 
                 return {
@@ -319,15 +363,18 @@ def process_document(document_id: int, force: bool = False) -> dict:
                 }
 
             else:
+                logger.error(f"[PROCESS] Document {document_id}: file_path is None")
                 document.status = "failed"
                 db.commit()
                 return {"error": "Storage path no encontrado", "status": "failed"}
         else:
+            logger.error(f"[PROCESS] Document {document_id}: document.storage_path is None")
             document.status = "failed"
             db.commit()
             return {"error": "No tiene storage_path", "status": "failed"}
 
     except Exception as e:
+        logger.error(f"[PROCESS] Document {document_id}: Exception: {type(e).__name__}: {str(e)}", exc_info=True)
         try:
             document.status = "failed"
             db.commit()
@@ -336,6 +383,29 @@ def process_document(document_id: int, force: bool = False) -> dict:
         return {"error": str(e), "status": "failed"}
     finally:
         db.close()
+        logger.info(f"[PROCESS] Document {document_id}: Finished, db closed")
+
+
+def _classify_document_async(document_id: int) -> None:
+    """Clasifica un documento de forma asíncrona."""
+    import asyncio
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"[CLASSIFY] Starting async classification for document_id={document_id}")
+
+    try:
+        from app.services.document_classifier import classify_document
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(classify_document(document_id))
+            logger.info(f"[CLASSIFY] Classification result for {document_id}: {result.get('document_type', 'unknown')}")
+        finally:
+            loop.close()
+    except Exception as e:
+        logger.error(f"[CLASSIFY] Classification failed for document {document_id}: {type(e).__name__}: {str(e)}", exc_info=True)
 
 
 def _classify_document_async(document_id: int) -> None:
