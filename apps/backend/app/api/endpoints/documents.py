@@ -44,10 +44,10 @@ def process_document_background(document_id: int) -> None:
 async def upload_document(
     matter_id: int,
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None
 ):
     matter = db.query(Matter).filter(
         Matter.id == matter_id,
@@ -170,10 +170,10 @@ def delete_document(
 @router.post("/{document_id}/process")
 def reprocess_document(
     document_id: int,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None
 ):
     """Procesa un documento de forma síncrona para debugging."""
     from app.services.document_processor import process_document
