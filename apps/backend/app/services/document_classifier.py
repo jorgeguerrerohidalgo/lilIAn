@@ -5,6 +5,7 @@ Uses LLM to automatically detect the type of document uploaded.
 
 from typing import Optional
 import logging
+import traceback
 
 from app.core.database import SessionLocal
 from app.models.document import Document
@@ -154,7 +155,7 @@ Proporciona la clasificación en formato JSON siguiendo el esquema especificado.
             }
 
         except Exception as e:
-            logger.error(f"LLM classification failed for document {document_id}: {e}")
+            logger.error(f"LLM classification failed for document {document_id}: {e}\n{traceback.format_exc()}")
             return {
                 "document_type": "unknown",
                 "confidence": "low",
