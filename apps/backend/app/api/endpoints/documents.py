@@ -29,14 +29,15 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
 def process_document_background(document_id: int) -> None:
-    """Background task that creates its own DB session."""
+    """Background task that runs after response is sent."""
     from app.services.document_processor import process_document as process_doc
+
     try:
         logger.info(f"Starting background processing for document {document_id}")
         result = process_doc(document_id)
         logger.info(f"Background processing completed: {result.get('status')}")
     except Exception as e:
-        logger.error(f"Background processing failed: {type(e).__name__}: {str(e)}")
+        logger.error(f"Background processing failed: {type(e).__name__}: {str(e)}", exc_info=True)
 
 
 @router.post("/matters/{matter_id}/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
