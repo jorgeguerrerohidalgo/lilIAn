@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints import auth, organizations, matters, documents, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas, deadline_alerts, document_generator, precedents
 from app.core.config import settings
 
+# DEBUG: forcing rebuild to get latest code with sync processing
 app = FastAPI(
     title="lilIAn - API",
     description="Plataforma legaltech chilena asistida por IA",
