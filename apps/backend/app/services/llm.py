@@ -55,6 +55,7 @@ class AnthropicLLM(LLMProvider):
     @with_retry(max_retries=5, initial_delay=3.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         if not self.api_key:
+            print(f"[ANTHROPIC] ERROR: API key is None!")
             return {"error": "LLM_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
         system_with_schema = f"{system_prompt or ''}\n\nResponde SOLO con JSON válido siguiendo este esquema: {json.dumps(schema)}"
 
@@ -66,10 +67,11 @@ class AnthropicLLM(LLMProvider):
             "model": self.model,
             "messages": messages,
             "max_tokens": 4096,
-            "temperature": 0.3,
-            "response_format": {"type": "json_object"}
+            "temperature": 0.3
         }
 
+        print(f"[ANTHROPIC] Making request with model: {self.model}")
+        print(f"[ANTHROPIC] API key prefix: {self.api_key[:20] if self.api_key else 'None'}...")
         with httpx.Client() as client:
             response = client.post(
                 "https://api.anthropic.com/v1/messages",
@@ -81,11 +83,16 @@ class AnthropicLLM(LLMProvider):
                 json=payload,
                 timeout=60.0
             )
+            print(f"[ANTHROPIC] Response status: {response.status_code}")
+            print(f"[ANTHROPIC] Response body: {response.text[:500]}")
             response.raise_for_status()
             data = response.json()
             try:
-                return json.loads(data["content"][0]["text"])
-            except (json.JSONDecodeError, KeyError):
+                result = json.loads(data["content"][0]["text"])
+                print(f"[ANTHROPIC] Parsed result: {str(result)[:200]}")
+                return result
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"[ANTHROPIC] Parse error: {e}")
                 return {"error": "Failed to parse structured response"}
 
 
