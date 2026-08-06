@@ -126,6 +126,7 @@ class OpenAILLM(LLMProvider):
     @with_retry(max_retries=5, initial_delay=1.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         if not self.api_key:
+            print(f"[OPENAI] ERROR: API key is None or empty!")
             return {"error": "OPENAI_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
         messages = []
         if system_prompt:
@@ -143,6 +144,7 @@ class OpenAILLM(LLMProvider):
             "response_format": {"type": "json_object"}
         }
 
+        print(f"[OPENAI] Making request to OpenAI API with key prefix: {self.api_key[:20]}...")
         with httpx.Client() as client:
             response = client.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -153,6 +155,8 @@ class OpenAILLM(LLMProvider):
                 json=payload,
                 timeout=60.0
             )
+            print(f"[OPENAI] Response status: {response.status_code}")
+            print(f"[OPENAI] Response body: {response.text[:500]}")
             response.raise_for_status()
             data = response.json()
             try:
