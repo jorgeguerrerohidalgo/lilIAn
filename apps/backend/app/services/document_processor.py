@@ -321,6 +321,9 @@ def process_document(document_id: int, force: bool = False) -> dict:
                 extracted_text = extract_text_from_file(file_path, document.mime_type)
                 document.extracted_text = extracted_text
                 print(f"[PROCESS] Doc {document_id}: extracted_text length={len(extracted_text) if extracted_text else 0}")
+                print(f"[PROCESS] Doc {document_id}: === EXTRACTED TEXT START ===")
+                print(extracted_text[:3000] if extracted_text else "EMPTY")
+                print(f"[PROCESS] Doc {document_id}: === EXTRACTED TEXT END (total: {len(extracted_text) if extracted_text else 0} chars) ===")
 
                 if document.mime_type == "application/pdf":
                     try:
