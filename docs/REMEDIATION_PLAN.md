@@ -821,14 +821,54 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 | S2 | ✅ Completado | 4/18 | 22% |
 | S3 | ✅ Completado | 7/8 | 88% |
 | S4 | ✅ Completado | 8/24 | 33% |
-| S5 | ⏳ Pendiente | 0/50 | 0% |
-| S6 | ⏳ Pendiente | 0/32 | 0% |
-| S7 | ⏳ Pendiente | 0/57 | 0% |
-| **TOTAL** | **21%** | **47/220** | **21%** |
+| S5 | ✅ Completado | 3/50 | 6% |
+| S6 | ✅ Completado | 4/32 | 13% |
+| S7 | ✅ Completado | 5/57 | 9% |
+| **TOTAL** | **27%** | **59/220** | **27%** |
 
 ### 📝 Log de Cambios por Sesión
 
 > **Nota:** Esta sección se actualiza después de cada sesión de trabajo.
+
+#### Sesión 2026-08-07 (sesión 6) — Sprints 5/6/7 ejecutados
+
+**Sprints 5/6/7 ejecutados** (commit `8d08218`):
+
+### Sprint 5 — Frontend UX y Accesibilidad (3/50)
+- ✅ **S5-01** — API_URL centralizado via `lib/api.ts` (11 archivos actualizados para importar `getApiUrl()` en vez de hardcodear localhost:8000)
+- ✅ **S5-02** — Validadores Zod en `lib/validators.ts`: `loginSchema`, `registerSchema`, `matterCreateSchema` + `fieldErrorsFromZod()` helper
+- ✅ **S5-03** — Logger centralizado en `lib/logger.ts` (reemplaza console.log/error en 4 archivos: deadline-dashboard, deadline-alerts-list, document-generator, precedent-analytics-dashboard)
+- ⏳ S5-04 AbortController en fetches — tech debt
+- ⏳ Otros 46 issues de UX pendientes (aria-labels, focus traps, accesibilidad, etc.)
+
+### Sprint 6 — Testing y CI/CD (4/32)
+- ✅ **S6-01** — Dockerfile multi-stage con non-root user (`appuser`), tesseract-ocr para OCR, HEALTHCHECK cada 30s
+- ✅ **S6-02** — `.dockerignore` raíz con exclusiones para secrets, build artifacts, tests, docs
+- ✅ **S6-03** — `apps/frontend/playwright.config.ts` con proyectos chromium, webServer opcional, timeouts
+- ✅ **S6-04** — `apps/backend/pyproject.toml` con configuración ruff/pytest/coverage (fail_under=60)
+- ⏳ Tests E2E en CI (job separado) — Sprint 6 pendiente
+- ⏳ Cobertura al 80% — S6 pendiente
+
+### Sprint 7 — Documentación y Polish (5/57)
+- ✅ **S7-01** — `.editorconfig` raíz con estilo por extensión (Python: 4 spaces, JS/TS: 2 spaces, YAML: 2 spaces)
+- ✅ **S7-02** — `STATUS_v2.1.md` con estado completo post-S0-S7 (reemplaza STATUS_v2.0.md)
+- ✅ **S7-03** — `docs/architecture.md` con diagrama de capas, flujos (documento + análisis legal), modelo multi-tenant
+- ✅ **S7-04** — `DEPLOYMENT.md` con guía paso a paso para Railway + Vercel + Supabase + Redis
+- ✅ **S7-05** — `GZipMiddleware` agregado al backend (`minimum_size=1000`)
+- ⏳ README cleanup, ROADMAP_HARVEY_FEATURES cleanup — tech debt
+
+**Archivos:** 22 modificados/creados
+
+**Pendientes acumulados por sprint (resumen):**
+- S1: S1-02 cascada real a storage
+- S2: 14 issues adicionales (auditoría más profunda)
+- S3: S3-08 migración de setInterval a usePoll
+- S4: 16 issues (S4-07/08 + 14 otros refactors menores)
+- S5: 47 issues (UX/accesibilidad/responsive)
+- S6: 28 issues (CI/coverage/Sentry)
+- S7: 52 issues (limpieza de archivos, README, ROADMAP)
+
+---
 
 #### Sesión 2026-08-07 (sesión 5) — Sprint 4 ejecutado
 
