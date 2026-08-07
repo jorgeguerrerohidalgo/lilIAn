@@ -816,7 +816,7 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 
 | Sprint | Estado | Issues Completados | % |
 |--------|--------|---------------------|---|
-| S0 | ⏳ Pendiente | 0/14 | 0% |
+| S0 | ✅ Completado | 14/14 | 100% |
 | S1 | ⏳ Pendiente | 0/17 | 0% |
 | S2 | ⏳ Pendiente | 0/18 | 0% |
 | S3 | ⏳ Pendiente | 0/8 | 0% |
@@ -824,19 +824,42 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 | S5 | ⏳ Pendiente | 0/50 | 0% |
 | S6 | ⏳ Pendiente | 0/32 | 0% |
 | S7 | ⏳ Pendiente | 0/57 | 0% |
-| **TOTAL** | **0%** | **0/220** | **0%** |
+| **TOTAL** | **6%** | **14/220** | **6%** |
 
 ### 📝 Log de Cambios por Sesión
 
 > **Nota:** Esta sección se actualiza después de cada sesión de trabajo.
 
-#### Sesión 2026-08-06 — Creación del plan
+#### Sesión 2026-08-06 (sesión 1) — Creación del plan + Sprint 0
 
+**Plan:**
 - ✅ Auditoría completa realizada (3 Explore agents en paralelo)
 - ✅ 220 issues identificados y categorizados
 - ✅ Plan organizado en 8 sprints
 - ✅ Documento maestro `docs/REMEDIATION_PLAN.md` creado
-- ⏳ Pendiente: aprobación del usuario para iniciar Sprint 0
+
+**Sprint 0 ejecutado** (commit `22e52d6` en rama `sprint-0-security`):
+- ✅ S0-01 — `docs/SECRETS_MANAGEMENT.md` creado con procedimiento de rotación
+- ✅ S0-02 — `print()` con API keys eliminados de `llm.py`, reemplazados por `logger`
+- ✅ S0-03 — 6 endpoints de `review.py` migrados a `require_organization`
+- ✅ S0-04 — JWT migrado de `localStorage` a cookie `httpOnly` + `SameSite=Lax`. Backend setea cookie en `/login`, limpia en `/logout`. Frontend con `middleware.ts` + `lib/auth-cookie.ts` + `credentials: 'include'`
+- ✅ S0-05 — `escapeHtml` (22 usos) y `escapeColor` (3 usos) aplicados en `document-analysis-view.tsx`
+- ✅ S0-06 — `list_plans` ahora requiere `get_current_user`
+- ✅ S0-07 — `SUPABASE_SERVICE_KEY` → `SUPABASE_SERVICE_ROLE_KEY` en `storage.py`
+- ✅ S0-08 — Función duplicada `_classify_document_async` eliminada
+- ✅ S0-09 — Validación fail-fast de `JWT_SECRET` (>=32 chars, no placeholder); `iss`/`aud` agregados al payload y validados en `decode`
+- ✅ S0-10 — `admin.py` ya no filtra audit logs por `membership.organization_id`
+- ✅ S0-11 — Helper `_safe_join()` en `storage.py` valida que las rutas no escapen del sandbox
+- ✅ S0-12 — Validación por magic bytes (`%PDF-`, `PK\x03\x04`, `\xd0\xcf…`) + filename sanitization
+- ✅ S0-13 — `can_use_analysis_for_automated_decisions` ahora requiere `review_approved=True` si `requires_human_review=True`
+- ✅ S0-14 — `record_usage_event` usa `try/finally` para `db.close()`
+
+**Archivos:** 19 modificados/creados (11 backend + 6 frontend + 2 docs)
+
+**Acciones manuales pendientes para el usuario:**
+- ⏳ Rotar claves reales del `.env` local en OpenAI/Anthropic/Supabase
+- ⏳ Validar manualmente en navegador que el login setea la cookie `lilian_auth_token`
+- ⏳ Instalar gitleaks para prevenir futura exposición
 
 ---
 
