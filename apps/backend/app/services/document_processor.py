@@ -14,6 +14,16 @@ from app.models.matter import Matter
 from app.models.legal_area import get_legal_area_from_matter_type
 
 
+# S1-07: hard caps on PDF processing to avoid DoS / memory exhaustion.
+MAX_PDF_PAGES = 500
+MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB aligned with MAX_FILE_SIZE
+MAX_DOCX_BYTES = 50 * 1024 * 1024
+
+
+class DocumentTooLargeError(Exception):
+    """Raised when a document exceeds the configured size or page limits."""
+
+
 def extract_text_from_file(file_path: str, mime_type: Optional[str]) -> str:
     print(f"[EXTRACT] extract_text_from_file: path={file_path}, mime={mime_type}")
     if not file_path or not mime_type:
@@ -39,9 +49,35 @@ def extract_text_from_file(file_path: str, mime_type: Optional[str]) -> str:
         else:
             print(f"[EXTRACT] ERROR: Unsupported mime_type: {mime_type}")
             return ""
+    except DocumentTooLargeError as exc:
+        logger.warning("Document rejected: %s", exc)
+        return f"Error extracting text: {exc}"
     except Exception as e:
         print(f"[EXTRACT] ERROR: {type(e).__name__}: {str(e)}")
         return f"Error extracting text: {str(e)}"
+
+
+def _safe_open_pdf(file_path: str) -> fitz.Document:
+    """Open a PDF enforcing size and page caps before handing it to PyMuPDF."""
+    import os
+
+    try:
+        size = os.path.getsize(file_path)
+    except OSError:
+        size = 0
+    if size > MAX_PDF_BYTES:
+        raise DocumentTooLargeError(
+            f"PDF excede el tamaño máximo ({size} bytes)"
+        )
+
+    doc = fitz.open(file_path)
+    if len(doc) > MAX_PDF_PAGES:
+        page_count = len(doc)
+        doc.close()
+        raise DocumentTooLargeError(
+            f"PDF excede el máximo de {MAX_PDF_PAGES} páginas ({page_count} detectadas)"
+        )
+    return doc
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -49,12 +85,14 @@ def extract_text_from_pdf(file_path: str) -> str:
     text_parts = []
     page_count = 0
     try:
-        doc = fitz.open(file_path)
+        doc = _safe_open_pdf(file_path)
         page_count = len(doc)
         print(f"[EXTRACT] PDF opened, {page_count} pages")
         for page in doc:
             text_parts.append(page.get_text())
         doc.close()
+    except DocumentTooLargeError:
+        raise
     except Exception as e:
         print(f"[EXTRACT] ERROR opening PDF: {type(e).__name__}: {str(e)}")
         return ""
@@ -80,7 +118,7 @@ def extract_text_from_pdf_ocr(file_path: str) -> str:
         from PIL import Image
         import fitz
 
-        doc = fitz.open(file_path)
+        doc = _safe_open_pdf(file_path)
         text_parts = []
 
         for page_num, page in enumerate(doc):
@@ -100,6 +138,8 @@ def extract_text_from_pdf_ocr(file_path: str) -> str:
 
         doc.close()
         return "\n\n".join(text_parts)
+    except DocumentTooLargeError:
+        raise
     except Exception as e:
         print(f"[EXTRACT] OCR ERROR: {str(e)}")
         return f"[OCR Error: {str(e)}]"
@@ -276,7 +316,16 @@ def process_document(document_id: int, force: bool = False) -> dict:
     print(f"[PROCESS] START document_id={document_id}, force={force}")
     db = SessionLocal()
     try:
-        document = db.query(Document).filter(Document.id == document_id).first()
+        # S1-08: acquire a pessimistic row lock so two workers (RQ + the
+        # in-process BackgroundTasks fallback) cannot process the same
+        # document concurrently. The lock is released automatically when
+        # the transaction commits or rolls back below.
+        document = (
+            db.query(Document)
+            .filter(Document.id == document_id)
+            .with_for_update()
+            .first()
+        )
 
         if not document:
             print(f"[PROCESS] ERROR: Document {document_id} not found")

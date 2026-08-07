@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 import json
+import re
 
 from app.core.database import SessionLocal
 from app.models.analysis_report import AnalysisReport
@@ -9,6 +10,125 @@ from app.models.matter import Matter
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.core.config import settings
+
+
+# S1-06: phrases that strongly suggest the upstream document (or the LLM
+# itself) tried to break out of the analysis sandbox. When detected, the
+# analysis is automatically flagged for human review.
+_PROMPT_INJECTION_PATTERNS = (
+    re.compile(r"ignore (all )?previous instructions", re.IGNORECASE),
+    re.compile(r"ignore (all )?above instructions", re.IGNORECASE),
+    re.compile(r"disregard (the )?(system|previous) prompt", re.IGNORECASE),
+    re.compile(r"you are now (?!a legal)", re.IGNORECASE),
+    re.compile(r"new instructions?:", re.IGNORECASE),
+    re.compile(r"<\|im_start\|>|<\|im_end\|>", re.IGNORECASE),
+)
+
+# Allowed string fields and their character sets. Anything outside these
+# bounds is rejected as malformed output.
+_MAX_STRING_LEN = 8_000
+_MAX_LIST_ITEMS = 200
+
+
+def _detect_prompt_injection(payload: Any) -> bool:
+    """Walk the LLM output looking for injection patterns."""
+    if isinstance(payload, str):
+        return any(p.search(payload) for p in _PROMPT_INJECTION_PATTERNS)
+    if isinstance(payload, list):
+        return any(_detect_prompt_injection(item) for item in payload)
+    if isinstance(payload, dict):
+        return any(_detect_prompt_injection(v) for v in payload.values())
+    return False
+
+
+def _shape_is_acceptable(payload: Any) -> bool:
+    """Cheap shape check that prevents runaway responses from being persisted.
+
+    Enforces soft caps on string length, list length and nesting depth.
+    """
+    def _walk(value: Any, depth: int = 0) -> bool:
+        if depth > 8:
+            return False
+        if isinstance(value, str):
+            return len(value) <= _MAX_STRING_LEN
+        if isinstance(value, list):
+            if len(value) > _MAX_LIST_ITEMS:
+                return False
+            return all(_walk(item, depth + 1) for item in value)
+        if isinstance(value, dict):
+            if len(value) > 50:
+                return False
+            return all(_walk(v, depth + 1) for v in value.values())
+        return True
+
+    return _walk(payload)
+
+
+def _validate_llm_output(raw: Any) -> Dict[str, Any]:
+    """S1-06: validate an LLM structured output before persisting.
+
+    Returns a normalized dict that ALWAYS has ``requires_human_review``
+    and a ``warnings`` list so callers can branch on trust.
+    """
+    warnings: List[str] = []
+    requires_human_review = False
+
+    if raw is None:
+        warnings.append("El LLM devolvió una respuesta vacía")
+        requires_human_review = True
+        normalized: Dict[str, Any] = {
+            "resumen_ejecutivo": "",
+            "puntos_criticos": [],
+            "risks": [],
+            "confidence": "low",
+            "warnings": warnings,
+            "requires_human_review": True,
+        }
+        return normalized
+
+    if not isinstance(raw, dict):
+        warnings.append("El LLM no devolvió un objeto JSON válido")
+        requires_human_review = True
+        return {
+            "resumen_ejecutivo": str(raw)[:_MAX_STRING_LEN],
+            "puntos_criticos": [],
+            "risks": [],
+            "confidence": "low",
+            "warnings": warnings,
+            "requires_human_review": True,
+        }
+
+    if _detect_prompt_injection(raw):
+        warnings.append(
+            "El contenido del documento contenía instrucciones potencialmente "
+            "adversarias; el análisis fue marcado para revisión humana."
+        )
+        requires_human_review = True
+
+    if not _shape_is_acceptable(raw):
+        warnings.append(
+            "La respuesta del LLM excedió los límites esperados; se marcó "
+            "para revisión humana."
+        )
+        requires_human_review = True
+
+    # Coerce string fields into bounded strings so downstream code is safe.
+    def _bounded(value: Any) -> Any:
+        if isinstance(value, str):
+            return value[:_MAX_STRING_LEN]
+        if isinstance(value, list):
+            return [item for item in (_bounded(v) for v in value) if item is not None][:_MAX_LIST_ITEMS]
+        if isinstance(value, dict):
+            return {str(k)[:120]: _bounded(v) for k, v in value.items()}
+        return value
+
+    normalized = _bounded(raw)
+    normalized.setdefault("warnings", [])
+    normalized["warnings"] = list(normalized.get("warnings", [])) + warnings
+    normalized["requires_human_review"] = bool(
+        normalized.get("requires_human_review", False) or requires_human_review
+    )
+    return normalized
 
 
 # ==================== QUERIES RAG DINÁMICAS POR TIPO DE MATERIA ====================
@@ -782,7 +902,11 @@ DOCUMENTO:
 Proporciona el análisis en formato JSON siguiendo exactamente el esquema especificado."""
 
     try:
-        result = provider.generate_structured(prompt, system_prompt, RISK_ANALYSIS_SCHEMA)
+        raw_result = provider.generate_structured(prompt, system_prompt, RISK_ANALYSIS_SCHEMA)
+
+        # S1-06: validate, shape-check and flag for human review when the
+        # upstream document contains prompt-injection patterns.
+        result = _validate_llm_output(raw_result)
 
         # Detectar conflictos normativos si hay suficiente contexto legal
         if laws_context:
