@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getApiUrl } from "../lib/api";
+import { logger } from "../lib/logger";
+
+
+const API_URL = getApiUrl();
 
 interface Template {
   id: string;
@@ -30,8 +35,6 @@ interface SuggestedVariables {
   reasoning: string;
   missing_fields: string[];
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const categoryLabels: Record<string, string> = {
   comunicacion: "Comunicación",
@@ -73,7 +76,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         setCategories(cats);
       }
     } catch (error) {
-      console.error("Error fetching templates:", error);
+      logger.error("Error fetching templates:", error);
     } finally {
       setLoading(false);
     }
@@ -115,7 +118,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         }
       }
     } catch (error) {
-      console.error("Error suggesting variables:", error);
+      logger.error("Error suggesting variables:", error);
     } finally {
       setSuggesting(false);
     }
@@ -150,7 +153,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         setGeneratedDoc({ success: false, content: null, document_name: null, errors: ["Error al generar documento"] });
       }
     } catch (error) {
-      console.error("Error generating document:", error);
+      logger.error("Error generating document:", error);
       setGeneratedDoc({ success: false, content: null, document_name: null, errors: ["Error de conexión"] });
     } finally {
       setGenerating(false);

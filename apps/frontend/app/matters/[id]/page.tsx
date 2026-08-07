@@ -6,6 +6,7 @@ import { DocumentAnalysisView } from "@/components/document-analysis-view";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { MATTER_DOCUMENT_POLL } from "@/lib/hooks/use-poll";
+import { getApiUrl } from "@/lib/api";
 import {
   matterTypeLabels,
   statusLabels,
@@ -18,7 +19,7 @@ import {
   type TabType,
 } from "@/components/matters/constants";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = getApiUrl();
 
 // S3-07: named constants for the polling magic numbers used in the four
 // poll loops below. The handlers can still inline them but the values

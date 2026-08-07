@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.endpoints import auth, organizations, matters, documents, document_analysis, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas, deadline_alerts, document_generator, precedents
 from app.core.config import settings
@@ -12,6 +13,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# S7-05: compress responses larger than 1KB to cut bandwidth for
+# analytics / list endpoints. Mounted BEFORE CORS so the
+# Vary: Accept-Encoding header is set correctly.
+app.add_middleware(GZipMiddleware, minimum_size=1_000)
 
 # CORS configuration (S1-17)
 # - In production we require an explicit, comma-separated allow-list of
