@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from app.core.database import get_db
@@ -15,15 +15,19 @@ from app.services import chat as chat_service
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+# S3-06: cap user-supplied chat input to prevent DoS / abuse of LLM budget.
+CHAT_MESSAGE_MAX_LEN = 4_000
+
+
 class CreateSessionRequest(BaseModel):
     matter_id: int
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=200)
 
 
 class SendMessageRequest(BaseModel):
     session_id: int
-    message: str
-    legal_area_override: Optional[str] = None
+    message: str = Field(min_length=1, max_length=CHAT_MESSAGE_MAX_LEN)
+    legal_area_override: Optional[str] = Field(default=None, max_length=64)
 
 
 class ChatMessageResponse(BaseModel):
@@ -151,6 +155,8 @@ def send_message(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    import logging
+    logger = logging.getLogger(__name__)
     session = db.query(ChatSession).filter(
         ChatSession.id == request.session_id,
         ChatSession.organization_id == membership.organization_id
@@ -181,6 +187,24 @@ def send_message(
         content=request.message
     )
 
+    # S3-03: write an audit row for every chat turn. We use a SHA-256
+    # prefix instead of the raw text so the audit table doesn't bloat
+    # with duplicates of every message.
+    try:
+        from app.services.audit import AuditLogger
+        AuditLogger(
+            db=db,
+            user_id=current_user.id,
+            organization_id=membership.organization_id,
+        ).log_chat_message(
+            session_id=request.session_id,
+            message_id=0,  # user message id is set after persistence
+            role="user",
+            content_preview=request.message,
+        )
+    except Exception as exc:
+        logger.warning("audit_log_chat_user_failed: %s", exc)
+
     response_content, error = chat_service.generate_chat_response(
         session_id=request.session_id,
         matter_id=session.matter_id,
@@ -196,6 +220,21 @@ def send_message(
         content=response_content,
         metadata={"error": error} if error else None
     )
+
+    try:
+        from app.services.audit import AuditLogger
+        AuditLogger(
+            db=db,
+            user_id=current_user.id,
+            organization_id=membership.organization_id,
+        ).log_chat_message(
+            session_id=request.session_id,
+            message_id=saved_message.get("id", 0),
+            role="assistant",
+            content_preview=response_content or "",
+        )
+    except Exception as exc:
+        logger.warning("audit_log_chat_assistant_failed: %s", exc)
 
     return MessageResponse(
         content=response_content,

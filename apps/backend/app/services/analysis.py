@@ -1190,9 +1190,16 @@ def update_analysis_review_status(analysis_report_id: int, review_status: str, d
         review_status: Estado del review (approved/rejected/pending)
         db: sesión de base de datos
     """
-    report = db.query(AnalysisReport).filter(
-        AnalysisReport.id == analysis_report_id
-    ).first()
+    # S3-02: acquire a pessimistic lock so two concurrent reviewers can't
+    # race the same row and end up with an inconsistent review_approved
+    # value. The lock is released automatically when the transaction
+    # commits below.
+    report = (
+        db.query(AnalysisReport)
+        .filter(AnalysisReport.id == analysis_report_id)
+        .with_for_update()
+        .first()
+    )
 
     if not report:
         return

@@ -256,7 +256,14 @@ def reprocess_document(
 
 
 def _process_document_background(document_id: int) -> None:
-    """Función que se ejecuta en background para procesar documentos."""
+    """Función que se ejecuta en background para procesar documentos.
+
+    S3-05: FastAPI's ``BackgroundTasks`` scheduler runs tasks in a
+    threadpool (not the event loop), so it's safe to use the sync
+    SQLAlchemy session here. If you ever need to call this from
+    ``async def`` code, dispatch through ``run_in_threadpool`` to
+    keep the event loop unblocked.
+    """
     from app.services.document_processor import process_document
     from app.core.database import SessionLocal
 

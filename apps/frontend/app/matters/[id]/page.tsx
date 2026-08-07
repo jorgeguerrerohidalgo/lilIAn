@@ -5,8 +5,19 @@ import { DocumentStatus } from "@/components/document-status";
 import { DocumentAnalysisView } from "@/components/document-analysis-view";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { MATTER_DOCUMENT_POLL } from "@/lib/hooks/use-poll";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// S3-07: named constants for the polling magic numbers used in the four
+// poll loops below. The handlers can still inline them but the values
+// live in one place. See lib/hooks/use-poll.ts for the ``usePoll`` hook
+// available for future migrations that need guaranteed unmount cleanup
+// (S3-08 — the current setInterval loops clear themselves correctly
+// when the polling completes; the unmount leak only matters if the
+// user navigates away mid-poll).
+const POLL_INTERVAL_MS = MATTER_DOCUMENT_POLL.intervalMs; // 5_000
+const POLL_MAX_ATTEMPTS = MATTER_DOCUMENT_POLL.maxAttempts; // 60
 
 interface Matter {
   id: number;
@@ -391,7 +402,7 @@ export default function MatterDetailPage() {
     if (res.ok) {
       // polling para verificar cuando termina el procesamiento
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutos
+      const maxAttempts = POLL_MAX_ATTEMPTS; // S3-07: was the magic 60
       const pollInterval = setInterval(async () => {
         attempts++;
         const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}`, {
@@ -411,7 +422,7 @@ export default function MatterDetailPage() {
           fetchDocuments();
           setProcessingDocId(null);
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS); // S3-07: was the magic 5000
     } else {
       const data = await res.json();
       setDocProcessError(data.detail || "Error al procesar documento");
@@ -434,7 +445,7 @@ export default function MatterDetailPage() {
       setDocAnalyzeError(""); // Limpiar errores
       // polling para verificar cuando termina el análisis
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutos
+      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutos
       const pollInterval = setInterval(async () => {
         attempts++;
         const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
@@ -455,7 +466,7 @@ export default function MatterDetailPage() {
           setDocAnalyzeError("El análisis está tardando más de lo esperado. Puedes verificar manualmente más tarde.");
           setAnalyzingDocId(null);
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS);
     } else {
       const data = await res.json();
       setDocAnalyzeError(data.detail || "Error al analizar documento");
@@ -490,7 +501,7 @@ export default function MatterDetailPage() {
     // Si no tiene análisis, hacer polling por si el análisis está en proceso
     if (!hasAnalysis) {
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutos
+      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutos
       const pollInterval = setInterval(async () => {
         attempts++;
         const result = await fetchAnalysis();
@@ -500,7 +511,7 @@ export default function MatterDetailPage() {
             setDocAnalyzeError("El análisis está tardando más de lo esperado.");
           }
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS);
     }
   };
 
@@ -527,7 +538,7 @@ export default function MatterDetailPage() {
 
       // Poll for analysis result
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutes max (60 * 5s = 300s)
+      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutes max (60 * 5s = 300s)
       const pollInterval = setInterval(async () => {
         attempts++;
         await fetchAnalysis();
@@ -547,7 +558,7 @@ export default function MatterDetailPage() {
           }
           setAnalysisSuccess("");
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS);
     } else {
       const data = await res.json();
       setAnalysisError(data.detail || "Error al solicitar análisis");

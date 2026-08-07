@@ -95,3 +95,30 @@ class AuditLogger:
 
     def log_role_change(self, target_user_id: int, old_role: str, new_role: str, ip_address: str = None):
         self.log("role_change", "user", target_user_id, ip_address, metadata={"old_role": old_role, "new_role": new_role})
+
+    # S3-03: trace every chat turn so legal/forensic audits can reconstruct
+    # exactly who asked what and when. We deliberately store a SHA-256
+    # prefix of the content rather than the full text to keep audit rows
+    # small — the full text remains in the chat_messages table.
+    def log_chat_message(
+        self,
+        session_id: int,
+        message_id: int,
+        role: str,
+        content_preview: str,
+        ip_address: str = None,
+    ):
+        import hashlib
+        digest = hashlib.sha256((content_preview or "").encode("utf-8")).hexdigest()
+        self.log(
+            "chat_message",
+            "chat_session",
+            session_id,
+            ip_address,
+            metadata={
+                "message_id": message_id,
+                "role": role,
+                "content_sha256": digest,
+                "content_length": len(content_preview or ""),
+            },
+        )
