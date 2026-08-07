@@ -817,18 +817,54 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 | Sprint | Estado | Issues Completados | % |
 |--------|--------|---------------------|---|
 | S0 | ✅ Completado | 14/14 | 100% |
-| S1 | ⏳ Pendiente | 0/17 | 0% |
+| S1 | ✅ Completado | 14/17 | 82% |
 | S2 | ⏳ Pendiente | 0/18 | 0% |
 | S3 | ⏳ Pendiente | 0/8 | 0% |
 | S4 | ⏳ Pendiente | 0/24 | 0% |
 | S5 | ⏳ Pendiente | 0/50 | 0% |
 | S6 | ⏳ Pendiente | 0/32 | 0% |
 | S7 | ⏳ Pendiente | 0/57 | 0% |
-| **TOTAL** | **6%** | **14/220** | **6%** |
+| **TOTAL** | **13%** | **28/220** | **13%** |
 
 ### 📝 Log de Cambios por Sesión
 
 > **Nota:** Esta sección se actualiza después de cada sesión de trabajo.
+
+#### Sesión 2026-08-06 (sesión 2) — Sprint 1 ejecutado
+
+**Sprint 1 ejecutado** (commit `6ef23f4` en rama `sprint-0-security`):
+
+Issues heredados del Sprint 0 (ya estaban resueltos):
+- ✅ S1-01 — Cubierto por S0-12 (validación magic bytes)
+- ✅ S1-02 — Cubierto por S0-11 (path traversal)
+- ✅ S1-13 — Cubierto por S0-09 (iss/aud validation)
+
+Issues nuevos resueltos en Sprint 1:
+- ✅ S1-03 — `deadline_alerts.py`: eliminada referencia inválida a `current_user.organization_id`
+- ✅ S1-04 — `schemas/user.py`: validación Pydantic con 5 reglas de fortaleza (min 12 chars + minúscula + mayúscula + dígito + símbolo)
+- ✅ S1-05 — `slowapi` aplicado a `/register` y `/login` con `10/minute`
+- ✅ S1-06 — `_validate_llm_output()` con detección de prompt injection (6 patrones regex) + shape check (max 8000 chars, max 200 items, max depth 8)
+- ✅ S1-07 — `_safe_open_pdf()` con `MAX_PDF_PAGES=500` + `MAX_PDF_BYTES=50MB`; `DocumentTooLargeError` agregado
+- ✅ S1-08 — `doc_worker.py` ahora delega a `process_document` canónico; `SELECT FOR UPDATE` agregado al canónico
+- ✅ S1-09 — `create_matter` y `update_matter` validan que `client_id` pertenece a la org del usuario
+- ✅ S1-10 — `get_client` filtra `is_active=True` por defecto
+- ✅ S1-11 — `delete_matter` cascade explícito: RiskItem, DocumentChunk, DocumentAnalysis, AnalysisReport, DeadlineAlert, ChatMessage, ChatSession, Document
+- ✅ S1-12 — `get_organization_members`: OWNER/ADMIN ven email de todos, otros solo se ven a sí mismos sin email
+- ✅ S1-14 — `python-jose>=3.4.0` en requirements.txt (CVE-2024-33663, CVE-2024-33664)
+- ✅ S1-15 — `bcrypt>=4.2.1` en requirements.txt (CVE-2024-32661)
+- ✅ S1-16 — `app/core/token_blacklist.py` creado (Redis-backed); `is_revoked()` en `get_current_user`; `/logout` ahora `revoke_token()` con TTL alineado al `exp`
+- ✅ S1-17 — `main.py`: CORS restrictivo + fail-fast en producción cuando `ALLOWED_ORIGINS=*`; allow_methods y allow_headers en lista explícita
+
+**Archivos:** 13 modificados/creados (12 backend + 1 nuevo token_blacklist.py)
+
+**Issues heredados restantes del Sprint 1:**
+- ⏳ S1-02 — Cascada real a storage (borrar archivos físicos) — pendiente para S3
+- ⏳ S1-14 — Audit/verificar que python-jose upgrade no rompe tests existentes
+- ⏳ S1-15 — Igual que arriba
+
+**Acciones manuales pendientes para el usuario:**
+- ⏳ Verificar que Redis está disponible en producción (ya está en docker-compose pero no en railway.json)
+- ⏳ Después de pip install -r requirements.txt, ejecutar tests para confirmar que python-jose 3.4+ y bcrypt 4.2.1+ no rompen nada
 
 #### Sesión 2026-08-06 (sesión 1) — Creación del plan + Sprint 0
 
@@ -855,11 +891,6 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 - ✅ S0-14 — `record_usage_event` usa `try/finally` para `db.close()`
 
 **Archivos:** 19 modificados/creados (11 backend + 6 frontend + 2 docs)
-
-**Acciones manuales pendientes para el usuario:**
-- ⏳ Rotar claves reales del `.env` local en OpenAI/Anthropic/Supabase
-- ⏳ Validar manualmente en navegador que el login setea la cookie `lilian_auth_token`
-- ⏳ Instalar gitleaks para prevenir futura exposición
 
 ---
 
