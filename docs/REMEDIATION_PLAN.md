@@ -819,16 +819,37 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 | S0 | ✅ Completado | 14/14 | 100% |
 | S1 | ✅ Completado | 14/17 | 82% |
 | S2 | ✅ Completado | 4/18 | 22% |
-| S3 | ⏳ Pendiente | 0/8 | 0% |
+| S3 | ✅ Completado | 7/8 | 88% |
 | S4 | ⏳ Pendiente | 0/24 | 0% |
 | S5 | ⏳ Pendiente | 0/50 | 0% |
 | S6 | ⏳ Pendiente | 0/32 | 0% |
 | S7 | ⏳ Pendiente | 0/57 | 0% |
-| **TOTAL** | **15%** | **32/220** | **15%** |
+| **TOTAL** | **18%** | **39/220** | **18%** |
 
 ### 📝 Log de Cambios por Sesión
 
 > **Nota:** Esta sección se actualiza después de cada sesión de trabajo.
+
+#### Sesión 2026-08-06 (sesión 4) — Sprint 3 ejecutado
+
+**Sprint 3 ejecutado** (commit `383ecee` en rama `sprint-0-security`):
+
+Issues heredados del Sprint 1:
+- ✅ S3-01 — Cubierto por S1-08 (workers unificados)
+
+Issues nuevos resueltos:
+- ✅ **S3-02** — `update_analysis_review_status`: SELECT FOR UPDATE agregado para evitar race conditions entre reviewers concurrentes
+- ✅ **S3-03** — `chat.send_message`: audit logging agregado. `log_chat_message` con SHA-256 del contenido (no almacena texto crudo en audit_logs). Tanto mensajes user como assistant se registran.
+- ✅ **S3-04** — `precedents.get_analytics`: rate limit 10/minute aplicado (operación costosa con agregaciones cross-tenant + análisis de texto opcional)
+- ✅ **S3-05** — `_process_document_background`: documentado que se ejecuta en threadpool de FastAPI BackgroundTasks (no bloquea event loop). El patrón actual es correcto.
+- ✅ **S3-06** — `chat.SendMessageRequest`: `Field(min_length=1, max_length=4000)` agregado con Pydantic v2 para prevenir DoS / abuso de LLM budget. También en `CreateSessionRequest.title` con max_length=200.
+- ✅ **S3-07** — Magic numbers de polling extraídos a constantes `POLL_INTERVAL_MS` y `POLL_MAX_ATTEMPTS` en matters/[id]/page.tsx. Los 4 polls ahora usan las constantes.
+- ✅ **S3-08** — `usePoll` hook creado en `lib/hooks/use-poll.ts` con cleanup garantizado en unmount. Disponible para migraciones futuras (los 4 polls actuales limpian correctamente al terminar, pero pueden tener leak si el usuario navega antes del done).
+
+**Archivos:** 7 modificados/creados (5 backend + 1 frontend + 1 nuevo hook)
+
+**Issue heredado restante:**
+- ⏳ S3-08: Migrar los 4 `setInterval` actuales al `usePoll` hook (tech debt — funciona pero puede tener leak en unmount). No es crítico y es refactor grande.
 
 #### Sesión 2026-08-06 (sesión 3) — Sprint 2 ejecutado
 
