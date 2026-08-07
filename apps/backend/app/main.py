@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import auth, organizations, matters, documents, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas, deadline_alerts, document_generator, precedents
+from app.api.endpoints import auth, organizations, matters, documents, document_analysis, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas, deadline_alerts, document_generator, precedents
 from app.core.config import settings
 
 app = FastAPI(
@@ -50,6 +50,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(organizations.router, prefix="/api/v1")
 app.include_router(matters.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
+app.include_router(document_analysis.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")

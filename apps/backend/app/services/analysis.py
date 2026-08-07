@@ -750,73 +750,66 @@ def get_precedents_context_for_rag(matter_type: str, organization_id: int, top_k
         return ""
 
 
-def detect_normative_conflicts(
-    documents_text: str,
-    matter_type: str,
-    organization_id: int
-) -> dict:
-    """Detecta conflictos entre cláusulas del contrato y la legislación chilena vigente.
+def _empty_conflicts_result(summary: str, warnings: list) -> dict:
+    """Helper for the early-return paths in ``detect_normative_conflicts``."""
+    return {
+        "conflicts": [],
+        "observations": [],
+        "confidence": "low",
+        "summary": summary,
+        "warnings": warnings,
+        "requires_human_review": True,
+    }
 
-    Compara el contenido del contrato con las leyes relevantes indexadas
-    para identificar posibles contradicciones o cláusulas potencialmente abusivas.
 
-    Returns:
-        dict con:
-        - conflicts: lista de conflictos detectados
-        - observations: lista de cláusulas en observación
-        - confidence: nivel de confianza del análisis
-    """
-    from app.services.llm import get_llm_provider
+def _parse_conflicts_response(raw: str) -> dict:
+    """Extract a JSON object from the LLM response and normalize its fields."""
+    import json as _json
+    import re as _re
 
-    if not documents_text or len(documents_text.strip()) < 200:
-        return {
-            "conflicts": [],
-            "observations": [],
-            "confidence": "low",
-            "summary": "Texto insuficiente para análisis de conflictos normativos",
-            "warnings": ["Documento con texto insuficiente para análisis de conflictos"],
-            "requires_human_review": True
-        }
+    json_match = _re.search(r"\\{.*\\}", raw, _re.DOTALL)
+    if not json_match:
+        return _empty_conflicts_result(
+            "No se pudo parsear el análisis de conflictos",
+            ["Error al parsear respuesta del LLM"],
+        )
+    result = _json.loads(json_match.group(0))
+    return {
+        "conflicts": result.get("conflicts", []),
+        "observations": result.get("observations", []),
+        "confidence": "high",
+        "summary": result.get("summary", "Análisis completado"),
+    }
 
-    try:
-        # Obtener contexto legal relevante
-        laws_context = get_laws_context_for_rag(matter_type, organization_id)
 
-        if not laws_context:
-            return {
-                "conflicts": [],
-                "observations": [],
-                "confidence": "low",
-                "summary": "No se encontró contexto legal para comparar",
-                "warnings": ["Contexto legal no disponible - análisis de conflictos limitado"],
-                "requires_human_review": True
-            }
-
-        prompt = f"""Analiza el siguiente contrato y detecta conflictos con la legislación chilena.
+CONFLICTS_PROMPT_TEMPLATE = """Analiza el siguiente contrato y detecta conflictos con la legislación chilena.
 
 Identifica:
 1. CONFLICTOS: Cláusulas que contradicen directamente una ley o regulation chilena vigente
 2. OBSERVACIONES: Cláusulas que podrían ser problematicas o estar en zona gris legal
 
 CONTRATO:
-{documents_text[:15000]}
+{documents}
 
-LEGISLACIÓN APLICABLE:
-{laws_context}
+LEYES RELEVANTES:
+{laws}
 
-Responde en JSON con este formato exacto:
+Responde SOLO con JSON válido siguiendo este esquema:
 {{
     "conflicts": [
         {{
-            "clause": "Texto de la cláusula conflictiva",
-            "issue": "Descripción del conflicto",
-            "law": "Ley o artículo que se contradice",
-            "severity": "high|medium|low"
+            "clause": "Texto o resumen de la cláusula",
+            "law_reference": "Ley o artículo específico",
+            "severity": "high|medium|low",
+            "explanation": "Por qué hay conflicto",
+            "concern": "Motivo de preocupación",
+            "recommendation": "Recomendación"
         }}
     ],
     "observations": [
         {{
-            "clause": "Texto de la cláusula en observación",
+            "clause": "Texto o resumen de la cláusula",
+            "law_reference": "Ley relacionada",
             "concern": "Motivo de preocupación",
             "recommendation": "Recomendación"
         }}
@@ -824,46 +817,54 @@ Responde en JSON con este formato exacto:
     "summary": "Resumen ejecutivo del análisis"
 }}"""
 
+
+def detect_normative_conflicts(
+    documents_text: str,
+    matter_type: str,
+    organization_id: int,
+) -> dict:
+    """Detecta conflictos entre cláusulas del contrato y la legislación chilena vigente.
+
+    S4-03: split into helpers (``CONFLICTS_PROMPT_TEMPLATE``,
+    ``_parse_conflicts_response``, ``_empty_conflicts_result``) so this
+    orchestrator only owns the flow.
+    """
+    from app.services.llm import get_llm_provider
+
+    if not documents_text or len(documents_text.strip()) < 200:
+        return _empty_conflicts_result(
+            "Texto insuficiente para análisis de conflictos normativos",
+            ["Documento con texto insuficiente para análisis de conflictos"],
+        )
+
+    try:
+        laws_context = get_laws_context_for_rag(matter_type, organization_id)
+        if not laws_context:
+            return _empty_conflicts_result(
+                "No se encontró contexto legal para comparar",
+                ["Contexto legal no disponible - análisis de conflictos limitado"],
+            )
+
+        prompt = CONFLICTS_PROMPT_TEMPLATE.format(
+            documents=documents_text[:15000],
+            laws=laws_context[:5000],
+        )
+
         provider = get_llm_provider()
         response = provider.generate(
             prompt=prompt,
             system_prompt=None,
             max_tokens=2048,
-            temperature=0.3
+            temperature=0.3,
+        )
+        return _parse_conflicts_response(response)
+
+    except Exception as exc:
+        return _empty_conflicts_result(
+            f"Error en análisis de conflictos: {exc}",
+            [f"Error en análisis de conflictos: {exc}"],
         )
 
-        # Parsear JSON de la respuesta
-        import json
-        import re
-
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group(0))
-            return {
-                "conflicts": result.get("conflicts", []),
-                "observations": result.get("observations", []),
-                "confidence": "high",
-                "summary": result.get("summary", "Análisis completado")
-            }
-        else:
-            return {
-                "conflicts": [],
-                "observations": [],
-                "confidence": "low",
-                "summary": "No se pudo parsear el análisis de conflictos",
-                "warnings": ["Error al parsear respuesta del LLM"],
-                "requires_human_review": True
-            }
-
-    except Exception as e:
-        return {
-            "conflicts": [],
-            "observations": [],
-            "confidence": "low",
-            "summary": f"Error en análisis de conflictos: {str(e)}",
-            "warnings": [f"Error en análisis de conflictos: {str(e)}"],
-            "requires_human_review": True
-        }
 
 
 def analyze_contract(documents_text: str, matter_type: str, organization_id: int) -> dict:
