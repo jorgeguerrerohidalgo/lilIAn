@@ -1,6 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import {
+  escapeHtml,
+  escapeColor,
+  generateStyledHTML,
+  openPrintableReport,
+  type AnalysisReportPayload,
+} from "@/lib/pdf-generator";
 
 interface Participant {
   company: string;
@@ -161,139 +168,11 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
   };
 
   const handleDownloadPDF = () => {
-    // Generate styled HTML for PDF
-    const content = generateStyledHTML();
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(content);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-    }
+    // S4-02: HTML generation moved to lib/pdf-generator so the view
+    // stays focused on the React UI.
+    openPrintableReport(analysis);
   };
 
-  const generateStyledHTML = () => {
-    const participantsHTML = analysis.participants?.map((p) => `
-      <div style="padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: start;">
-          <div>
-            <p style="font-weight: 600; color: #111827; margin: 0 0 4px 0;">${p.company || '-'}</p>
-            ${p.rut ? `<p style="color: #6b7280; font-size: 12px; margin: 0;">RUT: ${p.rut}</p>` : ''}
-          </div>
-          <span style="padding: 4px 12px; font-size: 12px; font-weight: 500; border-radius: 9999px; background: ${p.role === 'contratante' ? '#ede9fe' : '#dbeafe'}; color: ${p.role === 'contratante' ? '#6b21a8' : '#1e40af'};">${p.role}</span>
-        </div>
-        ${p.representative ? `
-          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-            <p style="color: #374151; font-size: 13px; margin: 0;">Representante: ${p.representative}</p>
-            ${p.representative_rut ? `<p style="color: #6b7280; font-size: 11px; margin: 0;">RUT: ${p.representative_rut}</p>` : ''}
-          </div>
-        ` : ''}
-      </div>
-    `).join('') || '<p style="color: #6b7280;">No hay participantes identificados.</p>';
-
-    const risksHTML = analysis.risk_assessment?.map((r, idx) => `
-      <div style="padding: 16px; background: ${r.risk_level === 'high' ? '#fef2f2' : r.risk_level === 'medium' ? '#fefce8' : '#f0fdf4'}; border-left: 4px solid ${r.risk_level === 'high' ? '#dc2626' : r.risk_level === 'medium' ? '#ca8a04' : '#16a34a'}; margin-bottom: 16px; border-radius: 0 8px 8px 0;">
-        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="padding: 4px 8px; font-size: 11px; font-weight: 700; border-radius: 4px; background: ${r.risk_level === 'high' ? '#dc2626' : r.risk_level === 'medium' ? '#ca8a04' : '#16a34a'}; color: white;">${r.risk_level?.toUpperCase()}</span>
-            <span style="color: #374151; font-weight: 500;">${r.clause_type || '-'}</span>
-          </div>
-          <span style="font-size: 24px; font-weight: 700; color: #111827;">${r.risk_score}<span style="font-size: 14px; color: #6b7280;">/100</span></span>
-        </div>
-        <p style="color: #4b5563; margin: 0 0 12px 0;">${r.explanation || '-'}</p>
-        ${r.industry_standard ? `<p style="color: #374151; font-size: 13px; margin: 0 0 8px 0;"><strong>Estándar del sector:</strong> ${r.industry_standard}</p>` : ''}
-        ${r.recommendation ? `<p style="color: #1e40af; font-size: 13px; margin: 0 0 8px 0;"><strong>Recomendación:</strong> ${r.recommendation}</p>` : ''}
-        ${r.suggested_clause ? `<div style="background: white; padding: 12px; border-radius: 6px; margin-top: 8px;"><p style="color: #065f46; font-size: 13px; font-style: italic; margin: 0;">"${r.suggested_clause}"</p></div>` : ''}
-      </div>
-    `).join('') || '<p style="color: #6b7280;">No hay riesgos evaluados.</p>';
-
-    const timelineHTML = analysis.contract_timeline?.map((t, idx) => `
-      <div style="display: flex; gap: 16px; margin-bottom: 16px;">
-        <div style="display: flex; flex-direction: column; align-items: center;">
-          <div style="width: 12px; height: 12px; border-radius: 50%; background: ${t.type === 'inicio' ? '#22c55e' : t.type === 'termino' ? '#ef4444' : '#eab308'}; margin-top: 4px;"></div>
-          ${idx < (analysis.contract_timeline?.length || 0) - 1 ? '<div style="width: 2px; flex: 1; background: #d1d5db; margin-top: 4px;"></div>' : ''}
-        </div>
-        <div style="flex: 1; padding-bottom: 16px;">
-          <div style="display: flex; justify-content: space-between; align-items: start;">
-            <p style="font-weight: 600; color: #111827; margin: 0;">${t.event || '-'}</p>
-            ${t.days_from_signing !== undefined ? `<span style="padding: 2px 8px; font-size: 11px; font-weight: 500; background: #e0e7ff; color: #3730a3; border-radius: 9999px;">Día ${t.days_from_signing}</span>` : ''}
-          </div>
-          <p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">${t.date || '-'}</p>
-          ${t.description ? `<p style="color: #374151; font-size: 13px; margin: 8px 0 0 0;">${t.description}</p>` : ''}
-          ${t.consequence ? `<p style="color: #dc2626; font-size: 12px; font-weight: 500; margin: 8px 0 0 0;">⚠️ ${t.consequence}</p>` : ''}
-        </div>
-      </div>
-    `).join('') || '<p style="color: #6b7280;">No hay timeline disponible.</p>';
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Análisis de Documento - ${analysis.document_type || 'Legal'}</title>
-        <style>
-          * { box-sizing: border-box; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #111827; line-height: 1.5; }
-          h1 { font-size: 24px; color: #111827; margin: 0 0 8px 0; }
-          h2 { font-size: 18px; color: #111827; margin: 32px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }
-          h3 { font-size: 15px; color: #374151; margin: 0 0 12px 0; }
-          .header { border-bottom: 2px solid #3b82f6; padding-bottom: 16px; margin-bottom: 24px; }
-          .doc-type { display: inline-block; padding: 6px 16px; background: #eff6ff; color: #1d4ed8; border-radius: 9999px; font-size: 14px; font-weight: 500; margin-top: 8px; }
-          .section { margin-bottom: 24px; }
-          .risk-box { padding: 16px; border-radius: 8px; margin-bottom: 12px; }
-          .note { background: #f3f4f6; padding: 16px; border-radius: 8px; font-size: 12px; color: #4b5563; margin-top: 40px; }
-          .obligations { margin-top: 12px; }
-          .obligation { padding: 12px; background: #f9fafb; border-radius: 8px; margin-bottom: 8px; }
-          .obligation-party { font-weight: 600; color: #374151; margin-bottom: 4px; }
-          .obligation-desc { color: #6b7280; font-size: 13px; margin: 0; }
-          @media print {
-            body { padding: 20px; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Análisis de Documento</h1>
-          <span class="doc-type">${analysis.document_type || 'Documento'}</span>
-        </div>
-
-        <div class="section">
-          <h2>👥 Participantes Identificados</h2>
-          ${participantsHTML}
-        </div>
-
-        ${analysis.obligations?.length ? `
-        <div class="section">
-          <h2>📋 Obligaciones</h2>
-          <div class="obligations">
-            ${analysis.obligations.map((o) => `
-              <div class="obligation">
-                <p class="obligation-party">${o.party || '-'}</p>
-                <p class="obligation-desc">${o.description || '-'}</p>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-        ` : ''}
-
-        <div class="section">
-          <h2>⚠️ Evaluación de Riesgo por Cláusula</h2>
-          ${risksHTML}
-        </div>
-
-        <div class="section">
-          <h2>📅 Línea de Tiempo del Contrato</h2>
-          ${timelineHTML}
-        </div>
-
-        <div class="note">
-          <strong>Nota legal:</strong> Este análisis es preliminar y basado en IA. No reemplaza la revisión profesional de un abogado habilitado en Chile.
-        </div>
-      </body>
-      </html>
-    `;
-  };
 
   return (
     <div className="space-y-6" id="analysis-content">

@@ -1,9 +1,26 @@
 import os
 import uuid
 import hashlib
+import logging
 from typing import Optional, Tuple
 from abc import ABC, abstractmethod
 from enum import Enum
+
+logger = logging.getLogger(__name__)
+
+STORAGE_ROOT = os.path.realpath(os.environ.get("STORAGE_PATH", "/app/storage/documents"))
+
+
+def _safe_join(relative_path: str) -> Optional[str]:
+    """Resolve ``relative_path`` against STORAGE_ROOT and ensure the result stays
+    inside the storage sandbox. Returns ``None`` if the path would escape.
+    """
+    if not relative_path or os.path.isabs(relative_path):
+        return None
+    candidate = os.path.realpath(os.path.join(STORAGE_ROOT, relative_path))
+    if candidate != STORAGE_ROOT and not candidate.startswith(STORAGE_ROOT + os.sep):
+        return None
+    return candidate
 
 
 class StorageBackend(str, Enum):
@@ -39,7 +56,7 @@ class StorageService(ABC):
 # Implementación LOCAL (filesystem)
 # =============================================================================
 
-STORAGE_PATH = os.environ.get("STORAGE_PATH", "/app/storage/documents")
+STORAGE_PATH = STORAGE_ROOT
 
 
 class LocalStorage(StorageService):
@@ -67,21 +84,21 @@ class LocalStorage(StorageService):
         return relative_path, file_hash, len(content)
 
     def get_file_path(self, relative_path: str) -> Optional[str]:
-        full_path = os.path.join(STORAGE_PATH, relative_path)
-        if os.path.exists(full_path):
+        full_path = _safe_join(relative_path)
+        if full_path and os.path.exists(full_path):
             return full_path
         return None
 
     def delete_file(self, relative_path: str) -> bool:
-        full_path = os.path.join(STORAGE_PATH, relative_path)
-        if os.path.exists(full_path):
+        full_path = _safe_join(relative_path)
+        if full_path and os.path.exists(full_path):
             os.remove(full_path)
             return True
         return False
 
     def get_file_content(self, relative_path: str) -> Optional[bytes]:
-        full_path = os.path.join(STORAGE_PATH, relative_path)
-        if os.path.exists(full_path):
+        full_path = _safe_join(relative_path)
+        if full_path and os.path.exists(full_path):
             with open(full_path, "rb") as f:
                 return f.read()
         return None
@@ -101,7 +118,7 @@ class SupabaseStorage(StorageService):
         self.bucket_name = os.environ.get("SUPABASE_STORAGE_BUCKET", "documents")
         self.client = create_client(
             settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_KEY
+            settings.SUPABASE_SERVICE_ROLE_KEY
         )
 
     def _get_storage_path(self, organization_id: int, matter_id: int, filename: str) -> str:

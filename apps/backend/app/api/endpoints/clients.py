@@ -94,11 +94,14 @@ def get_client(
     client_id: int,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    # S1-10: hide soft-deleted clients by default. Callers that need to
+    # audit deleted records can opt in via ``include_inactive=True``.
     client = db.query(Client).filter(
         Client.id == client_id,
-        Client.organization_id == membership.organization_id
+        Client.organization_id == membership.organization_id,
+        Client.is_active == True,
     ).first()
 
     if not client:

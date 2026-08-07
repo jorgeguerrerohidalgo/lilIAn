@@ -5,8 +5,31 @@ import { DocumentStatus } from "@/components/document-status";
 import { DocumentAnalysisView } from "@/components/document-analysis-view";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { MATTER_DOCUMENT_POLL } from "@/lib/hooks/use-poll";
+import { getApiUrl } from "@/lib/api";
+import {
+  matterTypeLabels,
+  statusLabels,
+  urgencyColors,
+  statusColors,
+  riskLevelColors,
+  matterTypeToLegalArea,
+  legalAreaLabels,
+  legalAreaColors,
+  type TabType,
+} from "@/components/matters/constants";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = getApiUrl();
+
+// S3-07: named constants for the polling magic numbers used in the four
+// poll loops below. The handlers can still inline them but the values
+// live in one place. See lib/hooks/use-poll.ts for the ``usePoll`` hook
+// available for future migrations that need guaranteed unmount cleanup
+// (S3-08 — the current setInterval loops clear themselves correctly
+// when the polling completes; the unmount leak only matters if the
+// user navigates away mid-poll).
+const POLL_INTERVAL_MS = MATTER_DOCUMENT_POLL.intervalMs; // 5_000
+const POLL_MAX_ATTEMPTS = MATTER_DOCUMENT_POLL.maxAttempts; // 60
 
 interface Matter {
   id: number;
@@ -96,90 +119,6 @@ interface ChatMessage {
   content: string;
   created_at: string;
 }
-
-type TabType = "details" | "documents" | "analysis" | "chat";
-
-const matterTypeLabels: Record<string, string> = {
-  contract_review: "Revisión de contrato",
-  lease: "Arriendo",
-  labor: "Laboral",
-  company: "Empresas",
-  data_protection: "Protección de datos",
-  consumer: "Consumidor",
-  family: "Familia",
-  debt: "Deudas",
-  other: "Otro",
-};
-
-const statusLabels: Record<string, string> = {
-  new: "Nuevo",
-  processing: "Procesando",
-  analysis_ready: "Análisis listo",
-  pending_human_review: "Pendiente revisión",
-  missing_information: "Info incompleta",
-  contact_client: "Contactar cliente",
-  in_progress: "En gestión",
-  closed: "Cerrado",
-  archived: "Archivado",
-};
-
-const urgencyColors: Record<string, string> = {
-  low: "bg-green-100 text-green-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-orange-100 text-orange-800",
-  urgent: "bg-red-100 text-red-800",
-};
-
-const statusColors: Record<string, string> = {
-  new: "bg-blue-100 text-blue-800",
-  processing: "bg-yellow-100 text-yellow-800",
-  analysis_ready: "bg-green-100 text-green-800",
-  pending_human_review: "bg-purple-100 text-purple-800",
-  missing_information: "bg-orange-100 text-orange-800",
-  contact_client: "bg-cyan-100 text-cyan-800",
-  in_progress: "bg-indigo-100 text-indigo-800",
-  closed: "bg-gray-100 text-gray-800",
-  archived: "bg-gray-200 text-gray-600",
-};
-
-const riskLevelColors: Record<string, string> = {
-  low: "bg-green-100 text-green-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-orange-100 text-orange-800",
-  critical: "bg-red-100 text-red-800",
-};
-
-const matterTypeToLegalArea: Record<string, string> = {
-  labor: "labor",
-  contract_review: "civil",
-  lease: "civil",
-  debt: "civil",
-  data_protection: "civil",
-  consumer: "consumer",
-  family: "family",
-  company: "commerce",
-  other: "other",
-};
-
-const legalAreaLabels: Record<string, string> = {
-  labor: "Laboral",
-  civil: "Civil",
-  consumer: "Consumidor",
-  family: "Familia",
-  commerce: "Comercial",
-  penal: "Penal",
-  other: "General",
-};
-
-const legalAreaColors: Record<string, string> = {
-  labor: "bg-blue-100 text-blue-800 border-blue-200",
-  civil: "bg-green-100 text-green-800 border-green-200",
-  consumer: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  family: "bg-purple-100 text-purple-800 border-purple-200",
-  commerce: "bg-orange-100 text-orange-800 border-orange-200",
-  penal: "bg-red-100 text-red-800 border-red-200",
-  other: "bg-gray-100 text-gray-800 border-gray-200",
-};
 
 export default function MatterDetailPage() {
   const params = useParams();
@@ -391,7 +330,7 @@ export default function MatterDetailPage() {
     if (res.ok) {
       // polling para verificar cuando termina el procesamiento
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutos
+      const maxAttempts = POLL_MAX_ATTEMPTS; // S3-07: was the magic 60
       const pollInterval = setInterval(async () => {
         attempts++;
         const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}`, {
@@ -411,7 +350,7 @@ export default function MatterDetailPage() {
           fetchDocuments();
           setProcessingDocId(null);
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS); // S3-07: was the magic 5000
     } else {
       const data = await res.json();
       setDocProcessError(data.detail || "Error al procesar documento");
@@ -434,7 +373,7 @@ export default function MatterDetailPage() {
       setDocAnalyzeError(""); // Limpiar errores
       // polling para verificar cuando termina el análisis
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutos
+      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutos
       const pollInterval = setInterval(async () => {
         attempts++;
         const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
@@ -455,7 +394,7 @@ export default function MatterDetailPage() {
           setDocAnalyzeError("El análisis está tardando más de lo esperado. Puedes verificar manualmente más tarde.");
           setAnalyzingDocId(null);
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS);
     } else {
       const data = await res.json();
       setDocAnalyzeError(data.detail || "Error al analizar documento");
@@ -490,7 +429,7 @@ export default function MatterDetailPage() {
     // Si no tiene análisis, hacer polling por si el análisis está en proceso
     if (!hasAnalysis) {
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutos
+      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutos
       const pollInterval = setInterval(async () => {
         attempts++;
         const result = await fetchAnalysis();
@@ -500,7 +439,7 @@ export default function MatterDetailPage() {
             setDocAnalyzeError("El análisis está tardando más de lo esperado.");
           }
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS);
     }
   };
 
@@ -527,7 +466,7 @@ export default function MatterDetailPage() {
 
       // Poll for analysis result
       let attempts = 0;
-      const maxAttempts = 60; // 5 minutes max (60 * 5s = 300s)
+      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutes max (60 * 5s = 300s)
       const pollInterval = setInterval(async () => {
         attempts++;
         await fetchAnalysis();
@@ -547,7 +486,7 @@ export default function MatterDetailPage() {
           }
           setAnalysisSuccess("");
         }
-      }, 5000);
+      }, POLL_INTERVAL_MS);
     } else {
       const data = await res.json();
       setAnalysisError(data.detail || "Error al solicitar análisis");

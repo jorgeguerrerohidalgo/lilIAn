@@ -2,9 +2,12 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
 import os
 import json
+import logging
 import httpx
 
 from app.services.retry_utils import with_retry
+
+logger = logging.getLogger(__name__)
 
 
 class LLMProvider(ABC):
@@ -55,7 +58,7 @@ class AnthropicLLM(LLMProvider):
     @with_retry(max_retries=5, initial_delay=3.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         if not self.api_key:
-            print(f"[ANTHROPIC] ERROR: API key is None!")
+            logger.error("AnthropicLLM: API key is not configured")
             return {"error": "LLM_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
         system_with_schema = f"{system_prompt or ''}\n\nResponde SOLO con JSON válido siguiendo este esquema: {json.dumps(schema)}"
 
@@ -70,8 +73,7 @@ class AnthropicLLM(LLMProvider):
             "temperature": 0.3
         }
 
-        print(f"[ANTHROPIC] Making request with model: {self.model}")
-        print(f"[ANTHROPIC] API key prefix: {self.api_key[:20] if self.api_key else 'None'}...")
+        logger.debug("AnthropicLLM: making request", extra={"model": self.model})
         with httpx.Client() as client:
             response = client.post(
                 "https://api.anthropic.com/v1/messages",
@@ -83,16 +85,15 @@ class AnthropicLLM(LLMProvider):
                 json=payload,
                 timeout=60.0
             )
-            print(f"[ANTHROPIC] Response status: {response.status_code}")
-            print(f"[ANTHROPIC] Response body: {response.text[:500]}")
+            logger.debug("AnthropicLLM: response received", extra={"status_code": response.status_code})
             response.raise_for_status()
             data = response.json()
             try:
                 result = json.loads(data["content"][0]["text"])
-                print(f"[ANTHROPIC] Parsed result: {str(result)[:200]}")
+                logger.debug("AnthropicLLM: parsed structured response")
                 return result
             except (json.JSONDecodeError, KeyError) as e:
-                print(f"[ANTHROPIC] Parse error: {e}")
+                logger.warning(f"AnthropicLLM: parse error: {e}")
                 return {"error": "Failed to parse structured response"}
 
 
@@ -133,7 +134,7 @@ class OpenAILLM(LLMProvider):
     @with_retry(max_retries=5, initial_delay=1.0)
     def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
         if not self.api_key:
-            print(f"[OPENAI] ERROR: API key is None or empty!")
+            logger.error("OpenAILLM: API key is not configured")
             return {"error": "OPENAI_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
         messages = []
         if system_prompt:
@@ -151,7 +152,7 @@ class OpenAILLM(LLMProvider):
             "response_format": {"type": "json_object"}
         }
 
-        print(f"[OPENAI] Making request to OpenAI API with key prefix: {self.api_key[:20]}...")
+        logger.debug("OpenAILLM: making request", extra={"model": self.model})
         with httpx.Client() as client:
             response = client.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -162,13 +163,13 @@ class OpenAILLM(LLMProvider):
                 json=payload,
                 timeout=60.0
             )
-            print(f"[OPENAI] Response status: {response.status_code}")
-            print(f"[OPENAI] Response body: {response.text[:500]}")
+            logger.debug("OpenAILLM: response received", extra={"status_code": response.status_code})
             response.raise_for_status()
             data = response.json()
             try:
                 return json.loads(data["choices"][0]["message"]["content"])
             except (json.JSONDecodeError, KeyError):
+                logger.warning("OpenAILLM: failed to parse structured response")
                 return {"error": "Failed to parse structured response"}
 
 

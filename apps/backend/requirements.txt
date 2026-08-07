@@ -4,13 +4,14 @@ sqlalchemy==2.0.31
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
 alembic==1.13.2
-pydantic==2.8.0
+pydantic>=2.10.0
 pydantic-settings==2.3.4
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]>=3.4.0  # S1-14: CVE-2024-33663, CVE-2024-33664
 passlib[bcrypt]==1.7.4
-bcrypt==4.2.0
+bcrypt>=4.2.1  # S1-15: CVE-2024-32661 (truncation of >72-byte passwords)
 python-multipart==0.0.9
 python-docx==1.1.2
 pymupdf==1.24.5
 httpx==0.27.2
 numpy==1.26.4
+redis>=5.0.0  # S1-16: required for token blacklist

@@ -59,19 +59,27 @@ class DashboardStats(BaseModel):
 def list_audit_logs(
     action_filter: Optional[str] = None,
     entity_type: Optional[str] = None,
+    organization_id: Optional[int] = None,
     days: int = 7,
     limit: int = 100,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(get_platform_admin_membership),
     db: Session = Depends(get_db)
 ):
+    """List audit logs across all organizations.
+
+    ``get_platform_admin_membership`` already verifies the caller has
+    ``PLATFORM_ADMIN`` rights, so the result is intentionally not filtered by
+    the admin's own ``organization_id``. Callers may optionally scope to a
+    single organization via the ``organization_id`` query parameter.
+    """
 
     since = datetime.utcnow() - timedelta(days=days)
 
-    query = db.query(AuditLog).filter(
-        AuditLog.organization_id == membership.organization_id,
-        AuditLog.created_at >= since
-    )
+    query = db.query(AuditLog).filter(AuditLog.created_at >= since)
+
+    if organization_id is not None:
+        query = query.filter(AuditLog.organization_id == organization_id)
 
     if action_filter:
         query = query.filter(AuditLog.action == action_filter)

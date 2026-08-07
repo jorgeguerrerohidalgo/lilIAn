@@ -13,7 +13,7 @@ from datetime import datetime
 from app.core.database import get_db
 from app.models.user import User
 from app.models.organization_member import OrganizationMember, MemberRole
-from app.api.deps.auth import get_current_user
+from app.api.deps.auth import get_current_user, require_organization
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
@@ -73,7 +73,7 @@ def require_reviewer(membership: OrganizationMember) -> None:
 def create_review(
     review_data: ReviewCreate,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """
@@ -138,7 +138,7 @@ def create_review(
 def get_review(
     review_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """Obtiene un review por ID."""
@@ -173,7 +173,7 @@ def get_review(
 def get_reviews_for_analysis(
     analysis_report_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """Obtiene todos los reviews para un análisis."""
@@ -205,7 +205,7 @@ def get_reviews_for_analysis(
 def submit_review(
     review_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """
@@ -257,7 +257,7 @@ def approve_review(
     review_id: int,
     approve_data: ReviewApprove,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """
@@ -318,7 +318,7 @@ def reject_review(
     review_id: int,
     reject_data: ReviewReject,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """

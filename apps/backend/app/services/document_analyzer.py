@@ -15,6 +15,8 @@ from app.models.document_analysis import DocumentAnalysis
 from app.models.document_chunk import DocumentChunk
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 # Schema para análisis estructurado
 DOCUMENT_ANALYSIS_SCHEMA = {
@@ -257,7 +259,7 @@ def get_rag_context_for_document_type(document_type: str, organization_id: int) 
         return "\n".join(context_parts)
 
     except Exception as e:
-        print(f"Error getting RAG context: {e}")
+        logger.debug(f"Error getting RAG context: {e}")  # S4-05
         return ""
 
 

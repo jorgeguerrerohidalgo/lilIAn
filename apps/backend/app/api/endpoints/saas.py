@@ -63,7 +63,14 @@ class OrganizationMetrics(BaseModel):
 
 
 @router.get("/plans", response_model=List[PlanResponse])
-def list_plans(db: Session = Depends(get_db)):
+def list_plans(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List active plans. Requires authentication to avoid leaking competitive
+    pricing information to anonymous callers. Public marketing pages should
+    expose a separate, sanitised pricing endpoint (or copy) instead of this one.
+    """
     plans = db.query(Plan).filter(Plan.is_active == True).order_by(Plan.monthly_price).all()
     return plans
 
@@ -246,15 +253,25 @@ def record_usage_event(
     metadata: dict = None,
     db: Session = None
 ):
-    if db is None:
-        db = next(get_db().__iter__().__next__())
+    from app.core.database import SessionLocal
 
-    event = UsageEvent(
-        organization_id=organization_id,
-        user_id=user_id,
-        event_type=event_type,
-        quantity=quantity,
-        event_metadata=json.dumps(metadata) if metadata else None
-    )
-    db.add(event)
-    db.commit()
+    owns_session = db is None
+    if owns_session:
+        db = SessionLocal()
+    try:
+        event = UsageEvent(
+            organization_id=organization_id,
+            user_id=user_id,
+            event_type=event_type,
+            quantity=quantity,
+            event_metadata=json.dumps(metadata) if metadata else None
+        )
+        db.add(event)
+        db.commit()
+    except Exception:
+        if owns_session:
+            db.rollback()
+        raise
+    finally:
+        if owns_session:
+            db.close()

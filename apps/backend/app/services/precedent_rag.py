@@ -1,3 +1,4 @@
+import logging
 """
 Precedent RAG Service - Busqueda de precedentes judiciales chilenas
 """
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.precedent import Precedent
 from app.services.embeddings import get_embedding_provider
+
+logger = logging.getLogger(__name__)
 
 
 def cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -216,5 +219,5 @@ def index_precedent(precedent_id: int, db: Session) -> bool:
         db.commit()
         return True
     except Exception as e:
-        print(f"Error indexing precedent {precedent_id}: {e}")
+        logger.debug(f"Error indexing precedent {precedent_id}: {e}")  # S4-05
         return False

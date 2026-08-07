@@ -8,6 +8,10 @@ import { StatCard } from "@/components/ui";
 import { Badge } from "@/components/ui";
 import { MatterStatusBadge, UrgencyBadge } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
+import { getApiUrl } from "../lib/api";
+
+
+const API_URL = getApiUrl();
 
 interface Matter {
   id: number;
@@ -17,8 +21,6 @@ interface Matter {
   urgency: string;
   created_at: string;
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const matterTypeLabels: Record<string, string> = {
   contract_review: "Revisión de contrato",

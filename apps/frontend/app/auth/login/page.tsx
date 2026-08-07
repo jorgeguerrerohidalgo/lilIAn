@@ -34,6 +34,7 @@ export default function LoginPage() {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: formData,
+        credentials: "include", // S0-04: persist HttpOnly auth cookie
       });
 
       if (!res.ok) {
@@ -41,11 +42,14 @@ export default function LoginPage() {
         throw new Error(data.detail || "Error al iniciar sesión");
       }
 
-      const data = await res.json();
-      localStorage.setItem("token", data.access_token);
+      // S0-04: auth token now lives in an HttpOnly cookie. We still parse
+      // the response for backward compatibility but DO NOT persist it to
+      // localStorage anymore — that was an XSS vector.
+      await res.json();
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Error al iniciar sesión");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error al iniciar sesión";
+      setError(message);
     } finally {
       setLoading(false);
     }

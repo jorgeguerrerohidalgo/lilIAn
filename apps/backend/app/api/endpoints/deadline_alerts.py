@@ -217,7 +217,7 @@ def update_alert(
         DeadlineAlert.id == alert_id,
         DeadlineAlert.organization_id == membership.organization_id
     ).first()
-    if not alert or alert.organization_id != current_user.organization_id:
+    if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
 
     if update.status:

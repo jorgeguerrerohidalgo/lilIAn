@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
+    JWT_ISSUER: str = "lilian"
+    JWT_AUDIENCE: str = "lilian-api"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 60 * 24
 
     LLM_PROVIDER: str = "openai"
@@ -53,3 +55,43 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# Fail-fast validation: refuse to start with a weak or placeholder JWT secret
+# so production deployments cannot accidentally ship with a guessable key.
+_MIN_SECRET_LEN = 32
+_PLACEHOLDER_SECRETS = {
+    "",
+    "changeme",
+    "change-me",
+    "secret",
+    "lilian-jwt-secret-key-2024-change-in-production",
+    "your-secret-key",
+}
+
+
+def _validate_jwt_secret() -> None:
+    secret = settings.JWT_SECRET or ""
+    if (
+        len(secret) < _MIN_SECRET_LEN
+        or secret.lower() in _PLACEHOLDER_SECRETS
+        or "change" in secret.lower()
+        or "placeholder" in secret.lower()
+    ):
+        if settings.APP_ENV.lower() == "production":
+            raise RuntimeError(
+                "JWT_SECRET is missing, too short (<32 chars), or appears to be a "
+                "placeholder. Generate one with: "
+                "`python -c \"import secrets; print(secrets.token_urlsafe(32))\"`"
+            )
+        # In development we only warn so the local stack can still boot.
+        import warnings
+
+        warnings.warn(
+            "JWT_SECRET is weak or a placeholder. This is OK for development but "
+            "MUST be replaced before deploying to production.",
+            RuntimeWarning,
+        )
+
+
+_validate_jwt_secret()

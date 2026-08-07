@@ -20,6 +20,11 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    # S1-16: reject tokens that have been explicitly revoked on logout.
+    from app.core.token_blacklist import is_revoked
+    if is_revoked(token):
+        raise credentials_exception
+
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception

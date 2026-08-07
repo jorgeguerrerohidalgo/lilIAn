@@ -4,6 +4,14 @@ from typing import List
 
 from app.core.database import get_db
 from app.models.matter import Matter, MatterStatus
+from app.models.client import Client
+from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
+from app.models.document_analysis import DocumentAnalysis
+from app.models.analysis_report import AnalysisReport
+from app.models.deadline_alert import DeadlineAlert
+from app.models.chat import ChatSession, ChatMessage
+from app.models.risk_item import RiskItem
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
 from app.schemas.matter import MatterCreate, MatterUpdate, MatterResponse
@@ -41,6 +49,20 @@ def create_matter(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    # S1-09: validate that client_id (when provided) belongs to the same
+    # organization. Without this check, a user could attach a case to a
+    # client from another organization, leaking its existence across tenants.
+    if matter_data.client_id is not None:
+        client = db.query(Client).filter(
+            Client.id == matter_data.client_id,
+            Client.organization_id == membership.organization_id,
+        ).first()
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cliente no encontrado en esta organización",
+            )
+
     matter = Matter(
         organization_id=membership.organization_id,
         created_by_user_id=current_user.id,
@@ -95,6 +117,20 @@ def update_matter(
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
     update_data = matter_data.model_dump(exclude_unset=True)
+
+    # S1-09: same client validation as create — preventing cross-tenant
+    # assignment when the client_id is updated post-creation.
+    if "client_id" in update_data and update_data["client_id"] is not None:
+        client = db.query(Client).filter(
+            Client.id == update_data["client_id"],
+            Client.organization_id == membership.organization_id,
+        ).first()
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Cliente no encontrado en esta organización",
+            )
+
     for field, value in update_data.items():
         setattr(matter, field, value)
 
@@ -118,6 +154,17 @@ def delete_matter(
 
     if not matter:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    # S1-11: explicit cascade cleanup so we don't leak orphans in the DB
+    # or in storage. Order matters — child rows before the parent matter.
+    db.query(RiskItem).filter(RiskItem.matter_id == matter_id).delete(synchronize_session=False)
+    db.query(DocumentChunk).filter(DocumentChunk.matter_id == matter_id).delete(synchronize_session=False)
+    db.query(DocumentAnalysis).filter(DocumentAnalysis.matter_id == matter_id).delete(synchronize_session=False)
+    db.query(AnalysisReport).filter(AnalysisReport.matter_id == matter_id).delete(synchronize_session=False)
+    db.query(DeadlineAlert).filter(DeadlineAlert.matter_id == matter_id).delete(synchronize_session=False)
+    db.query(ChatMessage).filter(ChatMessage.matter_id == matter_id).delete(synchronize_session=False)
+    db.query(ChatSession).filter(ChatSession.matter_id == matter_id).delete(synchronize_session=False)
+    db.query(Document).filter(Document.matter_id == matter_id).delete(synchronize_session=False)
 
     db.delete(matter)
     db.commit()

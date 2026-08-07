@@ -2,11 +2,12 @@
 Precedents API Endpoints
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.api.deps.auth import get_current_user, require_organization
 from app.models.user import User
 from app.models.organization_member import OrganizationMember
@@ -176,7 +177,12 @@ def list_legal_areas_in_precedents(
 
 
 @router.get("/analytics")
+# S3-04: analytics queries are expensive (cross-tenant aggregations +
+# optional text analysis). Cap at 10/minute so a chatty scraper can't
+# turn this into a hot DB path.
+@limiter.limit("10/minute")
 def get_analytics(
+    request: Request,
     legal_area: Optional[str] = Query(None, description="Filter by legal area"),
     court: Optional[str] = Query(None, description="Filter by court"),
     year_from: Optional[int] = Query(None, description="From year"),
