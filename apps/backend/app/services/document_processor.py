@@ -394,26 +394,6 @@ def process_document(document_id: int, force: bool = False) -> dict:
 def _classify_document_async(document_id: int) -> None:
     """Clasifica un documento de forma asíncrona."""
     import asyncio
-
-    print(f"[CLASSIFY] Starting async classification for document_id={document_id}")
-
-    try:
-        from app.services.document_classifier import classify_document
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(classify_document(document_id))
-            print(f"[CLASSIFY] Result for {document_id}: type={result.get('document_type', 'unknown')}, confidence={result.get('confidence', 'unknown')}")
-        finally:
-            loop.close()
-    except Exception as e:
-        print(f"[CLASSIFY] FAILED for {document_id}: {type(e).__name__}: {str(e)}")
-
-
-def _classify_document_async(document_id: int) -> None:
-    """Clasifica un documento de forma asíncrona."""
-    import asyncio
     import logging
 
     logger = logging.getLogger(__name__)

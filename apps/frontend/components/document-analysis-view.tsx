@@ -2,6 +2,33 @@
 
 import { useState } from "react";
 
+/**
+ * HTML-escape user-derived strings before interpolating them into the
+ * printable report. This is the S0-05 fix: ``document.write`` would
+ * otherwise execute any ``<script>`` or event-handler payload that the
+ * upstream document analysis introduced via an injected participant
+ * name, risk explanation, or clause text.
+ */
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  return str.replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch] ?? ch);
+}
+
+/** Allow only known-safe CSS color literals or numeric risk scores. */
+function escapeColor(value: unknown, fallback: string): string {
+  const raw = typeof value === "string" ? value : "";
+  return /^#[0-9a-fA-F]{3,8}$/.test(raw) ? raw : fallback;
+}
+
 interface Participant {
   company: string;
   rut?: string;
@@ -173,64 +200,81 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
   };
 
   const generateStyledHTML = () => {
-    const participantsHTML = analysis.participants?.map((p) => `
+    const participantsHTML = analysis.participants?.map((p) => {
+      const isContratante = p.role === "contratante";
+      const roleBg = isContratante ? "#ede9fe" : "#dbeafe";
+      const roleColor = isContratante ? "#6b21a8" : "#1e40af";
+      return `
       <div style="padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: start;">
           <div>
-            <p style="font-weight: 600; color: #111827; margin: 0 0 4px 0;">${p.company || '-'}</p>
-            ${p.rut ? `<p style="color: #6b7280; font-size: 12px; margin: 0;">RUT: ${p.rut}</p>` : ''}
+            <p style="font-weight: 600; color: #111827; margin: 0 0 4px 0;">${escapeHtml(p.company || '-')}</p>
+            ${p.rut ? `<p style="color: #6b7280; font-size: 12px; margin: 0;">RUT: ${escapeHtml(p.rut)}</p>` : ''}
           </div>
-          <span style="padding: 4px 12px; font-size: 12px; font-weight: 500; border-radius: 9999px; background: ${p.role === 'contratante' ? '#ede9fe' : '#dbeafe'}; color: ${p.role === 'contratante' ? '#6b21a8' : '#1e40af'};">${p.role}</span>
+          <span style="padding: 4px 12px; font-size: 12px; font-weight: 500; border-radius: 9999px; background: ${escapeColor(roleBg, '#dbeafe')}; color: ${escapeColor(roleColor, '#1e40af')};">${escapeHtml(p.role)}</span>
         </div>
         ${p.representative ? `
           <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-            <p style="color: #374151; font-size: 13px; margin: 0;">Representante: ${p.representative}</p>
-            ${p.representative_rut ? `<p style="color: #6b7280; font-size: 11px; margin: 0;">RUT: ${p.representative_rut}</p>` : ''}
+            <p style="color: #374151; font-size: 13px; margin: 0;">Representante: ${escapeHtml(p.representative)}</p>
+            ${p.representative_rut ? `<p style="color: #6b7280; font-size: 11px; margin: 0;">RUT: ${escapeHtml(p.representative_rut)}</p>` : ''}
           </div>
         ` : ''}
       </div>
-    `).join('') || '<p style="color: #6b7280;">No hay participantes identificados.</p>';
+    `;
+    }).join('') || '<p style="color: #6b7280;">No hay participantes identificados.</p>';
 
-    const risksHTML = analysis.risk_assessment?.map((r, idx) => `
-      <div style="padding: 16px; background: ${r.risk_level === 'high' ? '#fef2f2' : r.risk_level === 'medium' ? '#fefce8' : '#f0fdf4'}; border-left: 4px solid ${r.risk_level === 'high' ? '#dc2626' : r.risk_level === 'medium' ? '#ca8a04' : '#16a34a'}; margin-bottom: 16px; border-radius: 0 8px 8px 0;">
+    const risksHTML = analysis.risk_assessment?.map((r) => {
+      const level = r.risk_level === "high" ? "high" : r.risk_level === "medium" ? "medium" : "low";
+      const bg = level === "high" ? "#fef2f2" : level === "medium" ? "#fefce8" : "#f0fdf4";
+      const border = level === "high" ? "#dc2626" : level === "medium" ? "#ca8a04" : "#16a34a";
+      const score = typeof r.risk_score === "number" && Number.isFinite(r.risk_score) ? r.risk_score : "-";
+      return `
+      <div style="padding: 16px; background: ${bg}; border-left: 4px solid ${border}; margin-bottom: 16px; border-radius: 0 8px 8px 0;">
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="padding: 4px 8px; font-size: 11px; font-weight: 700; border-radius: 4px; background: ${r.risk_level === 'high' ? '#dc2626' : r.risk_level === 'medium' ? '#ca8a04' : '#16a34a'}; color: white;">${r.risk_level?.toUpperCase()}</span>
-            <span style="color: #374151; font-weight: 500;">${r.clause_type || '-'}</span>
+            <span style="padding: 4px 8px; font-size: 11px; font-weight: 700; border-radius: 4px; background: ${border}; color: white;">${escapeHtml(level.toUpperCase())}</span>
+            <span style="color: #374151; font-weight: 500;">${escapeHtml(r.clause_type || '-')}</span>
           </div>
-          <span style="font-size: 24px; font-weight: 700; color: #111827;">${r.risk_score}<span style="font-size: 14px; color: #6b7280;">/100</span></span>
+          <span style="font-size: 24px; font-weight: 700; color: #111827;">${escapeHtml(score)}<span style="font-size: 14px; color: #6b7280;">/100</span></span>
         </div>
-        <p style="color: #4b5563; margin: 0 0 12px 0;">${r.explanation || '-'}</p>
-        ${r.industry_standard ? `<p style="color: #374151; font-size: 13px; margin: 0 0 8px 0;"><strong>Estándar del sector:</strong> ${r.industry_standard}</p>` : ''}
-        ${r.recommendation ? `<p style="color: #1e40af; font-size: 13px; margin: 0 0 8px 0;"><strong>Recomendación:</strong> ${r.recommendation}</p>` : ''}
-        ${r.suggested_clause ? `<div style="background: white; padding: 12px; border-radius: 6px; margin-top: 8px;"><p style="color: #065f46; font-size: 13px; font-style: italic; margin: 0;">"${r.suggested_clause}"</p></div>` : ''}
+        <p style="color: #4b5563; margin: 0 0 12px 0;">${escapeHtml(r.explanation || '-')}</p>
+        ${r.industry_standard ? `<p style="color: #374151; font-size: 13px; margin: 0 0 8px 0;"><strong>Estándar del sector:</strong> ${escapeHtml(r.industry_standard)}</p>` : ''}
+        ${r.recommendation ? `<p style="color: #1e40af; font-size: 13px; margin: 0 0 8px 0;"><strong>Recomendación:</strong> ${escapeHtml(r.recommendation)}</p>` : ''}
+        ${r.suggested_clause ? `<div style="background: white; padding: 12px; border-radius: 6px; margin-top: 8px;"><p style="color: #065f46; font-size: 13px; font-style: italic; margin: 0;">&ldquo;${escapeHtml(r.suggested_clause)}&rdquo;</p></div>` : ''}
       </div>
-    `).join('') || '<p style="color: #6b7280;">No hay riesgos evaluados.</p>';
+    `;
+    }).join('') || '<p style="color: #6b7280;">No hay riesgos evaluados.</p>';
 
-    const timelineHTML = analysis.contract_timeline?.map((t, idx) => `
+    const timelineHTML = analysis.contract_timeline?.map((t, idx) => {
+      const typeBg = t.type === 'inicio' ? '#22c55e' : t.type === 'termino' ? '#ef4444' : '#eab308';
+      const days = typeof t.days_from_signing === 'number' && Number.isFinite(t.days_from_signing)
+        ? t.days_from_signing
+        : null;
+      return `
       <div style="display: flex; gap: 16px; margin-bottom: 16px;">
         <div style="display: flex; flex-direction: column; align-items: center;">
-          <div style="width: 12px; height: 12px; border-radius: 50%; background: ${t.type === 'inicio' ? '#22c55e' : t.type === 'termino' ? '#ef4444' : '#eab308'}; margin-top: 4px;"></div>
+          <div style="width: 12px; height: 12px; border-radius: 50%; background: ${escapeColor(typeBg, '#eab308')}; margin-top: 4px;"></div>
           ${idx < (analysis.contract_timeline?.length || 0) - 1 ? '<div style="width: 2px; flex: 1; background: #d1d5db; margin-top: 4px;"></div>' : ''}
         </div>
         <div style="flex: 1; padding-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: start;">
-            <p style="font-weight: 600; color: #111827; margin: 0;">${t.event || '-'}</p>
-            ${t.days_from_signing !== undefined ? `<span style="padding: 2px 8px; font-size: 11px; font-weight: 500; background: #e0e7ff; color: #3730a3; border-radius: 9999px;">Día ${t.days_from_signing}</span>` : ''}
+            <p style="font-weight: 600; color: #111827; margin: 0;">${escapeHtml(t.event || '-')}</p>
+            ${days !== null ? `<span style="padding: 2px 8px; font-size: 11px; font-weight: 500; background: #e0e7ff; color: #3730a3; border-radius: 9999px;">Día ${escapeHtml(days)}</span>` : ''}
           </div>
-          <p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">${t.date || '-'}</p>
-          ${t.description ? `<p style="color: #374151; font-size: 13px; margin: 8px 0 0 0;">${t.description}</p>` : ''}
-          ${t.consequence ? `<p style="color: #dc2626; font-size: 12px; font-weight: 500; margin: 8px 0 0 0;">⚠️ ${t.consequence}</p>` : ''}
+          <p style="color: #4b5563; font-size: 13px; margin: 4px 0 0 0;">${escapeHtml(t.date || '-')}</p>
+          ${t.description ? `<p style="color: #374151; font-size: 13px; margin: 8px 0 0 0;">${escapeHtml(t.description)}</p>` : ''}
+          ${t.consequence ? `<p style="color: #dc2626; font-size: 12px; font-weight: 500; margin: 8px 0 0 0;">⚠️ ${escapeHtml(t.consequence)}</p>` : ''}
         </div>
       </div>
-    `).join('') || '<p style="color: #6b7280;">No hay timeline disponible.</p>';
+    `;
+    }).join('') || '<p style="color: #6b7280;">No hay timeline disponible.</p>';
 
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8">
-        <title>Análisis de Documento - ${analysis.document_type || 'Legal'}</title>
+        <title>Análisis de Documento - ${escapeHtml(analysis.document_type || 'Legal')}</title>
         <style>
           * { box-sizing: border-box; }
           body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #111827; line-height: 1.5; }
@@ -255,7 +299,7 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
       <body>
         <div class="header">
           <h1>Análisis de Documento</h1>
-          <span class="doc-type">${analysis.document_type || 'Documento'}</span>
+          <span class="doc-type">${escapeHtml(analysis.document_type || 'Documento')}</span>
         </div>
 
         <div class="section">
@@ -269,8 +313,8 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
           <div class="obligations">
             ${analysis.obligations.map((o) => `
               <div class="obligation">
-                <p class="obligation-party">${o.party || '-'}</p>
-                <p class="obligation-desc">${o.description || '-'}</p>
+                <p class="obligation-party">${escapeHtml(o.party || '-')}</p>
+                <p class="obligation-desc">${escapeHtml(o.description || '-')}</p>
               </div>
             `).join('')}
           </div>

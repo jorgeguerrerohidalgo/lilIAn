@@ -960,9 +960,15 @@ def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> Dic
     """
     Verifica si un análisis puede ser usado para decisiones automatizadas.
 
-    Args:
-        analysis_report_id: ID del análisis a verificar
-        db: sesión de base de datos
+    Política explícita (S0-13):
+    - Si ``requires_human_review=True``, el gate SOLO se abre cuando
+      ``review_approved=True`` (un Review humano en estado ``APPROVED``).
+    - Si ``requires_human_review=False``, el análisis puede usarse sin
+      revisión, pero la trazabilidad queda registrada explícitamente
+      vía ``review_status="auto_approved"`` en la respuesta. La
+      aplicación cliente debe mostrar esta distinción al usuario.
+    - Por defecto (sin información suficiente), el gate se mantiene
+      cerrado para evitar decisiones legales sin auditoría.
 
     Returns:
         Dict con:
@@ -985,68 +991,69 @@ def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> Dic
             "review_status": None
         }
 
-    # Si el análisis no requiere revisión humana, puede usarse directamente
-    if not report.requires_human_review and not report.review_approved:
-        return {
-            "can_use": True,
-            "requires_review": False,
-            "reason": None,
-            "review_status": "auto_approved"
-        }
+    # Si requiere revisión humana, gate SOLO se abre con review_approved=True.
+    if report.requires_human_review:
+        if report.review_approved:
+            return {
+                "can_use": True,
+                "requires_review": True,
+                "reason": None,
+                "review_status": "approved"
+            }
+        # Requiere revisión y NO está aprobada — buscar contexto del review.
+        latest_review = db.query(Review).filter(
+            Review.analysis_report_id == analysis_report_id
+        ).order_by(Review.created_at.desc()).first()
 
-    # Si requiere revisión pero ya está aprobado, puede usarse
-    if report.requires_human_review and report.review_approved:
-        return {
-            "can_use": True,
-            "requires_review": True,
-            "reason": None,
-            "review_status": "approved"
-        }
+        if latest_review is None:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": "Analysis requires human review but no review has been submitted",
+                "review_status": None
+            }
 
-    # Si requiere revisión y no está aprobado, buscar último review
-    latest_review = db.query(Review).filter(
-        Review.analysis_report_id == analysis_report_id
-    ).order_by(Review.created_at.desc()).first()
+        if latest_review.status == ReviewStatus.PENDING:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": "Analysis is pending review",
+                "review_status": "pending"
+            }
 
-    if not latest_review:
+        if latest_review.status == ReviewStatus.REJECTED:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": f"Analysis was rejected: {latest_review.rejection_reason}",
+                "review_status": "rejected",
+                "suggested_changes": latest_review.suggested_changes
+            }
+
+        if latest_review.status == ReviewStatus.DRAFT:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": "Analysis review is still in draft state",
+                "review_status": "draft"
+            }
+
+        # Default conservador: NO permitir uso automatizado.
         return {
             "can_use": False,
             "requires_review": True,
-            "reason": "Analysis requires human review but no review has been submitted",
-            "review_status": None
+            "reason": "Analysis cannot be used for automated decisions",
+            "review_status": latest_review.status
         }
 
-    if latest_review.status == ReviewStatus.PENDING:
-        return {
-            "can_use": False,
-            "requires_review": True,
-            "reason": "Analysis is pending review",
-            "review_status": "pending"
-        }
-
-    if latest_review.status == ReviewStatus.REJECTED:
-        return {
-            "can_use": False,
-            "requires_review": True,
-            "reason": f"Analysis was rejected: {latest_review.rejection_reason}",
-            "review_status": "rejected",
-            "suggested_changes": latest_review.suggested_changes
-        }
-
-    if latest_review.status == ReviewStatus.DRAFT:
-        return {
-            "can_use": False,
-            "requires_review": True,
-            "reason": "Analysis review is still in draft state",
-            "review_status": "draft"
-        }
-
-    # Por defecto, no permitir uso automatizado
+    # No requiere revisión humana: el análisis puede usarse, pero la
+    # respuesta deja explícito que fue auto-aprobado para que la UI pueda
+    # informar al usuario.
     return {
-        "can_use": False,
-        "requires_review": True,
-        "reason": "Analysis cannot be used for automated decisions",
-        "review_status": latest_review.status if latest_review else None
+        "can_use": True,
+        "requires_review": False,
+        "reason": None,
+        "review_status": "auto_approved"
     }
 
 

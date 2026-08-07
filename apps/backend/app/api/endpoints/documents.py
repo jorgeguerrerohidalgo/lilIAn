@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
 import logging
+import re
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -18,14 +19,53 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_MIME_TYPES = [
+ALLOWED_MIME_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
     "text/plain",
-]
+}
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
+# Map magic-byte signatures to the canonical MIME type we accept.
+MAGIC_SIGNATURES = (
+    (b"%PDF-", "application/pdf"),
+    (b"PK\x03\x04", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "application/msword"),
+)
+
+_FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _detect_mime_from_content(content: bytes) -> Optional[str]:
+    """Detect MIME type from the actual file bytes (magic numbers).
+
+    Returning ``None`` means we could not positively identify the file as
+    one of the formats we accept.
+    """
+    for signature, mime in MAGIC_SIGNATURES:
+        if content.startswith(signature):
+            return mime
+    # text/plain: require ASCII/UTF-8 decodable without errors.
+    try:
+        content.decode("utf-8")
+        return "text/plain"
+    except UnicodeDecodeError:
+        return None
+
+
+def _sanitize_filename(name: Optional[str]) -> str:
+    """Return a filesystem- and HTML-safe filename stripped of path components
+    and control characters. Falls back to ``"upload"`` if nothing usable remains.
+    """
+    if not name:
+        return "upload"
+    # Strip any directory components (basename only).
+    name = name.replace("\\", "/").split("/")[-1]
+    name = _FILENAME_SAFE_RE.sub("_", name)
+    name = name.strip("._") or "upload"
+    return name[:255]
 
 
 def process_document_background(document_id: int) -> None:
@@ -57,12 +97,6 @@ async def upload_document(
     if not matter:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tipo de archivo no permitido. Tipos válidos: PDF, DOCX, DOC, TXT"
-        )
-
     content = await file.read()
 
     if len(content) > MAX_FILE_SIZE:
@@ -71,9 +105,30 @@ async def upload_document(
             detail=f"El archivo excede el tamaño máximo de {MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
+    detected_mime = _detect_mime_from_content(content)
+    if detected_mime is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de archivo no permitido. El contenido no coincide con un formato aceptado (PDF, DOCX, DOC, TXT)."
+        )
+
+    # Reject mismatched Content-Type headers unless they fall in the allowed set.
+    declared_mime = file.content_type
+    if declared_mime and declared_mime not in ALLOWED_MIME_TYPES:
+        logger.warning(
+            "Rejected upload with disallowed declared mime type",
+            extra={"matter_id": matter_id, "declared_mime": declared_mime, "user_id": current_user.id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de archivo no permitido. Tipos válidos: PDF, DOCX, DOC, TXT"
+        )
+
+    safe_filename = _sanitize_filename(file.filename)
+
     storage_path, file_hash, file_size = storage.save_file(
         content,
-        file.filename,
+        safe_filename,
         membership.organization_id,
         matter_id
     )
@@ -82,9 +137,9 @@ async def upload_document(
         organization_id=membership.organization_id,
         matter_id=matter_id,
         uploaded_by_user_id=current_user.id,
-        original_filename=file.filename,
+        original_filename=safe_filename,
         storage_path=storage_path,
-        mime_type=file.content_type,
+        mime_type=detected_mime,
         file_size=file_size,
         file_hash=file_hash,
         status="uploaded"
