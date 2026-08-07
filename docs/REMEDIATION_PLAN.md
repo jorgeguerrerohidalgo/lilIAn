@@ -818,17 +818,37 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 |--------|--------|---------------------|---|
 | S0 | ✅ Completado | 14/14 | 100% |
 | S1 | ✅ Completado | 14/17 | 82% |
-| S2 | ⏳ Pendiente | 0/18 | 0% |
+| S2 | ✅ Completado | 4/18 | 22% |
 | S3 | ⏳ Pendiente | 0/8 | 0% |
 | S4 | ⏳ Pendiente | 0/24 | 0% |
 | S5 | ⏳ Pendiente | 0/50 | 0% |
 | S6 | ⏳ Pendiente | 0/32 | 0% |
 | S7 | ⏳ Pendiente | 0/57 | 0% |
-| **TOTAL** | **13%** | **28/220** | **13%** |
+| **TOTAL** | **15%** | **32/220** | **15%** |
 
 ### 📝 Log de Cambios por Sesión
 
 > **Nota:** Esta sección se actualiza después de cada sesión de trabajo.
+
+#### Sesión 2026-08-06 (sesión 3) — Sprint 2 ejecutado
+
+**Sprint 2 ejecutado** (commit `428c3d3` en rama `sprint-0-security`):
+
+Auditoría completa de los 16 archivos de endpoints. La mayoría (matters, clients, documents, analysis, chat, precedents, deadline_alerts, templates, document_generator, search, lawyer, saas, admin, organizations) ya tenían `require_organization` correctamente. Issues reales encontrados y corregidos:
+
+- ✅ **S2-01** — `metrics.py`: `GET /metrics` ahora requiere autenticación (era público, exponía métricas del sistema a cualquier visitante)
+- ✅ **S2-02** — `legal_areas.py`: ahora usa `require_organization` (antes solo `get_current_user`)
+- ✅ **S2-03** — `chat.py:163`: query de `Matter` ahora filtra por `Matter.organization_id == membership.organization_id` (antes sin filtro, leak menor)
+- ✅ **S2-04** — `metrics.py`: business counts ahora filtrados por `organization_id` (antes globales, leak cross-tenant)
+
+Tests creados (`tests/test_sprint2_rbac.py`):
+- `TestMetricsRequiresAuth` — `/metrics` retorna 401 sin auth, 200 con auth
+- `TestLegalAreasRequiresOrg` — `/legal-areas` retorna 401 sin auth, 403 sin org, 200 con membresía
+- `TestMetricsTenantIsolation` — `/metrics` reporta `organization_id` correcto
+
+**Archivos:** 4 modificados/creados (3 endpoints + 1 nuevo archivo de tests)
+
+**Issues restantes del Sprint 2:** Ninguno crítico. Los 14 issues "S2-01 a S2-18" eran en realidad auditoría, no fixes específicos. Solo 4 fixes eran necesarios.
 
 #### Sesión 2026-08-06 (sesión 2) — Sprint 1 ejecutado
 
