@@ -159,8 +159,12 @@ def send_message(
     if not session:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
 
-    # Obtener matter_type del caso
-    matter = db.query(Matter).filter(Matter.id == session.matter_id).first()
+    # S2-03: scope the matter lookup to the caller's organization so a
+    # dangling FK can't be exploited to read a Matter from another tenant.
+    matter = db.query(Matter).filter(
+        Matter.id == session.matter_id,
+        Matter.organization_id == membership.organization_id,
+    ).first()
     matter_type = matter.matter_type.value if matter and matter.matter_type else None
 
     # Convertir legal_area_override de string a enum si viene
