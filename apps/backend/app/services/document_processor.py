@@ -175,95 +175,83 @@ def extract_text_from_txt(file_path: str) -> str:
             return ""
 
 
-def create_chunks_for_document(
-    document_id: int,
-    extracted_text: str,
-    organization_id: int,
-    matter_id: int,
-    db,
-    legal_area: Optional[str] = None,
-    force: bool = False
-) -> dict:
-    """
-    Crea chunks para un documento de forma idempotente.
+def _normalize_extracted_text(value: object) -> str:
+    """Coerce None / non-str input into a safe empty string."""
+    if not value:
+        return ""
+    if not isinstance(value, str):
+        return str(value)
+    return value
 
-    Args:
-        extracted_text: Texto extraído del documento (no debe ser None)
-        force: Si True, recrea los chunks incluso si ya existen.
-               Si False, solo crea si no existen.
 
-    Returns:
-        dict con 'created' (int), 'skipped' (bool), 'status' (str)
-    """
-    # Asegurar que extracted_text no sea None
-    if not extracted_text:
-        extracted_text = ""
-    if not isinstance(extracted_text, str):
-        extracted_text = str(extracted_text) if extracted_text else ""
+def _existing_content_hash(db, document_id: int) -> Optional[str]:
+    """Read the content_hash stored on the first chunk, if any."""
+    first_chunk = (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.document_id == document_id)
+        .first()
+    )
+    if not first_chunk or not first_chunk.chunk_metadata:
+        return None
+    try:
+        return json.loads(first_chunk.chunk_metadata).get("content_hash")
+    except Exception:
+        return None
 
-    from app.services.chunker import split_text_into_chunks
-    from app.services.embeddings import get_embedding_provider
-    import hashlib
 
-    # Verificar si ya existen chunks
-    existing_chunks = db.query(DocumentChunk).filter(
-        DocumentChunk.document_id == document_id
-    ).first()
+def _should_skip_chunking(db, document_id: int, content_hash: str, force: bool) -> Optional[dict]:
+    """Idempotency guard. Returns a skip-result dict when nothing needs to be done."""
+    existing_chunks = (
+        db.query(DocumentChunk)
+        .filter(DocumentChunk.document_id == document_id)
+        .first()
+    )
 
     if existing_chunks is not None and not force:
-        # Ya existen chunks y no se pidió reprocesamiento forzado
-        chunk_count = db.query(DocumentChunk).filter(
-            DocumentChunk.document_id == document_id
-        ).count()
+        chunk_count = (
+            db.query(DocumentChunk)
+            .filter(DocumentChunk.document_id == document_id)
+            .count()
+        )
         return {
             "created": 0,
             "skipped": True,
             "status": "skipped",
-            "message": f"Chunks ya existen ({chunk_count}), usa force=True para recrear"
+            "message": f"Chunks ya existen ({chunk_count}), usa force=True para recrear",
         }
 
-    # Generar hash del contenido para verificar si cambió
-    content_hash = hashlib.sha256(extracted_text.encode()).hexdigest()[:16]
+    previous_hash = _existing_content_hash(db, document_id)
+    if previous_hash == content_hash and not force:
+        chunk_count = (
+            db.query(DocumentChunk)
+            .filter(DocumentChunk.document_id == document_id)
+            .count()
+        )
+        return {
+            "created": 0,
+            "skipped": True,
+            "status": "skipped",
+            "message": f"Contenido no cambió (hash: {content_hash}), usa force=True para recrear",
+        }
+    return None
 
-    # Obtener chunks existentes para comparar
-    existing_content_hash = None
-    first_chunk = db.query(DocumentChunk).filter(
+
+def _delete_existing_chunks(db, document_id: int) -> None:
+    db.query(DocumentChunk).filter(
         DocumentChunk.document_id == document_id
-    ).first()
-    if first_chunk and first_chunk.chunk_metadata:
-        try:
-            existing_content_hash = json.loads(first_chunk.chunk_metadata).get("content_hash")
-        except Exception:
-            pass
+    ).delete()
 
-    # Si el contenido no cambió, no recrear
-    if existing_content_hash == content_hash and not force:
-        chunk_count = db.query(DocumentChunk).filter(
-            DocumentChunk.document_id == document_id
-        ).count()
-        return {
-            "created": 0,
-            "skipped": True,
-            "status": "skipped",
-            "message": f"Contenido no cambió (hash: {content_hash}), usa force=True para recrear"
-        }
 
-    # Obtener embedding provider
-    try:
-        embedding_provider = get_embedding_provider()
-    except Exception:
-        embedding_provider = None
-
-    # Dividir en chunks
-    raw_chunks = split_text_into_chunks(extracted_text)
-
-    # Eliminar chunks antiguos SOLO si hay nuevo contenido
-    if force or existing_chunks:
-        db.query(DocumentChunk).filter(
-            DocumentChunk.document_id == document_id
-        ).delete()
-
-    # Crear nuevos chunks
+def _persist_chunks(
+    db,
+    raw_chunks: list,
+    document_id: int,
+    organization_id: int,
+    matter_id: int,
+    legal_area: Optional[str],
+    content_hash: str,
+    embedding_provider,
+) -> int:
     created = 0
     for raw_chunk in raw_chunks:
         chunk = DocumentChunk(
@@ -277,27 +265,73 @@ def create_chunks_for_document(
             legal_area=legal_area,
             chunk_metadata=json.dumps({
                 "content_hash": content_hash,
-                "created_at": datetime.utcnow().isoformat()
-            })
+                "created_at": datetime.utcnow().isoformat(),
+            }),
         )
-
-        # Generate embedding if provider is available
         if embedding_provider:
             try:
                 embedding = embedding_provider.generate_embedding(raw_chunk["content"])
                 chunk.embedding = json.dumps(embedding)
             except Exception:
                 pass
-
         db.add(chunk)
         created += 1
-
     db.commit()
+    return created
+
+
+def create_chunks_for_document(
+    document_id: int,
+    extracted_text: str,
+    organization_id: int,
+    matter_id: int,
+    db,
+    legal_area: Optional[str] = None,
+    force: bool = False,
+) -> dict:
+    """
+    Crea chunks para un documento de forma idempotente.
+
+    S4-06: split into helpers (``_should_skip_chunking``,
+    ``_persist_chunks``, ``_existing_content_hash``,
+    ``_normalize_extracted_text``) so this orchestrator only owns the
+    control flow.
+    """
+    extracted_text = _normalize_extracted_text(extracted_text)
+
+    from app.services.chunker import split_text_into_chunks
+    from app.services.embeddings import get_embedding_provider
+    import hashlib
+
+    content_hash = hashlib.sha256(extracted_text.encode()).hexdigest()[:16]
+
+    skip_result = _should_skip_chunking(db, document_id, content_hash, force)
+    if skip_result is not None:
+        return skip_result
+
+    try:
+        embedding_provider = get_embedding_provider()
+    except Exception:
+        embedding_provider = None
+
+    raw_chunks = split_text_into_chunks(extracted_text)
+    _delete_existing_chunks(db, document_id)
+    created = _persist_chunks(
+        db,
+        raw_chunks,
+        document_id=document_id,
+        organization_id=organization_id,
+        matter_id=matter_id,
+        legal_area=legal_area,
+        content_hash=content_hash,
+        embedding_provider=embedding_provider,
+    )
+
     return {
         "created": created,
         "skipped": False,
         "status": "created",
-        "content_hash": content_hash
+        "content_hash": content_hash,
     }
 
 
