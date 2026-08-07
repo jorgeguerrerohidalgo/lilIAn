@@ -820,15 +820,36 @@ Cada issue debe tener **criterios de aceptación verificables**. Los criterios s
 | S1 | ✅ Completado | 14/17 | 82% |
 | S2 | ✅ Completado | 4/18 | 22% |
 | S3 | ✅ Completado | 7/8 | 88% |
-| S4 | ⏳ Pendiente | 0/24 | 0% |
+| S4 | ✅ Completado | 8/24 | 33% |
 | S5 | ⏳ Pendiente | 0/50 | 0% |
 | S6 | ⏳ Pendiente | 0/32 | 0% |
 | S7 | ⏳ Pendiente | 0/57 | 0% |
-| **TOTAL** | **18%** | **39/220** | **18%** |
+| **TOTAL** | **21%** | **47/220** | **21%** |
 
 ### 📝 Log de Cambios por Sesión
 
 > **Nota:** Esta sección se actualiza después de cada sesión de trabajo.
+
+#### Sesión 2026-08-07 (sesión 5) — Sprint 4 ejecutado
+
+**Sprint 4 ejecutado** (3 commits: `1b83afe`, `346845c`, `5932d67`):
+
+Issues resueltos:
+- ✅ **S4-05** — 56 prints reemplazados por `logger.debug/info` en 4 archivos backend
+- ✅ **S4-02** — `generateStyledHTML` extraído a `lib/pdf-generator.ts` (634→513 líneas)
+- ✅ **S4-06** — `create_chunks_for_document` split en 5 helpers (124→70 líneas)
+- ✅ **S4-04** — `documents.py` split en `documents.py` + `document_analysis.py`
+- ✅ **S4-03** — `detect_normative_conflicts` refactorizado con helpers (117→60 líneas)
+- ✅ **S4-01** (parcial) — Constantes de UI extraídas a `components/matters/constants.ts`
+- ⏳ S4-07, S4-08 — `process_document` y `analyze_document_full` quedan pendientes
+- ⏳ S4-09 a S4-24 — Otros refactorings menores pendientes
+
+**Archivos:** 8 modificados/creados
+
+**Pendientes para Sprint 4 (futuro):**
+- Refactorizar `process_document` (S4-07) en 125+ líneas
+- Refactorizar `analyze_document_full` (S4-08) en 150+ líneas
+- Dividir `matters/[id]/page.tsx` en 4 tabs separadas (actualmente 1297 líneas)
 
 #### Sesión 2026-08-06 (sesión 4) — Sprint 3 ejecutado
 
