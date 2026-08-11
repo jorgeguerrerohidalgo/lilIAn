@@ -8,7 +8,7 @@ import { StatCard } from "@/components/ui";
 import { Badge } from "@/components/ui";
 import { MatterStatusBadge, UrgencyBadge } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
-import { getApiUrl } from "../lib/api";
+import { getApiUrl } from "@/lib/api";
 
 
 const API_URL = getApiUrl();

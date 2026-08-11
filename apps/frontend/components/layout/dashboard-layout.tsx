@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChatWidget } from "@/components/chat";
-import { getApiUrl } from "../lib/api";
+import { getApiUrl } from "@/lib/api";
 
 
 const API_URL = getApiUrl();
