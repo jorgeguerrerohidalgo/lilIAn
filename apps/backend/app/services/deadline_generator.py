@@ -4,6 +4,7 @@ Deadline Generator Service
 Extracts deadline alerts from contract_timeline and creates DeadlineAlert records.
 """
 import json
+import re
 from datetime import date, datetime, timedelta
 
 from app.core.database import SessionLocal

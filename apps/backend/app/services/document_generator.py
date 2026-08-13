@@ -3,10 +3,14 @@ Document Generator Service
 
 Generates documents from templates with context from matters/documents.
 """
+
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Ruta a los templates
 TEMPLATES_DIR = Path(__file__).parent / "document_templates"
