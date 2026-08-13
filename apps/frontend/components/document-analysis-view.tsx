@@ -362,7 +362,7 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
                         <CopyButton text={risk.suggested_clause} label="Copiar" />
                       </div>
                       <div className="p-2 bg-white rounded border border-emerald-200">
-                        <p className="text-sm text-slate-700 italic">"{risk.suggested_clause}"</p>
+                        <p className="text-sm text-slate-700 italic">&ldquo;{risk.suggested_clause}&rdquo;</p>
                       </div>
                     </div>
                   )}

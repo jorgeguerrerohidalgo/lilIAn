@@ -7,6 +7,7 @@ the 600-line mark. The URLs are unchanged because both routers share the
 
 import json
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
