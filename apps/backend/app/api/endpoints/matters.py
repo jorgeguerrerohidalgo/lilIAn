@@ -167,7 +167,11 @@ def delete_matter(
         db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id.in_(doc_ids)).delete(synchronize_session=False)
     db.query(AnalysisReport).filter(AnalysisReport.matter_id == matter_id).delete(synchronize_session=False)
     db.query(DeadlineAlert).filter(DeadlineAlert.matter_id == matter_id).delete(synchronize_session=False)
-    db.query(ChatMessage).filter(ChatMessage.matter_id == matter_id).delete(synchronize_session=False)
+    # ChatMessage's link to a matter is indirect via ChatSession.matter_id;
+    # same SQLAlchemy restriction on .delete() after .join() applies.
+    session_ids = [s.id for s in db.query(ChatSession.id).filter(ChatSession.matter_id == matter_id).all()]
+    if session_ids:
+        db.query(ChatMessage).filter(ChatMessage.chat_session_id.in_(session_ids)).delete(synchronize_session=False)
     db.query(ChatSession).filter(ChatSession.matter_id == matter_id).delete(synchronize_session=False)
     db.query(Document).filter(Document.matter_id == matter_id).delete(synchronize_session=False)
 
