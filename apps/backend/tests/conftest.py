@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 
-
 # Wipe any leftover env vars that would fail pydantic validation.
 for _k in (
     "ENCRYPTION_KEY",
@@ -30,16 +29,14 @@ os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 # ---------------------------------------------------------------------------
 # Imports delayed so the env vars above are set before app imports.
 # ---------------------------------------------------------------------------
+import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import pytest
-from fastapi.testclient import TestClient
-
 from app.core.database import Base, get_db
 from app.main import app  # noqa: E402
-
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(

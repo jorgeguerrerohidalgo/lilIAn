@@ -12,11 +12,10 @@ import pytest
 
 from app.core.security import create_access_token, get_password_hash
 from app.models.client import Client
-from app.models.matter import Matter, MatterStatus
+from app.models.matter import Matter
 from app.models.organization import Organization, OrganizationType
-from app.models.organization_member import OrganizationMember, MemberRole
+from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
-
 
 pytestmark = pytest.mark.integration
 
@@ -344,7 +343,6 @@ class TestMetricsCrossTenant:
         """Each authenticated user sees /metrics scoped to their org only.
         S2-01 ensures cross-tenant aggregations don't leak.
         """
-        from app.models.matter import Matter
         org_a, user_a, _ = _make_org_member(db, "A")
         org_b, user_b, _ = _make_org_member(db, "B")
         for i in range(2):
