@@ -5,7 +5,7 @@ Generates human-readable markdown reports from document analysis results.
 """
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 
 def analysis_to_markdown(

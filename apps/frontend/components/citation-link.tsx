@@ -52,7 +52,7 @@ export function CitationLink({ citation, onNavigate }: CitationLinkProps) {
         className="citation-trigger"
         title="Clic para ver fuente"
       >
-        <span className="citation-text">"{citation.quoted_text}"</span>
+        <span className="citation-text">&ldquo;{citation.quoted_text}&rdquo;</span>
         <span className="citation-badge">
           <svg
             className="w-3 h-3"
@@ -241,7 +241,7 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
               </span>
             </div>
             <blockquote className="citation-item-text">
-              "{citation.quoted_text}"
+              &ldquo;{citation.quoted_text}&rdquo;
             </blockquote>
             <div className="citation-item-meta">
               {citation.source.document_id && (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getApiUrl } from "../lib/api";
+import { getApiUrl } from "@/lib/api";
 
 
 const API_URL = getApiUrl();

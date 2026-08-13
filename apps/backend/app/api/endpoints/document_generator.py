@@ -1,24 +1,25 @@
 """
 Document Generator API Endpoints
 """
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import List, Optional, Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
 from app.api.deps.auth import get_current_user, require_organization
-from app.models.user import User
-from app.models.organization_member import OrganizationMember
+from app.core.database import get_db
 from app.models.matter import Matter
+from app.models.organization_member import OrganizationMember
+from app.models.user import User
 from app.services.document_generator import (
+    extract_variables_from_matter,
+    generate_document,
     get_all_templates,
+    get_categories,
     get_template_by_id,
     get_templates_by_category,
-    get_categories,
-    generate_document,
     validate_variables,
-    extract_variables_from_matter
 )
 
 router = APIRouter(prefix="/doc-templates", tags=["document-generator"])
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/doc-templates", tags=["document-generator"])
 class GenerateDocumentRequest(BaseModel):
     template_id: str
     variables: dict
-    matter_id: Optional[int] = None
+    matter_id: int | None = None
 
 
 class TemplateResponse(BaseModel):
@@ -35,12 +36,12 @@ class TemplateResponse(BaseModel):
     name: str
     category: str
     description: str
-    variables: List[Any]
+    variables: list[Any]
 
 
-@router.get("/templates", response_model=List[TemplateResponse])
+@router.get("/templates", response_model=list[TemplateResponse])
 def list_templates(
-    category: Optional[str] = Query(None, description="Filter by category"),
+    category: str | None = Query(None, description="Filter by category"),
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
 ):
@@ -93,7 +94,7 @@ def get_template(
 
 class SuggestVariablesRequest(BaseModel):
     matter_id: int
-    matter_type: Optional[str] = None
+    matter_type: str | None = None
 
 
 @router.post("/suggest-variables")

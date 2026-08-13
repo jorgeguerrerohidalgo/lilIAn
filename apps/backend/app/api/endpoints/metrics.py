@@ -14,13 +14,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
 from app.core.metrics import registry
-from app.models.matter import Matter, MatterStatus
 from app.models.document import Document
+from app.models.matter import Matter, MatterStatus
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
-from app.api.deps.auth import get_current_user, require_organization
 
 router = APIRouter(tags=["observability"])
 log = logging.getLogger(__name__)

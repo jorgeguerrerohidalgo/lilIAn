@@ -1,21 +1,20 @@
 """
 Deadline Alerts API Endpoints
 """
-from typing import List, Optional
-from datetime import date, datetime
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
 from app.api.deps.auth import get_current_user, require_organization
-from app.models.user import User
-from app.models.organization_member import OrganizationMember
+from app.core.database import get_db
 from app.models.deadline_alert import DeadlineAlert
 from app.models.matter import Matter
+from app.models.organization_member import OrganizationMember
+from app.models.user import User
 from app.schemas.deadline_alert import (
-    DeadlineAlertResponse,
-    DeadlineAlertUpdate,
     AlertsSummary,
+    DeadlineAlertUpdate,
 )
 
 router = APIRouter(prefix="/alerts", tags=["deadline-alerts"])
@@ -51,12 +50,12 @@ def alert_to_response(alert: DeadlineAlert) -> dict:
     }
 
 
-@router.get("/", response_model=List[dict])
+@router.get("/", response_model=list[dict])
 def list_alerts(
-    status: Optional[str] = Query(None, description="Filter by status"),
-    urgency: Optional[str] = Query(None, description="Filter by urgency"),
-    overdue: Optional[bool] = Query(None, description="Filter overdue only"),
-    matter_id: Optional[int] = Query(None, description="Filter by matter"),
+    status: str | None = Query(None, description="Filter by status"),
+    urgency: str | None = Query(None, description="Filter by urgency"),
+    overdue: bool | None = Query(None, description="Filter overdue only"),
+    matter_id: int | None = Query(None, description="Filter by matter"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -99,7 +98,7 @@ def get_alerts_summary(
 
     overdue = db.query(DeadlineAlert).filter(
         DeadlineAlert.organization_id == org_id,
-        DeadlineAlert.is_overdue == True
+        DeadlineAlert.is_overdue
     ).count()
 
     critical = db.query(DeadlineAlert).filter(
@@ -156,11 +155,11 @@ def get_alerts_summary(
     )
 
 
-@router.get("/matters/{matter_id}", response_model=List[dict])
+@router.get("/matters/{matter_id}", response_model=list[dict])
 def get_matter_alerts(
     matter_id: int,
-    status: Optional[str] = Query(None),
-    urgency: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    urgency: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),

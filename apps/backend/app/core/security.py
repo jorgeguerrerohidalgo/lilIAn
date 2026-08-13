@@ -1,23 +1,37 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
+
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _truncate_password(password: str) -> str:
+    """Truncate password to 72 bytes for bcrypt (S1-15 / CVE-2024-32661)."""
+    if isinstance(password, str):
+        return password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return password[:72]
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(
+            _truncate_password(plain_password).encode("utf-8"),
+            hashed_password.encode("utf-8"),
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash a plain password using bcrypt directly (passlib<1.8 incompat con bcrypt>=4.2)."""
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(_truncate_password(password).encode("utf-8"), salt).decode("utf-8")
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if expires_delta:
         expire = now + expires_delta
     else:
@@ -34,7 +48,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> Optional[dict]:
+def decode_access_token(token: str) -> dict | None:
     try:
         payload = jwt.decode(
             token,

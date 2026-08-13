@@ -7,7 +7,9 @@ alembic==1.13.2
 pydantic>=2.10.0
 pydantic-settings==2.3.4
 python-jose[cryptography]>=3.4.0  # S1-14: CVE-2024-33663, CVE-2024-33664
-passlib[bcrypt]==1.7.4
+# passlib removed: passlib<1.8 is incompatible with bcrypt>=4.2
+# (AttributeError: module 'bcrypt' has no attribute '__about__').
+# We now call the bcrypt library directly in app/core/security.py.
 bcrypt>=4.2.1  # S1-15: CVE-2024-32661 (truncation of >72-byte passwords)
 python-multipart==0.0.9
 python-docx==1.1.2
@@ -15,3 +17,4 @@ pymupdf==1.24.5
 httpx==0.27.2
 numpy==1.26.4
 redis>=5.0.0  # S1-16: required for token blacklist
+slowapi==0.1.9  # S1-03: rate limit on /register and /login

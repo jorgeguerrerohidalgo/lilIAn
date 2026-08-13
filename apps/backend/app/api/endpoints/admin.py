@@ -1,31 +1,31 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.api.deps.auth import get_current_user, get_platform_admin_membership
 from app.core.database import get_db
 from app.models.audit_log import AuditLog
-from app.models.organization import Organization
-from app.models.user import User
-from app.models.organization_member import OrganizationMember
 from app.models.matter import Matter
-from app.api.deps.auth import get_current_user, get_platform_admin_membership
+from app.models.organization import Organization
+from app.models.organization_member import OrganizationMember
+from app.models.user import User
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 class AuditLogResponse(BaseModel):
     id: int
-    organization_id: Optional[int]
-    user_id: Optional[int]
+    organization_id: int | None
+    user_id: int | None
     action: str
-    entity_type: Optional[str]
-    entity_id: Optional[int]
-    ip_address: Optional[str]
-    metadata: Optional[dict]
+    entity_type: str | None
+    entity_id: int | None
+    ip_address: str | None
+    metadata: dict | None
     created_at: str
 
     class Config:
@@ -37,7 +37,7 @@ class OrganizationAdminResponse(BaseModel):
     name: str
     type: str
     status: str
-    plan_id: Optional[str]
+    plan_id: str | None
     created_at: str
     user_count: int
     matter_count: int
@@ -55,11 +55,11 @@ class DashboardStats(BaseModel):
     recent_logins: int
 
 
-@router.get("/audit-logs", response_model=List[AuditLogResponse])
+@router.get("/audit-logs", response_model=list[AuditLogResponse])
 def list_audit_logs(
-    action_filter: Optional[str] = None,
-    entity_type: Optional[str] = None,
-    organization_id: Optional[int] = None,
+    action_filter: str | None = None,
+    entity_type: str | None = None,
+    organization_id: int | None = None,
     days: int = 7,
     limit: int = 100,
     current_user: User = Depends(get_current_user),
@@ -105,7 +105,7 @@ def list_audit_logs(
     ]
 
 
-@router.get("/organizations", response_model=List[OrganizationAdminResponse])
+@router.get("/organizations", response_model=list[OrganizationAdminResponse])
 def list_all_organizations(
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(get_platform_admin_membership),

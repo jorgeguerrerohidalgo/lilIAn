@@ -1,15 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel, Field
-from typing import List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
-from app.models.chat import ChatSession, ChatMessage
-from app.models.matter import Matter
+from app.models.chat import ChatSession
 from app.models.legal_area import LegalArea
+from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
-from app.api.deps.auth import get_current_user, require_organization
 from app.services import chat as chat_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -21,21 +21,21 @@ CHAT_MESSAGE_MAX_LEN = 4_000
 
 class CreateSessionRequest(BaseModel):
     matter_id: int
-    title: Optional[str] = Field(default=None, max_length=200)
+    title: str | None = Field(default=None, max_length=200)
 
 
 class SendMessageRequest(BaseModel):
     session_id: int
     message: str = Field(min_length=1, max_length=CHAT_MESSAGE_MAX_LEN)
-    legal_area_override: Optional[str] = Field(default=None, max_length=64)
+    legal_area_override: str | None = Field(default=None, max_length=64)
 
 
 class ChatMessageResponse(BaseModel):
     id: int
     role: str
     content: str
-    model_provider: Optional[str] = None
-    model_name: Optional[str] = None
+    model_provider: str | None = None
+    model_name: str | None = None
     created_at: str
 
     class Config:
@@ -45,7 +45,7 @@ class ChatMessageResponse(BaseModel):
 class ChatSessionResponse(BaseModel):
     id: int
     matter_id: int
-    title: Optional[str]
+    title: str | None
     created_at: str
     updated_at: str
 
@@ -90,9 +90,9 @@ def create_session(
     )
 
 
-@router.get("/sessions", response_model=List[ChatSessionResponse])
+@router.get("/sessions", response_model=list[ChatSessionResponse])
 def list_sessions(
-    matter_id: Optional[int] = None,
+    matter_id: int | None = None,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
@@ -118,7 +118,7 @@ def list_sessions(
     ]
 
 
-@router.get("/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
+@router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageResponse])
 def get_session_messages(
     session_id: int,
     current_user: User = Depends(get_current_user),

@@ -17,15 +17,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
 from app.core.database import Base, get_db
 from app.core.security import get_password_hash
-
-from app.models.user import User
-from app.models.organization import Organization, OrganizationType
-from app.models.organization_member import OrganizationMember, MemberRole
+from app.main import app
 from app.models.matter import Matter, MatterStatus, MatterUrgency
-
+from app.models.organization import Organization, OrganizationType
+from app.models.organization_member import MemberRole, OrganizationMember
+from app.models.user import User
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(

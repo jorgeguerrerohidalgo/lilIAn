@@ -1,7 +1,7 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
 import re
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
@@ -54,10 +54,10 @@ class UserLogin(BaseModel):
 
 class UserResponse(UserBase):
     id: int
-    phone: Optional[str] = None
+    phone: str | None = None
     status: str
     created_at: datetime
-    last_login_at: Optional[datetime] = None
+    last_login_at: datetime | None = None
 
     class Config:
         from_attributes = True

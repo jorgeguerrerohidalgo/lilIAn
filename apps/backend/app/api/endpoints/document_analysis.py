@@ -11,12 +11,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
 from app.models.document import Document
 from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
-from app.api.deps.auth import get_current_user, require_organization
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -151,10 +151,10 @@ def get_matter_risk_dashboard(
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db),
-    level: Optional[str] = Query(None, description="Filter by risk level (high, medium, low)"),
-    risk_type: Optional[str] = Query(None, description="Filter by risk type (terminacion, penalidades, etc.)"),
-    sort_by: Optional[str] = Query("score", description="Sort by: score, level, type"),
-    sort_order: Optional[str] = Query("desc", description="Sort order: asc, desc"),
+    level: str | None = Query(None, description="Filter by risk level (high, medium, low)"),
+    risk_type: str | None = Query(None, description="Filter by risk type (terminacion, penalidades, etc.)"),
+    sort_by: str | None = Query("score", description="Sort by: score, level, type"),
+    sort_order: str | None = Query("desc", description="Sort order: asc, desc"),
 ):
     """Obtiene dashboard agregado de riesgos de todos los documentos analizados de un matter."""
     from app.models.document_analysis import DocumentAnalysis

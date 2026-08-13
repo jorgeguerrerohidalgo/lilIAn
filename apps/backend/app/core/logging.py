@@ -16,11 +16,10 @@ import json
 import logging
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import settings
-
 
 # Keys that must never appear in logs (case-insensitive substring match).
 # Aligns with the security rule of redacting credentials, cookies,
@@ -54,7 +53,7 @@ def _redact(value: Any) -> Any:
 def _scrub(record: logging.LogRecord) -> dict[str, Any]:
     """Convert a LogRecord to a JSON-serializable dict, redacting secrets."""
     payload: dict[str, Any] = {
-        "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+        "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
         "level": record.levelname,
         "logger": record.name,
         "message": record.getMessage(),

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
 
 import redis
 
@@ -22,10 +21,10 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_blacklist: Optional[redis.Redis] = None
+_blacklist: redis.Redis | None = None
 
 
-def _get_redis() -> Optional[redis.Redis]:
+def _get_redis() -> redis.Redis | None:
     global _blacklist
     if _blacklist is None and settings.REDIS_URL:
         try:
@@ -68,7 +67,7 @@ def is_revoked(token: str) -> bool:
         return False
 
 
-def ttl_for_token(exp_epoch: Optional[int]) -> int:
+def ttl_for_token(exp_epoch: int | None) -> int:
     """Compute the remaining TTL for a JWT exp claim."""
     if not exp_epoch:
         return settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60

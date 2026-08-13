@@ -1,11 +1,13 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum
-from sqlalchemy.orm import relationship
-from datetime import datetime
 import enum
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 
 
-class MemberRole(str, enum.Enum):
+class MemberRole(enum.StrEnum):
     PLATFORM_ADMIN = "PLATFORM_ADMIN"
     OWNER = "OWNER"
     ADMIN = "ADMIN"

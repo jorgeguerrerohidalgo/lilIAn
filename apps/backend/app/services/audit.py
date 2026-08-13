@@ -1,11 +1,9 @@
-from datetime import datetime
-from typing import Optional
 import json
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
 from app.models.audit_log import AuditLog
-from app.models.user import User
 
 
 def get_client_ip(request) -> str:
@@ -17,14 +15,14 @@ def get_client_ip(request) -> str:
 
 def record_audit_log(
     db: Session,
-    organization_id: Optional[int],
-    user_id: Optional[int],
+    organization_id: int | None,
+    user_id: int | None,
     action: str,
-    entity_type: Optional[str] = None,
-    entity_id: Optional[int] = None,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    metadata: Optional[dict] = None
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    metadata: dict | None = None
 ):
     audit_log = AuditLog(
         organization_id=organization_id,
@@ -42,7 +40,7 @@ def record_audit_log(
 
 
 class AuditLogger:
-    def __init__(self, db: Session, user_id: Optional[int] = None, organization_id: Optional[int] = None):
+    def __init__(self, db: Session, user_id: int | None = None, organization_id: int | None = None):
         self.db = db
         self.user_id = user_id
         self.organization_id = organization_id

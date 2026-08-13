@@ -1,26 +1,26 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 
-from app.core.database import get_db
-from app.models.matter import Matter, MatterStatus
-from app.models.client import Client
-from app.models.document import Document
-from app.models.document_chunk import DocumentChunk
-from app.models.document_analysis import DocumentAnalysis
-from app.models.analysis_report import AnalysisReport
-from app.models.deadline_alert import DeadlineAlert
-from app.models.chat import ChatSession, ChatMessage
-from app.models.risk_item import RiskItem
-from app.models.organization_member import OrganizationMember
-from app.models.user import User
-from app.schemas.matter import MatterCreate, MatterUpdate, MatterResponse
 from app.api.deps.auth import get_current_user, require_organization
+from app.core.database import get_db
+from app.models.analysis_report import AnalysisReport
+from app.models.chat import ChatMessage, ChatSession
+from app.models.client import Client
+from app.models.deadline_alert import DeadlineAlert
+from app.models.document import Document
+from app.models.document_analysis import DocumentAnalysis
+from app.models.document_chunk import DocumentChunk
+from app.models.matter import Matter
+from app.models.organization_member import OrganizationMember
+from app.models.risk_item import RiskItem
+from app.models.user import User
+from app.schemas.matter import MatterCreate, MatterResponse, MatterUpdate
 
 router = APIRouter(prefix="/matters", tags=["matters"])
 
 
-@router.get("", response_model=List[MatterResponse])
+@router.get("", response_model=list[MatterResponse])
 def list_matters(
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
@@ -157,12 +157,21 @@ def delete_matter(
 
     # S1-11: explicit cascade cleanup so we don't leak orphans in the DB
     # or in storage. Order matters — child rows before the parent matter.
+    # DocumentAnalysis doesn't have a matter_id column — its link to a
+    # matter is indirect via Document. We resolve the document ids first
+    # and delete by subquery (SQLAlchemy forbids .delete() after .join()).
     db.query(RiskItem).filter(RiskItem.matter_id == matter_id).delete(synchronize_session=False)
     db.query(DocumentChunk).filter(DocumentChunk.matter_id == matter_id).delete(synchronize_session=False)
-    db.query(DocumentAnalysis).filter(DocumentAnalysis.matter_id == matter_id).delete(synchronize_session=False)
+    doc_ids = [d.id for d in db.query(Document.id).filter(Document.matter_id == matter_id).all()]
+    if doc_ids:
+        db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id.in_(doc_ids)).delete(synchronize_session=False)
     db.query(AnalysisReport).filter(AnalysisReport.matter_id == matter_id).delete(synchronize_session=False)
     db.query(DeadlineAlert).filter(DeadlineAlert.matter_id == matter_id).delete(synchronize_session=False)
-    db.query(ChatMessage).filter(ChatMessage.matter_id == matter_id).delete(synchronize_session=False)
+    # ChatMessage's link to a matter is indirect via ChatSession.matter_id;
+    # same SQLAlchemy restriction on .delete() after .join() applies.
+    session_ids = [s.id for s in db.query(ChatSession.id).filter(ChatSession.matter_id == matter_id).all()]
+    if session_ids:
+        db.query(ChatMessage).filter(ChatMessage.chat_session_id.in_(session_ids)).delete(synchronize_session=False)
     db.query(ChatSession).filter(ChatSession.matter_id == matter_id).delete(synchronize_session=False)
     db.query(Document).filter(Document.matter_id == matter_id).delete(synchronize_session=False)
 
@@ -178,9 +187,9 @@ def get_matter_participants(
     db: Session = Depends(get_db)
 ):
     """Obtiene todos los participantes del caso con sus documentos."""
+
     from app.services.document_analyzer import get_all_participants_from_matter
-    from app.services.required_documents import REQUIRED_DOCUMENTS, DOCUMENT_TYPE_LABELS
-    import json
+    from app.services.required_documents import REQUIRED_DOCUMENTS
 
     matter = db.query(Matter).filter(
         Matter.id == matter_id,
@@ -200,7 +209,7 @@ def get_matter_participants(
     # Para cada participante, calcular completitud
     result = []
     for p in participants:
-        rut = p.get("rut")
+        p.get("rut")
         doc_ids = p.get("documents", [])
 
         # Obtener tipos de documentos que tiene este participante

@@ -1,46 +1,46 @@
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import date, datetime
+
+from pydantic import BaseModel
 
 
 class DeadlineAlertBase(BaseModel):
     title: str
-    description: Optional[str] = None
+    description: str | None = None
     event_type: str
     due_date: date
-    days_remaining: Optional[int] = None
+    days_remaining: int | None = None
     is_overdue: bool = False
     urgency: str
     importance_score: int = 50
     status: str = "pending"
-    source_event: Optional[str] = None
-    legal_reference: Optional[str] = None
-    consequence: Optional[str] = None
+    source_event: str | None = None
+    legal_reference: str | None = None
+    consequence: str | None = None
 
 
 class DeadlineAlertCreate(DeadlineAlertBase):
     organization_id: int
     matter_id: int
-    document_id: Optional[int] = None
-    user_id: Optional[int] = None
+    document_id: int | None = None
+    user_id: int | None = None
 
 
 class DeadlineAlertUpdate(BaseModel):
-    status: Optional[str] = None
-    acknowledged_by: Optional[int] = None
-    resolved_by: Optional[int] = None
+    status: str | None = None
+    acknowledged_by: int | None = None
+    resolved_by: int | None = None
 
 
 class DeadlineAlertResponse(DeadlineAlertBase):
     id: int
     organization_id: int
     matter_id: int
-    document_id: Optional[int] = None
-    user_id: Optional[int] = None
-    acknowledged_at: Optional[datetime] = None
-    resolved_at: Optional[datetime] = None
-    acknowledged_by: Optional[int] = None
-    resolved_by: Optional[int] = None
+    document_id: int | None = None
+    user_id: int | None = None
+    acknowledged_at: datetime | None = None
+    resolved_at: datetime | None = None
+    acknowledged_by: int | None = None
+    resolved_by: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -49,7 +49,7 @@ class DeadlineAlertResponse(DeadlineAlertBase):
 
 
 class DeadlineAlertWithMatter(DeadlineAlertResponse):
-    matter_title: Optional[str] = None
+    matter_title: str | None = None
 
 
 class AlertsSummary(BaseModel):
@@ -59,4 +59,4 @@ class AlertsSummary(BaseModel):
     high: int
     medium: int
     low: int
-    by_matter: List[dict]
+    by_matter: list[dict]

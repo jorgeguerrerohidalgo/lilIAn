@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { Input } from "@/components/ui";
 import { Card } from "@/components/ui";
-import { getApiUrl } from "../lib/api";
+import { getApiUrl } from "@/lib/api";
 
 
 const API_URL = getApiUrl();

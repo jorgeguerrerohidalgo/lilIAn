@@ -1,17 +1,17 @@
-from pydantic import BaseModel, field_validator
-from typing import Optional, List
-from datetime import datetime
 import json
+from datetime import datetime
+
+from pydantic import BaseModel, field_validator
 
 
 class RiskItemResponse(BaseModel):
     id: int
     level: str
     title: str
-    description: Optional[str] = None
-    source_fragment: Optional[str] = None
-    impact: Optional[str] = None
-    recommendation: Optional[str] = None
+    description: str | None = None
+    source_fragment: str | None = None
+    impact: str | None = None
+    recommendation: str | None = None
     confidence: str
     review_status: str
     created_at: datetime
@@ -23,17 +23,17 @@ class RiskItemResponse(BaseModel):
 class AnalysisReportResponse(BaseModel):
     id: int
     matter_id: int
-    model_provider: Optional[str] = None
-    model_name: Optional[str] = None
+    model_provider: str | None = None
+    model_name: str | None = None
     report_type: str
-    summary: Optional[str] = None
-    facts: Optional[str] = None
-    missing_information: Optional[str] = None
-    next_steps: Optional[str] = None
-    disclaimer: Optional[str] = None
+    summary: str | None = None
+    facts: str | None = None
+    missing_information: str | None = None
+    next_steps: str | None = None
+    disclaimer: str | None = None
     confidence: str
     status: str
-    validation_summary: Optional[dict] = None
+    validation_summary: dict | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -56,7 +56,7 @@ class AnalysisReportResponse(BaseModel):
 
 
 class AnalysisReportDetailResponse(AnalysisReportResponse):
-    risks: List[RiskItemResponse] = []
+    risks: list[RiskItemResponse] = []
 
     class Config:
         from_attributes = True

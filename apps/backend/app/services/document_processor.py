@@ -1,18 +1,17 @@
-from datetime import datetime
-from typing import Optional
+import json
 import logging
+from datetime import datetime
+
 import fitz
 from docx import Document as DocxDocument
-import json
 
 logger = logging.getLogger(__name__)
 
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
-from app.models.matter import Matter
 from app.models.legal_area import get_legal_area_from_matter_type
-
+from app.models.matter import Matter
 
 # S1-07: hard caps on PDF processing to avoid DoS / memory exhaustion.
 MAX_PDF_PAGES = 500
@@ -24,10 +23,10 @@ class DocumentTooLargeError(Exception):
     """Raised when a document exceeds the configured size or page limits."""
 
 
-def extract_text_from_file(file_path: str, mime_type: Optional[str]) -> str:
+def extract_text_from_file(file_path: str, mime_type: str | None) -> str:
     logger.info(f"[EXTRACT] extract_text_from_file: path={file_path}, mime={mime_type}")  # S4-05
     if not file_path or not mime_type:
-        logger.info(f"[EXTRACT] ERROR: Missing file_path or mime_type")  # S4-05
+        logger.info("[EXTRACT] ERROR: Missing file_path or mime_type")  # S4-05
         return ""
 
     try:
@@ -101,7 +100,7 @@ def extract_text_from_pdf(file_path: str) -> str:
     logger.info(f"[EXTRACT] PDF text extracted, length={len(full_text)}")  # S4-05
     # Si no se extrajo texto o es muy poco, usar OCR
     if len(full_text.strip()) < 100:
-        logger.info(f"[EXTRACT] Text too short, attempting OCR")  # S4-05
+        logger.info("[EXTRACT] Text too short, attempting OCR")  # S4-05
         ocr_text = extract_text_from_pdf_ocr(file_path)
         if ocr_text:
             return f"--- PDF ({page_count} páginas - OCR) ---\n\n{ocr_text}"
@@ -115,12 +114,11 @@ def extract_text_from_pdf_ocr(file_path: str) -> str:
     try:
         import pytesseract
         from PIL import Image
-        import fitz
 
         doc = _safe_open_pdf(file_path)
         text_parts = []
 
-        for page_num, page in enumerate(doc):
+        for _page_num, page in enumerate(doc):
             # Convertir página a imagen
             pix = page.get_pixmap(dpi=200)
             img_data = pix.tobytes("png")
@@ -159,14 +157,14 @@ def extract_text_from_docx(file_path: str) -> str:
 def extract_text_from_txt(file_path: str) -> str:
     logger.info(f"[EXTRACT] extract_text_from_txt: path={file_path}")  # S4-05
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
             logger.info(f"[EXTRACT] TXT (utf-8) extracted, length={len(content)}")  # S4-05
             return content
     except Exception as e:
         logger.info(f"[EXTRACT] TXT utf-8 failed: {e}, trying latin-1")  # S4-05
         try:
-            with open(file_path, "r", encoding="latin-1") as f:
+            with open(file_path, encoding="latin-1") as f:
                 content = f.read()
                 logger.info(f"[EXTRACT] TXT (latin-1) extracted, length={len(content)}")  # S4-05
                 return content
@@ -184,7 +182,7 @@ def _normalize_extracted_text(value: object) -> str:
     return value
 
 
-def _existing_content_hash(db, document_id: int) -> Optional[str]:
+def _existing_content_hash(db, document_id: int) -> str | None:
     """Read the content_hash stored on the first chunk, if any."""
     first_chunk = (
         db.query(DocumentChunk)
@@ -199,7 +197,7 @@ def _existing_content_hash(db, document_id: int) -> Optional[str]:
         return None
 
 
-def _should_skip_chunking(db, document_id: int, content_hash: str, force: bool) -> Optional[dict]:
+def _should_skip_chunking(db, document_id: int, content_hash: str, force: bool) -> dict | None:
     """Idempotency guard. Returns a skip-result dict when nothing needs to be done."""
     existing_chunks = (
         db.query(DocumentChunk)
@@ -248,7 +246,7 @@ def _persist_chunks(
     document_id: int,
     organization_id: int,
     matter_id: int,
-    legal_area: Optional[str],
+    legal_area: str | None,
     content_hash: str,
     embedding_provider,
 ) -> int:
@@ -286,7 +284,7 @@ def create_chunks_for_document(
     organization_id: int,
     matter_id: int,
     db,
-    legal_area: Optional[str] = None,
+    legal_area: str | None = None,
     force: bool = False,
 ) -> dict:
     """
@@ -299,9 +297,10 @@ def create_chunks_for_document(
     """
     extracted_text = _normalize_extracted_text(extracted_text)
 
+    import hashlib
+
     from app.services.chunker import split_text_into_chunks
     from app.services.embeddings import get_embedding_provider
-    import hashlib
 
     content_hash = hashlib.sha256(extracted_text.encode()).hexdigest()[:16]
 

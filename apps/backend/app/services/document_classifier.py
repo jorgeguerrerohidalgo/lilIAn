@@ -3,13 +3,11 @@ Document Classification Service
 Uses LLM to automatically detect the type of document uploaded.
 """
 
-from typing import Optional
 import logging
 import traceback
 
 from app.core.database import SessionLocal
 from app.models.document import Document
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

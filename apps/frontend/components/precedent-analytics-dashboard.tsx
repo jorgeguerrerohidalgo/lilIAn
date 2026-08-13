@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getApiUrl } from "../lib/api";
+import { getApiUrl } from "@/lib/api";
 import { logger } from "../lib/logger";
 
 
@@ -93,7 +93,7 @@ export function PrecedentAnalyticsDashboard() {
       }
     } catch (err) {
       setError("Error de conexión");
-      logger.error(err);
+      logger.error("Error fetching analytics:", err);
     } finally {
       setLoading(false);
     }

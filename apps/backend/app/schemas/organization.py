@@ -1,13 +1,13 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class OrganizationBase(BaseModel):
     name: str
     type: str = "individual"
-    rut: Optional[str] = None
-    billing_email: Optional[str] = None
+    rut: str | None = None
+    billing_email: str | None = None
 
 
 class OrganizationCreate(OrganizationBase):
@@ -16,7 +16,7 @@ class OrganizationCreate(OrganizationBase):
 
 class OrganizationResponse(OrganizationBase):
     id: int
-    plan_id: Optional[str] = None
+    plan_id: str | None = None
     status: str
     created_at: datetime
     updated_at: datetime

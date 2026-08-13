@@ -1,5 +1,4 @@
 """Regression tests for security fixes in Sprint 0."""
-import pytest
 
 
 def test_classify_document_async_defined_once():
@@ -11,6 +10,7 @@ def test_classify_document_async_defined_once():
     maintainers.
     """
     import inspect
+
     from app.services import document_processor
 
     source = inspect.getsource(document_processor)
@@ -23,6 +23,7 @@ def test_classify_document_async_defined_once():
 def test_classify_document_async_uses_logger_not_print():
     """S0-08 + S0-02: the surviving definition must use logger, not print()."""
     import inspect
+
     from app.services import document_processor
 
     source = inspect.getsource(document_processor._classify_document_async)

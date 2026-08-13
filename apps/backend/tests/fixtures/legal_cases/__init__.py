@@ -14,12 +14,12 @@ Uso:
 import json
 import os
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 FIXTURES_DIR = Path(__file__).parent
 
 
-def load_case_by_id(case_id: str) -> Optional[Dict]:
+def load_case_by_id(case_id: str) -> dict | None:
     """
     Carga un caso por su ID.
 
@@ -30,14 +30,14 @@ def load_case_by_id(case_id: str) -> Optional[Dict]:
         Dict con el caso o None si no existe
     """
     for json_file in FIXTURES_DIR.glob("*.json"):
-        with open(json_file, "r", encoding="utf-8") as f:
+        with open(json_file, encoding="utf-8") as f:
             case = json.load(f)
             if case.get("id") == case_id:
                 return case
     return None
 
 
-def load_all_cases() -> List[Dict]:
+def load_all_cases() -> list[dict]:
     """
     Carga todos los casos del dataset.
 
@@ -48,12 +48,12 @@ def load_all_cases() -> List[Dict]:
     for json_file in FIXTURES_DIR.glob("*.json"):
         if json_file.name == "__init__.py":
             continue
-        with open(json_file, "r", encoding="utf-8") as f:
+        with open(json_file, encoding="utf-8") as f:
             cases.append(json.load(f))
     return cases
 
 
-def load_cases_by_type(tipo_caso: str) -> List[Dict]:
+def load_cases_by_type(tipo_caso: str) -> list[dict]:
     """
     Carga casos filtrados por tipo.
 
@@ -67,7 +67,7 @@ def load_cases_by_type(tipo_caso: str) -> List[Dict]:
     return [c for c in all_cases if c.get("tipo_caso") == tipo_caso]
 
 
-def load_cases_by_difficulty(dificultad: str) -> List[Dict]:
+def load_cases_by_difficulty(dificultad: str) -> list[dict]:
     """
     Carga casos filtrados por dificultad.
 
@@ -81,7 +81,7 @@ def load_cases_by_difficulty(dificultad: str) -> List[Dict]:
     return [c for c in all_cases if c.get("dificultad") == dificultad]
 
 
-def get_test_cases_for_evaluation() -> List[Dict]:
+def get_test_cases_for_evaluation() -> list[dict]:
     """
     Retorna casos formateados para evaluación de LLM.
 

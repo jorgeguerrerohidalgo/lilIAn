@@ -1,18 +1,18 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
 from app.models.organization import Organization
-from app.models.organization_member import OrganizationMember, MemberRole
+from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
 from app.schemas.organization import OrganizationCreate, OrganizationResponse
-from app.api.deps.auth import get_current_user, require_organization
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
-@router.get("", response_model=List[OrganizationResponse])
+@router.get("", response_model=list[OrganizationResponse])
 def list_organizations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
