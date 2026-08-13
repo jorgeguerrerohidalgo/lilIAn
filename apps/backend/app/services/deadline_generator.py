@@ -58,108 +58,162 @@ def parse_timeline_item(item: dict) -> dict | None:
     """Parse a single timeline item and extract alert data.
 
     Handles both naming conventions from the LLM output.
+
+    S4-09: previously this 109-line function inlined four concerns —
+    field extraction, event-type inference, date parsing, and fallback
+    resolution. Each concern is now extracted into its own helper so
+    the top-level reads as a pipeline of intent.
     """
-    # LLM output uses: event, date, days_from_signing, type, description, consequence, legal_reference
-    # Legacy format used: evento, fecha_contrato, plazo_dias, fecha_limite, etc.
-    evento = (item.get("event") or item.get("evento") or "").strip()
-    date_str = item.get("date") or item.get("fecha_contrato") or item.get("fecha_limite")
-    plazo_dias = item.get("days_from_signing") or item.get("plazo_dias")
-    consecuencia = item.get("consequence") or item.get("consecuencia") or ""
-    articulo = item.get("legal_reference") or item.get("articulo_legal") or ""
+    fields = _extract_event_fields(item)
+    event_type = _infer_event_type(fields["evento"], fields["llm_type"])
+    due_date = _parse_due_date(fields["date_str"], fields["plazo_dias"])
 
-    # Use type from LLM directly if available and valid
-    llm_type = (item.get("type") or item.get("event_type") or "").lower()
-    valid_types = ["firma", "inicio", "vencimiento", "aviso_previo", "renovacion", "prescripcion", "pago", "garantia", "plazo_sin_penalidad", "aviso"]
-    event_type = llm_type if llm_type in valid_types else None
+    # If we have days_from_signing but no due_date, estimate from today.
+    if due_date is None and fields["plazo_dias"] and int(fields["plazo_dias"]) > 0:
+        due_date = date.today() + timedelta(days=int(fields["plazo_dias"]))
 
-    # If no valid type from LLM, detect from event text
-    evento_lower = evento.lower()
-    if not event_type:
-        if any(word in evento_lower for word in ["vencimient", "vencer", "tmino", "expira"]):
-            event_type = "vencimiento"
-        elif any(word in evento_lower for word in ["prescripci", "prescribir"]):
-            event_type = "prescripcion"
-        elif any(word in evento_lower for word in ["aviso", "notificaci", "comunicaci"]):
-            event_type = "aviso_previo"
-        elif any(word in evento_lower for word in ["renovaci", "renovar"]):
-            event_type = "renovacion"
-        elif any(word in evento_lower for word in ["pago", "cancelaci", "abono"]):
-            event_type = "pago"
-        elif any(word in evento_lower for word in ["garant", "aval"]):
-            event_type = "garantia"
-        elif any(word in evento_lower for word in ["firma", "suscribir"]):
-            event_type = "firma"
-        elif any(word in evento_lower for word in ["plazo", "limite", "sin penalidad", "sin penalización", "duraci"]):
-            event_type = "plazo_sin_penalidad"
-        else:
-            event_type = "pago"
-
-    # Parse date - try multiple formats
-    due_date = None
-    days_remaining = None
-
-    if date_str:
-        # Try ISO format first
-        try:
-            due_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            pass
-
-        if not due_date:
-            # Try Spanish date format "10 de julio de 2026"
-            try:
-                import re
-                match = re.match(r'(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})', date_str)
-                if match:
-                    day, month_name, year = match.groups()
-                    months = {
-                        'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
-                        'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
-                        'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
-                    }
-                    month = months.get(month_name.lower(), 1)
-                    due_date = date(int(year), month, int(day))
-            except Exception:
-                pass
-
-        if not due_date:
-            # Try DD/MM/YYYY
-            try:
-                due_date = datetime.strptime(date_str, "%d/%m/%Y").date()
-            except ValueError:
-                pass
-
-    # If we have days_from_signing but no due_date, estimate from today
-    if not due_date and plazo_dias and int(plazo_dias) > 0:
-        due_date = date.today() + timedelta(days=int(plazo_dias))
-
-    # If we still don't have a due_date, use today for immediate items or estimate
-    if not due_date:
-        if event_type in ["firma", "inicio"]:
-            # These should have dates - skip if no date found
+    # If we still don't have a due_date, use a placeholder based on type.
+    if due_date is None:
+        if event_type in ("firma", "inicio"):
             return None
-        # For others, use a placeholder date (today + some days based on type)
         due_date = date.today() + timedelta(days=30)
 
     days_remaining = (due_date - date.today()).days
-
     urgency = classify_urgency(event_type, days_remaining or 0)
     importance = calculate_importance_score(urgency, days_remaining or 0)
 
     return {
-        "title": evento if evento else f"Alerta de {event_type}",
-        "description": consecuencia if consecuencia and consecuencia != "Ninguna." else None,
+        "title": fields["evento"] if fields["evento"] else f"Alerta de {event_type}",
+        "description": (
+            fields["consecuencia"]
+            if fields["consecuencia"] and fields["consecuencia"] != "Ninguna."
+            else None
+        ),
         "event_type": event_type,
         "due_date": due_date,
         "days_remaining": days_remaining,
         "is_overdue": days_remaining < 0 if days_remaining else False,
         "urgency": urgency,
         "importance_score": importance,
-        "source_event": evento,
-        "legal_reference": articulo if articulo else None,
-        "consequence": consecuencia if consecuencia else None,
+        "source_event": fields["evento"],
+        "legal_reference": fields["articulo"] if fields["articulo"] else None,
+        "consequence": fields["consecuencia"] if fields["consecuencia"] else None,
     }
 
+
+_VALID_EVENT_TYPES = (
+    "firma",
+    "inicio",
+    "vencimiento",
+    "aviso_previo",
+    "renovacion",
+    "prescripcion",
+    "pago",
+    "garantia",
+    "plazo_sin_penalidad",
+    "aviso",
+)
+
+# Substrings (in order) that imply an event type when the LLM did not
+# give us a valid one. Order matters — the longest/most specific match
+# appears first.
+_TYPE_HEURISTICS = (
+    ("vencimiento", ("vencimient", "vencer", "tmino", "expira")),
+    ("prescripcion", ("prescripci", "prescribir")),
+    ("aviso_previo", ("aviso", "notificaci", "comunicaci")),
+    ("renovacion", ("renovaci", "renovar")),
+    ("pago", ("pago", "cancelaci", "abono")),
+    ("garantia", ("garant", "aval")),
+    ("firma", ("firma", "suscribir")),
+    ("plazo_sin_penalidad", ("plazo", "limite", "sin penalidad", "sin penalización", "duraci")),
+)
+
+
+def _extract_event_fields(item: dict) -> dict[str, object]:
+    """Normalize both naming conventions (LLM + legacy) into a uniform dict.
+
+    The legacy format used Spanish keys (evento, fecha_contrato, etc.)
+    while the current LLM output uses English. We accept either.
+    """
+    return {
+        "evento": (item.get("event") or item.get("evento") or "").strip(),
+        "date_str": (
+            item.get("date")
+            or item.get("fecha_contrato")
+            or item.get("fecha_limite")
+        ),
+        "plazo_dias": item.get("days_from_signing") or item.get("plazo_dias"),
+        "consecuencia": item.get("consequence") or item.get("consecuencia") or "",
+        "articulo": item.get("legal_reference") or item.get("articulo_legal") or "",
+        "llm_type": (item.get("type") or item.get("event_type") or "").lower(),
+    }
+
+
+def _infer_event_type(evento: str, llm_type: str) -> str:
+    """Prefer a valid LLM-provided type; otherwise infer from event text.
+
+    Defaults to ``pago`` when nothing matches (legacy behavior).
+    """
+    if llm_type in _VALID_EVENT_TYPES:
+        return llm_type
+    evento_lower = evento.lower()
+    for type_name, substrings in _TYPE_HEURISTICS:
+        if any(word in evento_lower for word in substrings):
+            return type_name
+    return "pago"
+
+
+def _parse_due_date(date_str: object, plazo_dias: object) -> object | None:
+    """Try several common date formats; return None when no input is parseable.
+
+    Tries in order: ISO (YYYY-MM-DD), Spanish ("10 de julio de 2026"),
+    DD/MM/YYYY. Each parser is independent — failures are silent.
+    """
+    if not date_str or not isinstance(date_str, str):
+        return None
+    if due_date := _try_iso_date(date_str):
+        return due_date
+    if due_date := _try_spanish_date(date_str):
+        return due_date
+    if due_date := _try_dmy_date(date_str):
+        return due_date
+    return None
+
+
+def _try_iso_date(date_str: str):
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+_SPANISH_MONTHS = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+    "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+}
+
+
+def _try_spanish_date(date_str: str):
+    match = re.match(
+        r"(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})",
+        date_str,
+    )
+    if not match:
+        return None
+    day, month_name, year = match.groups()
+    month = _SPANISH_MONTHS.get(month_name.lower(), 1)
+    try:
+        return date(int(year), month, int(day))
+    except ValueError:
+        return None
+
+
+def _try_dmy_date(date_str: str):
+    try:
+        return datetime.strptime(date_str, "%d/%m/%Y").date()
+    except ValueError:
+        return None
 
 def generate_alerts_from_document(document_id: int) -> list[int]:
     """Generate deadline alerts from a document's contract_timeline.

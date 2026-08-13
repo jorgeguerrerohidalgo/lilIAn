@@ -9,7 +9,6 @@ import json
 import logging
 from datetime import datetime
 
-from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.document_analysis import DocumentAnalysis

@@ -246,95 +246,148 @@ def extract_variables_from_matter(
         - suggested_variables: dict con {key: value}
         - reasoning: str con explicación del LLM
         - missing_fields: list de campos que no pudo inferir
+
+    S4-10: split out into helpers so the top-level is a linear
+    pipeline: lookup template → fetch text → build prompt → call LLM →
+    parse response. Each step is independently testable.
+    """
+    template = get_template_by_id(template_id)
+    if not template:
+        return _missing_template_response(template_id)
+
+    documents_text = get_chunks_text_for_matter(matter_id, organization_id)
+    template_vars = template.get("variables", [])
+
+    if not _has_enough_text(documents_text):
+        return _insufficient_text_response(template_vars)
+
+    prompt = _build_extraction_prompt(template, template_vars, documents_text)
+    raw_response = _invoke_extraction_llm(prompt)
+    return _parse_extraction_response(raw_response, template_vars)
+
+
+def _missing_template_response(template_id: str) -> dict:
+    return {
+        "success": False,
+        "suggested_variables": {},
+        "reasoning": f"Template '{template_id}' no encontrado",
+        "missing_fields": [],
+    }
+
+
+def _insufficient_text_response(template_vars: list) -> dict:
+    return {
+        "success": False,
+        "suggested_variables": {},
+        "reasoning": "No hay suficiente texto en los documentos del caso",
+        "missing_fields": [v["key"] for v in template_vars],
+    }
+
+
+def _has_enough_text(documents_text: str | None) -> bool:
+    return bool(documents_text) and len(documents_text.strip()) >= 100
+
+
+def _build_extraction_prompt(
+    template: dict, template_vars: list, documents_text: str
+) -> str:
+    """Compose the LLM prompt with template variables + document excerpts."""
+    vars_description = "\n".join([
+        f"- {v['key']}: {v.get('description', v.get('label', ''))} "
+        f"(tipo: {v.get('type', 'text')})"
+        for v in template_vars
+    ])
+    return (
+        f"Analiza los siguientes documentos de un caso legal y extrae la "
+        f"información relevante para completar un documento.\n\n"
+        f"TEMPLATE A COMPLETAR: {template.get('name', '')}\n"
+        f"{template.get('description', '')}\n\n"
+        f"VARIABLES A COMPLETAR:\n{vars_description}\n\n"
+        f"DOCUMENTOS DEL CASO:\n{documents_text[:30000]}\n\n"
+        f"Responde en JSON con el siguiente formato:\n"
+        f"{{\n"
+        f'  "suggested_variables": {{"variable_key": "valor_extraído", ...}},\n'
+        f'  "reasoning": "Explicación breve de cómo se infirieron los valores",\n'
+        f'  "missing_fields": ["lista de campos que no pudieron inferirse"]\n'
+        f"}}\n\n"
+        f"Solo incluye en suggested_variables los valores que puedas extraer "
+        f"con certeza del texto. Para campos no mencionados en los documentos, "
+        f"usa null o no los incluyas."
+    )
+
+
+def _invoke_extraction_llm(prompt: str) -> str:
+    """Call the LLM. On any provider error return an empty string so the
+    caller always sees a deterministic error path.
     """
     from app.services.llm import get_llm_provider
 
-    template = get_template_by_id(template_id)
-    if not template:
-        return {
-            "success": False,
-            "suggested_variables": {},
-            "reasoning": f"Template '{template_id}' no encontrado",
-            "missing_fields": []
-        }
-
-    # Obtener texto de los documentos
-    documents_text = get_chunks_text_for_matter(matter_id, organization_id)
-
-    if not documents_text or len(documents_text.strip()) < 100:
-        return {
-            "success": False,
-            "suggested_variables": {},
-            "reasoning": "No hay suficiente texto en los documentos del caso",
-            "missing_fields": [v["key"] for v in template.get("variables", [])]
-        }
-
-    # Construir prompt para extracción
-    template_vars = template.get("variables", [])
-    vars_description = "\n".join([
-        f"- {v['key']}: {v.get('description', v.get('label', ''))} (tipo: {v.get('type', 'text')})"
-        for v in template_vars
-    ])
-
-    prompt = f"""Analiza los siguientes documentos de un caso legal y extrae la información relevante para completar un documento.
-
-TEMPLATE A COMPLETAR: {template.get('name', template_id)}
-{template.get('description', '')}
-
-VARIABLES A COMPLETAR:
-{vars_description}
-
-DOCUMENTOS DEL CASO:
-{documents_text[:30000]}
-
-Responde en JSON con el siguiente formato:
-{{
-    "suggested_variables": {{"variable_key": "valor_extraído", ...}},
-    "reasoning": "Explicación breve de cómo se infirieron los valores",
-    "missing_fields": ["lista de campos que no pudieron inferirse de los documentos"]
-}}
-
-Solo incluye en suggested_variables los valores que puedas extraer con certeza del texto.
-Para campos no mencionados en los documentos, usa null o no los incluyas."""
-
     try:
         provider = get_llm_provider()
-        response = provider.generate(prompt=prompt, system_prompt=None, max_tokens=2048, temperature=0.3)
+        return provider.generate(
+            prompt=prompt,
+            system_prompt=None,
+            max_tokens=2048,
+            temperature=0.3,
+        )
+    except Exception as exc:
+        logger.error(f"Error invoking extraction LLM: {exc}", exc_info=True)
+        return ""
 
-        # Intentar parsear JSON de la respuesta
-        import json
-        import re
 
-        # Buscar JSON en la respuesta
-        json_match = re.search(r'\{[^{}]*"suggested_variables"[^{}]*\}', response, re.DOTALL)
-        if not json_match:
-            # Intentar buscar cualquier objeto JSON
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+def _parse_extraction_response(raw_response: str, template_vars: list) -> dict:
+    """Extract JSON from the LLM output, with two fallback strategies:
+    1. Look for an inline JSON object that mentions suggested_variables
+    2. Fall back to the first ``{...}`` block of any kind
+    """
+    parsed = _match_json_with_suggested_variables(raw_response)
+    if parsed is None:
+        parsed = _match_any_json_object(raw_response)
 
-        if json_match:
-            result = json.loads(json_match.group(0))
-            return {
-                "success": True,
-                "suggested_variables": result.get("suggested_variables", {}),
-                "reasoning": result.get("reasoning", "Valores extraídos del contexto"),
-                "missing_fields": result.get("missing_fields", [])
-            }
-        else:
-            return {
-                "success": True,
-                "suggested_variables": {},
-                "reasoning": response[:500],
-                "missing_fields": [v["key"] for v in template_vars]
-            }
-
-    except Exception as e:
+    if parsed is not None:
         return {
-            "success": False,
-            "suggested_variables": {},
-            "reasoning": f"Error al extraer variables: {str(e)}",
-            "missing_fields": [v["key"] for v in template_vars]
+            "success": True,
+            "suggested_variables": parsed.get("suggested_variables", {}),
+            "reasoning": parsed.get(
+                "reasoning", "Valores extraídos del contexto"
+            ),
+            "missing_fields": parsed.get("missing_fields", []),
         }
 
+    # No usable JSON in the response — record what came back so a human
+    # can debug the model later.
+    return {
+        "success": True,
+        "suggested_variables": {},
+        "reasoning": raw_response[:500],
+        "missing_fields": [v["key"] for v in template_vars],
+    }
+
+
+def _match_json_with_suggested_variables(response: str):
+    """Greedy regex that prefers an object containing suggested_variables
+    over a stray bracket later in the response.
+    """
+    raw_pattern = r"\{[^{}]*\"suggested_variables\"[^{}]*\}"
+    match = re.search(raw_pattern, response, re.DOTALL)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+def _match_any_json_object(response: str):
+    """Last-resort: take the first balanced object."""
+    raw_pattern = r"\{.*\}"
+    match = re.search(raw_pattern, response, re.DOTALL)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
 
 def validate_variables(template_id: str, variables: dict) -> dict:
     """Valida las variables contra un template.
