@@ -163,7 +163,7 @@ def get_clause_variance_description(clause_type: str, contract_type: str, actual
         return "Template no disponible para comparación"
 
     standard = template.get("industry_default", "Estándar no definido")
-    indicator = template.get("risk_indicator", "")
+    template.get("risk_indicator", "")
 
     description = f"Estándar del sector: {standard}"
 

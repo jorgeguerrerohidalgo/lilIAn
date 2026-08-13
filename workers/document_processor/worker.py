@@ -1,4 +1,3 @@
-import os
 import sys
 
 from redis import Redis
@@ -9,7 +8,6 @@ sys.path.insert(0, '/app')
 
 from app.core.config import settings
 from app.services.document_processor import process_document as backend_process_document
-
 
 redis_conn = Redis.from_url(settings.REDIS_URL)
 queue = Queue("document_processing", connection=redis_conn)

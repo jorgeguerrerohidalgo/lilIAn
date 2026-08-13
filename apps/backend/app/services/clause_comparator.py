@@ -4,11 +4,10 @@ Clause Comparator Service
 Compara las cláusulas extraídas del contrato contra templates estándar
 para detectar desviaciones y generar alertas.
 """
-from typing import List, Dict, Any, Optional
 import re
 
 
-def extract_clause_value(clause_text: str, clause_type: str) -> Optional[dict]:
+def extract_clause_value(clause_text: str, clause_type: str) -> dict | None:
     """Extrae valores específicos de una cláusula para comparar.
 
     Returns dict con valores relevantes para comparar contra el template.
@@ -95,7 +94,7 @@ def compare_clause_to_template(
     contract_type: str,
     clause_text: str,
     clause_template: dict
-) -> Optional[dict]:
+) -> dict | None:
     """Compara una cláusula extraída contra el template estándar.
 
     Returns dict con:
@@ -104,7 +103,9 @@ def compare_clause_to_template(
     - deviation_description: str
     - risk_score_adjustment: int (-50 to +50)
     """
-    from app.services.clause_templates import get_template_for_clause, get_clause_variance_description
+    from app.services.clause_templates import (
+        get_template_for_clause,
+    )
 
     template = clause_template or get_template_for_clause(contract_type, clause_type)
 
@@ -218,9 +219,9 @@ def compare_clause_to_template(
 
 
 def compare_contract_clauses_to_templates(
-    clauses_by_type: Dict[str, List[str]],
+    clauses_by_type: dict[str, list[str]],
     contract_type: str = "contract_review"
-) -> List[dict]:
+) -> list[dict]:
     """Compara todas las cláusulas de un contrato contra los templates.
 
     Returns lista de desviaciones encontradas.

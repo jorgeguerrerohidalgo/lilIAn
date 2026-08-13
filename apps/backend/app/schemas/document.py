@@ -1,12 +1,12 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class DocumentBase(BaseModel):
     original_filename: str
-    mime_type: Optional[str] = None
-    file_size: Optional[int] = None
+    mime_type: str | None = None
+    file_size: int | None = None
 
 
 class DocumentResponse(DocumentBase):
@@ -14,14 +14,14 @@ class DocumentResponse(DocumentBase):
     organization_id: int
     matter_id: int
     uploaded_by_user_id: int
-    storage_path: Optional[str] = None
-    file_hash: Optional[str] = None
+    storage_path: str | None = None
+    file_hash: str | None = None
     status: str
-    extracted_text: Optional[str] = None
-    page_count: Optional[int] = None
-    detected_document_type: Optional[str] = None
+    extracted_text: str | None = None
+    page_count: int | None = None
+    detected_document_type: str | None = None
     created_at: datetime
-    processed_at: Optional[datetime] = None
+    processed_at: datetime | None = None
 
     class Config:
         from_attributes = True

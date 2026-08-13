@@ -1,11 +1,13 @@
-from sqlalchemy import Column, String, Integer, DateTime, Enum
-from sqlalchemy.orm import relationship
-from datetime import datetime
 import enum
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Enum, Integer, String
+from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 
 
-class UserStatus(str, enum.Enum):
+class UserStatus(enum.StrEnum):
     ACTIVE = "active"
     SUSPENDED = "suspended"
     INACTIVE = "inactive"

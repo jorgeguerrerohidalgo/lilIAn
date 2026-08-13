@@ -1,27 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List, Optional
-from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
-from app.core.database import get_db
-from app.models.user import User
-from app.models.organization_member import OrganizationMember
-from app.models.client import Client
-from app.api.deps.auth import get_current_user, require_organization
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.api.deps.auth import get_current_user, require_organization
+from app.core.database import get_db
+from app.models.client import Client
+from app.models.organization_member import OrganizationMember
+from app.models.user import User
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
 class ClientBase(BaseModel):
     name: str
-    company_name: Optional[str] = None
-    rut: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    notes: Optional[str] = None
+    company_name: str | None = None
+    rut: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    notes: str | None = None
 
 
 class ClientCreate(ClientBase):
@@ -64,16 +63,16 @@ def create_client(
     return client
 
 
-@router.get("", response_model=List[ClientResponse])
+@router.get("", response_model=list[ClientResponse])
 def list_clients(
-    search: Optional[str] = None,
+    search: str | None = None,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     query = db.query(Client).filter(
         Client.organization_id == membership.organization_id,
-        Client.is_active == True
+        Client.is_active
     )
 
     if search:
@@ -101,7 +100,7 @@ def get_client(
     client = db.query(Client).filter(
         Client.id == client_id,
         Client.organization_id == membership.organization_id,
-        Client.is_active == True,
+        Client.is_active,
     ).first()
 
     if not client:

@@ -1,7 +1,8 @@
-from sqlalchemy import Column, String, Integer, DateTime, Text, JSON, Enum
 from datetime import datetime
+
+from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
+
 from app.core.database import Base
-from app.models.legal_area import LegalArea
 
 
 class LawChunk(Base):

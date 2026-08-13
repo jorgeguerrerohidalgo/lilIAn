@@ -1,18 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, BackgroundTasks
-from sqlalchemy.orm import Session
-from typing import List, Optional
-import json
 import logging
 import re
 
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
+
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
-from app.core.config import settings
 from app.models.document import Document
 from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
 from app.schemas.document import DocumentResponse
-from app.api.deps.auth import get_current_user, require_organization
 from app.services import storage
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -38,7 +36,7 @@ MAGIC_SIGNATURES = (
 _FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
 
 
-def _detect_mime_from_content(content: bytes) -> Optional[str]:
+def _detect_mime_from_content(content: bytes) -> str | None:
     """Detect MIME type from the actual file bytes (magic numbers).
 
     Returning ``None`` means we could not positively identify the file as
@@ -55,7 +53,7 @@ def _detect_mime_from_content(content: bytes) -> Optional[str]:
         return None
 
 
-def _sanitize_filename(name: Optional[str]) -> str:
+def _sanitize_filename(name: str | None) -> str:
     """Return a filesystem- and HTML-safe filename stripped of path components
     and control characters. Falls back to ``"upload"`` if nothing usable remains.
     """
@@ -154,7 +152,7 @@ async def upload_document(
     return document
 
 
-@router.get("/matters/{matter_id}/documents", response_model=List[DocumentResponse])
+@router.get("/matters/{matter_id}/documents", response_model=list[DocumentResponse])
 def list_matter_documents(
     matter_id: int,
     current_user: User = Depends(get_current_user),
@@ -264,8 +262,8 @@ def _process_document_background(document_id: int) -> None:
     ``async def`` code, dispatch through ``run_in_threadpool`` to
     keep the event loop unblocked.
     """
-    from app.services.document_processor import process_document
     from app.core.database import SessionLocal
+    from app.services.document_processor import process_document
 
     db = SessionLocal()
     try:

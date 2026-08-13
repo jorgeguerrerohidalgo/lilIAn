@@ -1,5 +1,5 @@
+
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -8,9 +8,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
 
-    SUPABASE_URL: Optional[str] = None
-    SUPABASE_ANON_KEY: Optional[str] = None
-    SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
+    SUPABASE_URL: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
 
     REDIS_URL: str = "redis://redis:6379/0"
 
@@ -22,19 +22,19 @@ class Settings(BaseSettings):
 
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-4o-mini"
-    LLM_API_KEY: Optional[str] = None
-    OPENAI_API_KEY: Optional[str] = None
+    LLM_API_KEY: str | None = None
+    OPENAI_API_KEY: str | None = None
 
     EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
-    EMBEDDING_API_KEY: Optional[str] = None
+    EMBEDDING_API_KEY: str | None = None
 
     @property
-    def resolved_llm_api_key(self) -> Optional[str]:
+    def resolved_llm_api_key(self) -> str | None:
         return self.LLM_API_KEY or self.OPENAI_API_KEY
 
     @property
-    def resolved_embedding_api_key(self) -> Optional[str]:
+    def resolved_embedding_api_key(self) -> str | None:
         return self.EMBEDDING_API_KEY or self.OPENAI_API_KEY
 
     ALLOWED_ORIGINS: str = "*"
@@ -90,7 +90,7 @@ def _validate_jwt_secret() -> None:
         warnings.warn(
             "JWT_SECRET is weak or a placeholder. This is OK for development but "
             "MUST be replaced before deploying to production.",
-            RuntimeWarning,
+            RuntimeWarning, stacklevel=2,
         )
 
 

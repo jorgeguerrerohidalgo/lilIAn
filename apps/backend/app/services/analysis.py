@@ -1,16 +1,14 @@
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
 import json
 import re
+from typing import Any
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.analysis_report import AnalysisReport
-from app.models.risk_item import RiskItem
-from app.models.matter import Matter
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
-from app.core.config import settings
-
+from app.models.matter import Matter
+from app.models.risk_item import RiskItem
 
 # S1-06: phrases that strongly suggest the upstream document (or the LLM
 # itself) tried to break out of the analysis sandbox. When detected, the
@@ -64,19 +62,19 @@ def _shape_is_acceptable(payload: Any) -> bool:
     return _walk(payload)
 
 
-def _validate_llm_output(raw: Any) -> Dict[str, Any]:
+def _validate_llm_output(raw: Any) -> dict[str, Any]:
     """S1-06: validate an LLM structured output before persisting.
 
     Returns a normalized dict that ALWAYS has ``requires_human_review``
     and a ``warnings`` list so callers can branch on trust.
     """
-    warnings: List[str] = []
+    warnings: list[str] = []
     requires_human_review = False
 
     if raw is None:
         warnings.append("El LLM devolvió una respuesta vacía")
         requires_human_review = True
-        normalized: Dict[str, Any] = {
+        normalized: dict[str, Any] = {
             "resumen_ejecutivo": "",
             "puntos_criticos": [],
             "risks": [],
@@ -696,8 +694,8 @@ def get_laws_context_for_rag(matter_type: str, organization_id: int) -> str:
     Usa queries específicas según el tipo de materia (laboral, civil, etc.)
     """
     try:
-        from app.services.rag import hybrid_search
         from app.services.embeddings import get_embedding_provider
+        from app.services.rag import hybrid_search
 
         provider = get_embedding_provider()
 
@@ -708,7 +706,7 @@ def get_laws_context_for_rag(matter_type: str, organization_id: int) -> str:
         # Por defecto usa "legislación chilena vigente" si no hay mapping específico
         query = QUERIES_RAG_POR_TIPO.get(mt, "legislación chilena vigente contratos obligaciones")
 
-        query_embedding = provider.generate_embedding(query)
+        provider.generate_embedding(query)
 
         results = hybrid_search(
             query=query,
@@ -1039,6 +1037,7 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
         validation_result = None
         try:
             import asyncio
+
             from app.services.document_validator import validate_matter_documents
 
             loop = asyncio.new_event_loop()
@@ -1081,7 +1080,7 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
 # GATE DE REVISIÓN - Análisis no aprobado no debe usarse para decisiones
 # =============================================================================
 
-def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> Dict[str, Any]:
+def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> dict[str, Any]:
     """
     Verifica si un análisis puede ser usado para decisiones automatizadas.
 

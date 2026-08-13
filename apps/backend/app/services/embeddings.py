@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
-from typing import List, Optional
-import os
 import logging
+import os
+from abc import ABC, abstractmethod
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -9,21 +9,21 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingProvider(ABC):
     @abstractmethod
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         pass
 
     @abstractmethod
-    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         pass
 
 
 class OpenAIEmbedding(EmbeddingProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-3-small"):
+    def __init__(self, api_key: str | None = None, model: str = "text-embedding-3-small"):
         self.api_key = api_key or os.environ.get("EMBEDDING_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY")
         self.model = model
         self.dimensions = 1536
 
-    def _do_generate_embedding(self, text: str) -> List[float]:
+    def _do_generate_embedding(self, text: str) -> list[float]:
         """Internal method that makes the actual API call."""
         response = httpx.post(
             "https://api.openai.com/v1/embeddings",
@@ -41,11 +41,11 @@ class OpenAIEmbedding(EmbeddingProvider):
         data = response.json()
         return data["data"][0]["embedding"]
 
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         if text is None:
             text = ""
 
-        from app.services.retry_utils import with_retry, is_retryable
+        from app.services.retry_utils import is_retryable, with_retry
 
         @with_retry(max_retries=5, initial_delay=1.0, backoff_factor=2.0)
         def retry_wrapper():
@@ -62,7 +62,7 @@ class OpenAIEmbedding(EmbeddingProvider):
             dummy = DummyEmbedding(dimensions=self.dimensions)
             return dummy.generate_embedding(text)
 
-    def _do_generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def _do_generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Internal method that makes the actual API call."""
         truncated_texts = [(text[:8000] if text else "") for text in texts]
         response = httpx.post(
@@ -81,11 +81,11 @@ class OpenAIEmbedding(EmbeddingProvider):
         data = response.json()
         return [item["embedding"] for item in data["data"]]
 
-    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
 
-        from app.services.retry_utils import with_retry, is_retryable
+        from app.services.retry_utils import is_retryable, with_retry
 
         @with_retry(max_retries=5, initial_delay=1.0, backoff_factor=2.0)
         def retry_wrapper():
@@ -107,14 +107,14 @@ class DummyEmbedding(EmbeddingProvider):
     def __init__(self, dimensions: int = 1536):
         self.dimensions = dimensions
 
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> list[float]:
         import hashlib
         if text is None:
             text = ""
         hash_value = int(hashlib.md5(str(text).encode()).hexdigest(), 16)
         return [(hash_value % 1000) / 1000.0 for _ in range(self.dimensions)]
 
-    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         return [self.generate_embedding(text) for text in texts]
 
 

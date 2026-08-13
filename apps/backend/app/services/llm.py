@@ -1,8 +1,8 @@
-from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any
-import os
 import json
 import logging
+import os
+from abc import ABC, abstractmethod
+
 import httpx
 
 from app.services.retry_utils import with_retry
@@ -12,20 +12,20 @@ logger = logging.getLogger(__name__)
 
 class LLMProvider(ABC):
     @abstractmethod
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
         pass
 
     @abstractmethod
-    def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
+    def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         pass
 
 
 class AnthropicLLM(LLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str | None = None, model: str = "claude-sonnet-4-20250514"):
         self.api_key = api_key or os.environ.get("LLM_API_KEY")
         self.model = model
 
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
         if not self.api_key:
             return "Error: LLM_API_KEY not configured"
         messages = []
@@ -56,7 +56,7 @@ class AnthropicLLM(LLMProvider):
             return data["content"][0]["text"]
 
     @with_retry(max_retries=5, initial_delay=3.0)
-    def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
+    def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         if not self.api_key:
             logger.error("AnthropicLLM: API key is not configured")
             return {"error": "LLM_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
@@ -98,11 +98,11 @@ class AnthropicLLM(LLMProvider):
 
 
 class OpenAILLM(LLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str | None = None, model: str = "gpt-4o-mini"):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.model = model
 
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
         if not self.api_key:
             return "Error: OPENAI_API_KEY not configured"
         messages = []
@@ -132,7 +132,7 @@ class OpenAILLM(LLMProvider):
             return data["choices"][0]["message"]["content"]
 
     @with_retry(max_retries=5, initial_delay=1.0)
-    def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
+    def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         if not self.api_key:
             logger.error("OpenAILLM: API key is not configured")
             return {"error": "OPENAI_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
@@ -174,12 +174,12 @@ class OpenAILLM(LLMProvider):
 
 
 class MiniMaxLLM(LLMProvider):
-    def __init__(self, api_key: Optional[str] = None, model: str = "abab6-chat"):
+    def __init__(self, api_key: str | None = None, model: str = "abab6-chat"):
         self.api_key = api_key or os.environ.get("LLM_API_KEY")
         self.model = model
         self.base_url = "https://api.minimax.chat/v1/text"
 
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -207,7 +207,7 @@ class MiniMaxLLM(LLMProvider):
             return data["choices"][0]["message"]["content"]
 
     @with_retry(max_retries=5, initial_delay=3.0)
-    def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
+    def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -243,10 +243,10 @@ class MiniMaxLLM(LLMProvider):
 
 
 class DummyLLM(LLMProvider):
-    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
         return "Este es un análisis de dummy. Configure un proveedor de LLM real."
 
-    def generate_structured(self, prompt: str, system_prompt: Optional[str], schema: dict) -> dict:
+    def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         return {
             "summary": "Resumen de análisis dummy",
             "facts": [],

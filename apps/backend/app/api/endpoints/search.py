@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
 
-from app.core.database import get_db
-from app.models.organization_member import OrganizationMember
-from app.models.matter import Matter
-from app.models.user import User
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.api.deps.auth import get_current_user, require_organization
+from app.core.database import get_db
+from app.models.matter import Matter
+from app.models.organization_member import OrganizationMember
+from app.models.user import User
 from app.services import rag
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -24,14 +24,14 @@ class SearchResultItem(BaseModel):
     chunk_id: int
     document_id: int
     content: str
-    page_number: Optional[int] = None
-    section_title: Optional[str] = None
+    page_number: int | None = None
+    section_title: str | None = None
     score: float
     source: str
 
 
 class SearchResponse(BaseModel):
-    results: List[SearchResultItem]
+    results: list[SearchResultItem]
     query: str
     total: int
 
@@ -54,10 +54,9 @@ def search_documents(
     if search_data.use_embeddings:
         try:
             from app.services.embeddings import get_embedding_provider
-            from app.services.rag import hybrid_search
 
             provider = get_embedding_provider()
-            query_embedding = provider.generate_embedding(search_data.query)
+            provider.generate_embedding(search_data.query)
 
             results = rag.hybrid_search(
                 query=search_data.query,

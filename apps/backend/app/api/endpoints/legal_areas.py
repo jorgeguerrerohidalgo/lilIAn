@@ -1,10 +1,9 @@
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import List
 
-from app.models.legal_area import LegalArea
-from app.models.organization_member import OrganizationMember
 from app.api.deps.auth import require_organization
+from app.models.organization_member import OrganizationMember
 
 router = APIRouter(prefix="/legal-areas", tags=["legal-areas"])
 
@@ -47,7 +46,7 @@ LEGAL_AREAS_INFO: dict[str, dict] = {
 }
 
 
-@router.get("", response_model=List[LegalAreaResponse])
+@router.get("", response_model=list[LegalAreaResponse])
 def list_legal_areas(
     membership: OrganizationMember = Depends(require_organization),
 ):

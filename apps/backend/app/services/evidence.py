@@ -6,9 +6,8 @@ generando citas navegables con contexto.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
 from datetime import datetime
-import re
+from typing import Any
 
 
 @dataclass
@@ -16,11 +15,11 @@ class EvidenceSource:
     """Fuente de evidencia (chunk de documento o precedente)."""
     source_id: str           # ID del chunk o precedente
     source_type: str         # "document_chunk", "legal_source", "precedent"
-    document_id: Optional[int] = None
+    document_id: int | None = None
     content: str = ""        # Texto del chunk
-    page_number: Optional[int] = None
-    section_title: Optional[str] = None
-    legal_area: Optional[str] = None
+    page_number: int | None = None
+    section_title: str | None = None
+    legal_area: str | None = None
     similarity_score: float = 0.0
 
 
@@ -47,8 +46,8 @@ class EvidenceBundle:
     - Exportar como JSON para el frontend
     - Validar que todas las citas sean navegables
     """
-    analysis_id: Optional[int] = None
-    citations: List[EvidenceCitation] = field(default_factory=list)
+    analysis_id: int | None = None
+    citations: list[EvidenceCitation] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
     def add_citation(
@@ -83,7 +82,7 @@ class EvidenceBundle:
         self.citations.append(citation)
         return citation
 
-    def get_citations_for_claim(self, claim: str) -> List[EvidenceCitation]:
+    def get_citations_for_claim(self, claim: str) -> list[EvidenceCitation]:
         """Obtiene todas las citas que soportan una afirmación específica."""
         return [c for c in self.citations if c.claim == claim]
 
@@ -112,7 +111,7 @@ class EvidenceBundle:
 
         return "\n".join(lines)
 
-    def to_frontend_dict(self) -> Dict[str, Any]:
+    def to_frontend_dict(self) -> dict[str, Any]:
         """Genera dict para enviar al frontend."""
         return {
             "analysis_id": self.analysis_id,
@@ -136,7 +135,7 @@ class EvidenceBundle:
             "created_at": self.created_at.isoformat()
         }
 
-    def get_navigable_links(self) -> List[Dict[str, Any]]:
+    def get_navigable_links(self) -> list[dict[str, Any]]:
         """Genera links navegables para el frontend."""
         links = []
         for cite in self.citations:
@@ -156,7 +155,7 @@ class EvidenceBundle:
 
 
 def extract_evidence_from_chunks(
-    chunks: List[Dict],
+    chunks: list[dict],
     query: str,
     top_k: int = 5
 ) -> EvidenceBundle:
@@ -180,7 +179,7 @@ def extract_evidence_from_chunks(
         reverse=True
     )[:top_k]
 
-    for i, chunk in enumerate(sorted_chunks):
+    for _i, chunk in enumerate(sorted_chunks):
         source = EvidenceSource(
             source_id=str(chunk.get("id", "")),
             source_type="document_chunk",

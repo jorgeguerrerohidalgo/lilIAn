@@ -9,28 +9,23 @@ Estos tests verifican que:
 Los tests usan SQLite en memoria + dependency_overrides de FastAPI para evitar
 dependencias de PostgreSQL/Redis externos.
 """
-import pytest
-from datetime import datetime
-from typing import Optional
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.main import app
 from app.core.database import Base, get_db
 from app.core.security import create_access_token, get_password_hash
-from app.api.deps.auth import get_current_user
-
-from app.models.user import User
-from app.models.organization import Organization, OrganizationType
-from app.models.organization_member import OrganizationMember, MemberRole
+from app.main import app
 from app.models.client import Client
-from app.models.matter import Matter, MatterStatus, MatterUrgency
 from app.models.document import Document
+from app.models.matter import Matter, MatterStatus, MatterUrgency
+from app.models.organization import Organization, OrganizationType
+from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.precedent import Precedent
-
+from app.models.user import User
 
 # ---------------------------------------------------------------------------
 # Engine SQLite en memoria compartido entre sesiones de test
@@ -83,7 +78,7 @@ def _make_user(
     email: str,
     org_id: int,
     role: MemberRole,
-    full_name: Optional[str] = None,
+    full_name: str | None = None,
 ) -> User:
     """Crea un User, lo une a la org con el rol indicado y devuelve el User."""
     user = User(
@@ -139,7 +134,7 @@ def _make_matter(
     org_id: int,
     user_id: int,
     title: str,
-    client_id: Optional[int] = None,
+    client_id: int | None = None,
 ) -> Matter:
     matter = Matter(
         organization_id=org_id,

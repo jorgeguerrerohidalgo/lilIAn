@@ -1,31 +1,28 @@
 """
 Precedents API Endpoints
 """
-from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.api.deps.auth import get_current_user, require_organization
-from app.models.user import User
 from app.models.organization_member import OrganizationMember
+from app.models.user import User
+from app.services.precedent_analytics import get_available_filters, get_precedent_analytics
 from app.services.precedent_rag import (
+    get_precedent_context,
     search_precedents_by_embedding,
     search_precedents_by_keyword,
-    get_precedent_context
-)
-from app.services.precedent_analytics import (
-    get_precedent_analytics,
-    get_available_filters
 )
 
 router = APIRouter(prefix="/precedents", tags=["precedents"])
 
 
 class PrecedentSearchResponse(BaseModel):
-    results: List[dict]
+    results: list[dict]
     query: str
     total: int
     search_type: str
@@ -36,16 +33,16 @@ class PrecedentCreateRequest(BaseModel):
     tribunal: str
     year: int
     roll_number: str
-    full_citation: Optional[str] = None
+    full_citation: str | None = None
     legal_area: str
-    matter_type: Optional[str] = None
+    matter_type: str | None = None
     summary: str
-    reasoning: Optional[str] = None
-    decision: Optional[str] = None
-    disposition: Optional[str] = None
-    voces: Optional[str] = None
-    ponente: Optional[str] = None
-    type: Optional[str] = None
+    reasoning: str | None = None
+    decision: str | None = None
+    disposition: str | None = None
+    voces: str | None = None
+    ponente: str | None = None
+    type: str | None = None
 
 
 class PrecedentResponse(BaseModel):
@@ -54,23 +51,23 @@ class PrecedentResponse(BaseModel):
     tribunal: str
     year: int
     roll_number: str
-    full_citation: Optional[str]
+    full_citation: str | None
     legal_area: str
-    matter_type: Optional[str]
+    matter_type: str | None
     summary: str
-    reasoning: Optional[str]
-    decision: Optional[str]
-    disposition: Optional[str]
-    voces: Optional[str]
+    reasoning: str | None
+    decision: str | None
+    disposition: str | None
+    voces: str | None
 
 
 @router.get("/search", response_model=PrecedentSearchResponse)
 def search_precedents(
     q: str = Query(..., min_length=3, description="Texto de busqueda"),
-    court: Optional[str] = Query(None, description="Filtrar por tribunal"),
-    year: Optional[int] = Query(None, description="Filtrar por año"),
-    legal_area: Optional[str] = Query(None, description="Filtrar por área legal"),
-    matter_type: Optional[str] = Query(None, description="Filtrar por tipo de materia"),
+    court: str | None = Query(None, description="Filtrar por tribunal"),
+    year: int | None = Query(None, description="Filtrar por año"),
+    legal_area: str | None = Query(None, description="Filtrar por área legal"),
+    matter_type: str | None = Query(None, description="Filtrar por tipo de materia"),
     search_type: str = Query("hybrid", description="Tipo de busqueda: semantic, keyword, o hybrid"),
     top_k: int = Query(5, ge=1, le=20, description="Numero de resultados"),
     current_user: User = Depends(get_current_user),
@@ -123,9 +120,9 @@ def search_precedents(
 @router.get("/context")
 def get_precedents_context(
     q: str = Query(..., min_length=3, description="Texto para buscar precedentes"),
-    court: Optional[str] = Query(None),
-    year: Optional[int] = Query(None),
-    legal_area: Optional[str] = Query(None),
+    court: str | None = Query(None),
+    year: int | None = Query(None),
+    legal_area: str | None = Query(None),
     top_k: int = Query(3, ge=1, le=10),
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
@@ -183,11 +180,11 @@ def list_legal_areas_in_precedents(
 @limiter.limit("10/minute")
 def get_analytics(
     request: Request,
-    legal_area: Optional[str] = Query(None, description="Filter by legal area"),
-    court: Optional[str] = Query(None, description="Filter by court"),
-    year_from: Optional[int] = Query(None, description="From year"),
-    year_to: Optional[int] = Query(None, description="To year"),
-    matter_type: Optional[str] = Query(None, description="Filter by matter type"),
+    legal_area: str | None = Query(None, description="Filter by legal area"),
+    court: str | None = Query(None, description="Filter by court"),
+    year_from: int | None = Query(None, description="From year"),
+    year_to: int | None = Query(None, description="To year"),
+    matter_type: str | None = Query(None, description="Filter by matter type"),
     include_text_analysis: bool = Query(False, description="Include text analysis (slower)"),
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),

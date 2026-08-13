@@ -5,15 +5,14 @@ Este módulo analiza documentos legales y extrae datos estructurados SIN resumir
 El contenido completo permanece accesible, pero organizado y searchable.
 """
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime
 import json
+from datetime import datetime
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.document_analysis import DocumentAnalysis
 from app.models.document_chunk import DocumentChunk
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -209,8 +208,8 @@ def get_document_chunks_text(document_id: int) -> str:
 def get_rag_context_for_document_type(document_type: str, organization_id: int) -> str:
     """Obtiene contexto legal relevante usando RAG según el tipo de documento."""
     try:
-        from app.services.rag import hybrid_search
         from app.models.legal_area import LegalArea
+        from app.services.rag import hybrid_search
 
         # Mapear tipo de documento a área legal y query de búsqueda
         type_to_query = {
@@ -350,8 +349,9 @@ def analyze_document_full(document_id: int) -> DocumentAnalysis:
 
         # Generate deadline alerts from contract_timeline
         try:
-            from app.services.deadline_generator import generate_alerts_from_document
             import logging
+
+            from app.services.deadline_generator import generate_alerts_from_document
             logger = logging.getLogger(__name__)
             alert_ids = generate_alerts_from_document(document_id)
             logger.info(f"Generated {len(alert_ids)} deadline alerts for document {document_id}")
@@ -363,8 +363,9 @@ def analyze_document_full(document_id: int) -> DocumentAnalysis:
 
         # Compare clauses against templates to find deviations
         try:
-            from app.services.clause_comparator import compare_contract_clauses_to_templates
             import logging
+
+            from app.services.clause_comparator import compare_contract_clauses_to_templates
             logger = logging.getLogger(__name__)
 
             clauses_by_type = result.get("clauses_by_type", {})
@@ -401,7 +402,10 @@ def analyze_document_full(document_id: int) -> DocumentAnalysis:
 
         # Generate and store markdown info in metadata
         try:
-            from app.services.markdown_generator import analysis_to_markdown, generate_document_markdown_filename
+            from app.services.markdown_generator import (
+                analysis_to_markdown,
+                generate_document_markdown_filename,
+            )
             markdown_content = analysis_to_markdown(analysis, document)
             filename = generate_document_markdown_filename(document)
             raw_metadata = analysis.analysis_metadata
@@ -426,7 +430,7 @@ def analyze_document_full(document_id: int) -> DocumentAnalysis:
         db.close()
 
 
-def get_document_analysis(document_id: int) -> Optional[DocumentAnalysis]:
+def get_document_analysis(document_id: int) -> DocumentAnalysis | None:
     """Obtiene el análisis de un documento si existe."""
     db = SessionLocal()
     try:
@@ -437,7 +441,7 @@ def get_document_analysis(document_id: int) -> Optional[DocumentAnalysis]:
         db.close()
 
 
-def get_all_participants_from_matter(matter_id: int) -> List[Dict]:
+def get_all_participants_from_matter(matter_id: int) -> list[dict]:
     """Extrae todos los participantes de todos los documentos de un matter."""
     db = SessionLocal()
     try:

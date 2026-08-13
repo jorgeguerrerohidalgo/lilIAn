@@ -6,11 +6,11 @@ de análisis genera outputs correctos.
 """
 
 import pytest
+
 from tests.fixtures.legal_cases import (
     load_all_cases,
     load_case_by_id,
     load_cases_by_type,
-    get_test_cases_for_evaluation,
 )
 
 

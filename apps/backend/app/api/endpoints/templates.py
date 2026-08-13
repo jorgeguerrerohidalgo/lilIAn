@@ -1,13 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
 
-from app.core.database import get_db
-from app.models.template import Template
-from app.models.organization_member import OrganizationMember
-from app.models.user import User
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.api.deps.auth import get_current_user, require_organization
+from app.core.database import get_db
+from app.models.organization_member import OrganizationMember
+from app.models.template import Template
+from app.models.user import User
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/templates", tags=["templates"])
 class TemplateCreate(BaseModel):
     template_type: str
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     content: str
     is_global: bool = False
 
@@ -24,7 +24,7 @@ class TemplateResponse(BaseModel):
     id: int
     template_type: str
     name: str
-    description: Optional[str]
+    description: str | None
     content: str
     is_global: bool
     created_at: str
@@ -175,16 +175,16 @@ NOTAS:
 ]
 
 
-@router.get("", response_model=List[TemplateResponse])
+@router.get("", response_model=list[TemplateResponse])
 def list_templates(
-    template_type: Optional[str] = None,
+    template_type: str | None = None,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     query = db.query(Template).filter(
         (Template.organization_id == membership.organization_id) |
-        (Template.is_global == True)
+        (Template.is_global)
     )
 
     if template_type:
@@ -207,7 +207,7 @@ def list_templates(
         db.commit()
         templates = db.query(Template).filter(
             (Template.organization_id == membership.organization_id) |
-            (Template.is_global == True)
+            (Template.is_global)
         ).filter(
             Template.template_type == template_type if template_type else True
         ).order_by(Template.name).all()

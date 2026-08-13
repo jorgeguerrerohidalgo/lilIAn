@@ -1,6 +1,6 @@
-import logging
-from typing import List, Optional, Tuple
 import json
+import logging
+
 import numpy as np
 
 from app.core.database import SessionLocal
@@ -16,7 +16,7 @@ except ImportError:
     LAW_CHUNKS_AVAILABLE = False
 
 
-def cosine_similarity(a: List[float], b: List[float]) -> float:
+def cosine_similarity(a: list[float], b: list[float]) -> float:
     a = np.array(a)
     b = np.array(b)
     norm_a = np.linalg.norm(a)
@@ -27,13 +27,13 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
 
 
 def search_chunks_by_embedding(
-    query_embedding: List[float],
+    query_embedding: list[float],
     organization_id: int,
     matter_id: int,
     top_k: int = 5,
     similarity_threshold: float = 0.3,  # DEBUG: lowering from 0.5 to 0.3
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     db = SessionLocal()
     try:
         # Usar SQL directo para evitar problemas con ORM
@@ -95,7 +95,7 @@ def search_chunks_by_embedding(
                     })
                 else:
                     skipped_threshold += 1
-            except (json.JSONDecodeError, TypeError) as e:
+            except (json.JSONDecodeError, TypeError):
                 errors += 1
                 continue
 
@@ -112,8 +112,8 @@ def search_chunks_by_keyword(
     organization_id: int,
     matter_id: int,
     top_k: int = 10,
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     db = SessionLocal()
     try:
         db_query = db.query(DocumentChunk).filter(
@@ -149,12 +149,12 @@ def search_chunks_by_keyword(
 
 
 def search_laws_by_embedding(
-    query_embedding: List[float],
+    query_embedding: list[float],
     law_code: str = None,
     top_k: int = 5,
     similarity_threshold: float = 0.5,
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     """Busca en chunks de leyes chilenas por embedding."""
     if not LAW_CHUNKS_AVAILABLE:
         return []
@@ -203,8 +203,8 @@ def hybrid_search(
     matter_id: int,
     top_k: int = 5,
     include_laws: bool = True,
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     """
     Búsqueda híbrida con Reciprocal Rank Fusion (RRF).
     Combina resultados de embedding y keyword search usando RRF para mejor ranking.

@@ -1,26 +1,26 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 
-from app.core.database import get_db
-from app.models.matter import Matter, MatterStatus
-from app.models.client import Client
-from app.models.document import Document
-from app.models.document_chunk import DocumentChunk
-from app.models.document_analysis import DocumentAnalysis
-from app.models.analysis_report import AnalysisReport
-from app.models.deadline_alert import DeadlineAlert
-from app.models.chat import ChatSession, ChatMessage
-from app.models.risk_item import RiskItem
-from app.models.organization_member import OrganizationMember
-from app.models.user import User
-from app.schemas.matter import MatterCreate, MatterUpdate, MatterResponse
 from app.api.deps.auth import get_current_user, require_organization
+from app.core.database import get_db
+from app.models.analysis_report import AnalysisReport
+from app.models.chat import ChatMessage, ChatSession
+from app.models.client import Client
+from app.models.deadline_alert import DeadlineAlert
+from app.models.document import Document
+from app.models.document_analysis import DocumentAnalysis
+from app.models.document_chunk import DocumentChunk
+from app.models.matter import Matter
+from app.models.organization_member import OrganizationMember
+from app.models.risk_item import RiskItem
+from app.models.user import User
+from app.schemas.matter import MatterCreate, MatterResponse, MatterUpdate
 
 router = APIRouter(prefix="/matters", tags=["matters"])
 
 
-@router.get("", response_model=List[MatterResponse])
+@router.get("", response_model=list[MatterResponse])
 def list_matters(
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
@@ -187,9 +187,9 @@ def get_matter_participants(
     db: Session = Depends(get_db)
 ):
     """Obtiene todos los participantes del caso con sus documentos."""
+
     from app.services.document_analyzer import get_all_participants_from_matter
-    from app.services.required_documents import REQUIRED_DOCUMENTS, DOCUMENT_TYPE_LABELS
-    import json
+    from app.services.required_documents import REQUIRED_DOCUMENTS
 
     matter = db.query(Matter).filter(
         Matter.id == matter_id,
@@ -209,7 +209,7 @@ def get_matter_participants(
     # Para cada participante, calcular completitud
     result = []
     for p in participants:
-        rut = p.get("rut")
+        p.get("rut")
         doc_ids = p.get("documents", [])
 
         # Obtener tipos de documentos que tiene este participante

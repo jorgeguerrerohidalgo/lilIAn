@@ -1,11 +1,13 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum, Text
-from sqlalchemy.orm import relationship
-from datetime import datetime
 import enum
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 
 
-class MatterType(str, enum.Enum):
+class MatterType(enum.StrEnum):
     CONTRACT_REVIEW = "contract_review"
     LEASE = "lease"
     LABOR = "labor"
@@ -17,7 +19,7 @@ class MatterType(str, enum.Enum):
     OTHER = "other"
 
 
-class MatterStatus(str, enum.Enum):
+class MatterStatus(enum.StrEnum):
     NEW = "new"
     PROCESSING = "processing"
     ANALYSIS_READY = "analysis_ready"
@@ -29,7 +31,7 @@ class MatterStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
-class MatterUrgency(str, enum.Enum):
+class MatterUrgency(enum.StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"

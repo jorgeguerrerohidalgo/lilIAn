@@ -5,15 +5,11 @@ Extracts deadline alerts from contract_timeline and creates DeadlineAlert record
 """
 import json
 from datetime import date, datetime, timedelta
-from typing import List, Optional
-from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.deadline_alert import DeadlineAlert
 from app.models.document import Document
 from app.models.document_analysis import DocumentAnalysis
-from app.models.matter import Matter
-
 
 # Urgency classification based on days remaining
 URGENCY_RULES = {
@@ -58,7 +54,7 @@ def calculate_importance_score(urgency: str, days_remaining: int) -> int:
     return base
 
 
-def parse_timeline_item(item: dict) -> Optional[dict]:
+def parse_timeline_item(item: dict) -> dict | None:
     """Parse a single timeline item and extract alert data.
 
     Handles both naming conventions from the LLM output.
@@ -165,7 +161,7 @@ def parse_timeline_item(item: dict) -> Optional[dict]:
     }
 
 
-def generate_alerts_from_document(document_id: int) -> List[int]:
+def generate_alerts_from_document(document_id: int) -> list[int]:
     """Generate deadline alerts from a document's contract_timeline.
 
     Returns list of created alert IDs.

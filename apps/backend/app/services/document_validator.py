@@ -5,19 +5,18 @@ Performs cross-document validation to detect inconsistencies,
 missing documents, and other validation issues.
 """
 
-from typing import Optional
-from pydantic import BaseModel
 import logging
+
+from pydantic import BaseModel
 
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.matter import Matter
+from app.services.data_extractor import extract_all_matter_documents_data
 from app.services.required_documents import (
-    get_matter_requirements,
     get_document_type_label,
-    get_validation_info
+    get_matter_requirements,
 )
-from app.services.data_extractor import extract_all_matter_documents_data, ExtractedDocumentData
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ def _normalize_name(name: str) -> str:
     return name.lower().strip().replace(".", "").replace(",", "")
 
 
-def _normalize_rut(rut: Optional[str]) -> str:
+def _normalize_rut(rut: str | None) -> str:
     """Normalize a RUT for comparison."""
     if not rut:
         return ""
@@ -71,7 +70,7 @@ def _names_consistent(names: dict[int, list[str]]) -> list[Inconsistency]:
                 all_names[normalized].append(doc_id)
 
     if len(all_names) > 1:
-        doc_id_to_names = {doc_id: names.get(doc_id, []) for doc_id in names.keys()}
+        {doc_id: names.get(doc_id, []) for doc_id in names.keys()}
         inconsistencies.append(Inconsistency(
             validation_type="name_consistency",
             field="name",
@@ -84,7 +83,7 @@ def _names_consistent(names: dict[int, list[str]]) -> list[Inconsistency]:
     return inconsistencies
 
 
-def _rut_consistent(ruts: dict[int, Optional[str]]) -> list[Inconsistency]:
+def _rut_consistent(ruts: dict[int, str | None]) -> list[Inconsistency]:
     """Check if RUTs are consistent across documents."""
     inconsistencies = []
 
@@ -110,7 +109,7 @@ def _rut_consistent(ruts: dict[int, Optional[str]]) -> list[Inconsistency]:
 
 
 def _company_names_consistent(
-    company_names: dict[int, Optional[str]]
+    company_names: dict[int, str | None]
 ) -> list[Inconsistency]:
     """Check if company names are consistent."""
     inconsistencies = []

@@ -1,9 +1,27 @@
-import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api.endpoints import auth, organizations, matters, documents, document_analysis, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas, deadline_alerts, document_generator, precedents, metrics
+from app.api.endpoints import (
+    admin,
+    analysis,
+    auth,
+    chat,
+    clients,
+    deadline_alerts,
+    document_analysis,
+    document_generator,
+    documents,
+    lawyer,
+    legal_areas,
+    matters,
+    metrics,
+    organizations,
+    precedents,
+    saas,
+    search,
+    templates,
+)
 from app.core.config import settings
 
 app = FastAPI(

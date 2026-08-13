@@ -1,9 +1,10 @@
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from app.core.database import get_db
+
 from app.api.deps.auth import get_current_user
-from app.models.user import User
+from app.core.database import get_db
 from app.models.organization_member import OrganizationMember
+from app.models.user import User
 
 
 class TenantContext:
