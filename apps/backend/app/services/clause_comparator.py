@@ -102,121 +102,169 @@ def compare_clause_to_template(
     - deviation_level: "none" | "minor" | "moderate" | "major" | "critical"
     - deviation_description: str
     - risk_score_adjustment: int (-50 to +50)
+
+    S4-12: previously this 127-line function embedded a per-clause
+    switch-statement. Refactor into a registry of per-type handlers so
+    new clause types register with `_register_clause_handler` without
+    touching the dispatcher.
     """
-    from app.services.clause_templates import (
-        get_template_for_clause,
-    )
+    from app.services.clause_templates import get_template_for_clause
 
     template = clause_template or get_template_for_clause(contract_type, clause_type)
 
     if not template:
         return None
 
-    result = {
+    result = _build_baseline_result(template)
+
+    actual_values = extract_clause_value(clause_text, clause_type)
+    if not actual_values:
+        return result
+
+    handler = _CLAUSE_HANDLERS.get(clause_type)
+    if handler is None:
+        return result
+    return handler(result, actual_values, template)
+
+
+def _build_baseline_result(template: dict) -> dict:
+    """Return the no-deviation baseline result populated with template context."""
+    return {
         "has_deviation": False,
         "deviation_level": "none",
         "deviation_description": "",
         "risk_score_adjustment": 0,
         "standard_clause": template.get("standard", ""),
-        "industry_default": template.get("industry_default", "")
+        "industry_default": template.get("industry_default", ""),
     }
 
-    actual_values = extract_clause_value(clause_text, clause_type)
 
-    if not actual_values:
-        # No se pudieron extraer valores para comparar
-        return result
+# ---------------------------------------------------------------------------
+# Per-clause-type handlers
+# ---------------------------------------------------------------------------
+def _check_terminacion(result, actual_values, template):
+    template_vars = template.get("variables", {})
 
-    # Comparaciones específicas por tipo de cláusula
-    if clause_type == "terminacion":
-        template_vars = template.get("variables", {})
+    if actual_values.get("allows_termination_without_cause"):
+        result["has_deviation"] = True
+        result["deviation_level"] = "major"
+        result["deviation_description"] = (
+            "La cláusula permite terminación SIN causa justificada, "
+            "lo cual es desfavorable"
+        )
+        result["risk_score_adjustment"] = 25
+    elif actual_values.get("requires_justified_cause"):
+        result["deviation_description"] = (
+            "La cláusula requiere causa justificada - OK"
+        )
 
-        # Plantilla sin causa es una desviación grave
-        if actual_values.get("allows_termination_without_cause"):
-            result["has_deviation"] = True
-            result["deviation_level"] = "major"
-            result["deviation_description"] = "La cláusula permite terminación SIN causa justificada, lo cual es desfavorable"
-            result["risk_score_adjustment"] = 25
-
-        # Si el template indica que debe tener causa
-        elif actual_values.get("requires_justified_cause"):
-            result["deviation_description"] = "La cláusula requiere causa justificada - OK"
-
-        # Comparar días de aviso
-        if "notice_days" in actual_values and "dias" in template_vars:
-            template_days = template_vars["dias"]
-            actual_days = actual_values["notice_days"]
-
-            if actual_days < template_days:
-                result["has_deviation"] = True
-                if actual_days < template_days * 0.5:
-                    result["deviation_level"] = "major"
-                    result["risk_score_adjustment"] = 20
-                else:
-                    result["deviation_level"] = "moderate"
-                    result["risk_score_adjustment"] = 10
-                result["deviation_description"] = f"Días de aviso previo insuficientes: {actual_days} días vs estándar de {template_days} días"
-
-    elif clause_type == "penalidades":
-        template_vars = template.get("variables", {})
-        template_pct = template_vars.get("porcentaje", 5)
-
-        if "penalty_percentage" in actual_values:
-            actual_pct = actual_values["penalty_percentage"]
-
-            if actual_pct > template_pct * 2:
-                result["has_deviation"] = True
-                result["deviation_level"] = "major"
-                result["risk_score_adjustment"] = 20
-                result["deviation_description"] = f"Penalidad excesiva: {actual_pct}% vs estándar de {template_pct}%"
-            elif actual_pct > template_pct:
-                result["has_deviation"] = True
-                result["deviation_level"] = "moderate"
-                result["risk_score_adjustment"] = 10
-                result["deviation_description"] = f"Penalidad高于标准: {actual_pct}% vs estándar de {template_pct}%"
-
-    elif clause_type == "garantia":
-        template_vars = template.get("variables", {})
-        template_pct = template_vars.get("porcentaje", 10)
-
-        if "guarantee_percentage" in actual_values:
-            actual_pct = actual_values["guarantee_percentage"]
-
-            if actual_pct > template_pct * 2:
-                result["has_deviation"] = True
-                result["deviation_level"] = "major"
-                result["risk_score_adjustment"] = 20
-                result["deviation_description"] = f"Garantía excesiva: {actual_pct}% vs estándar de {template_pct}%"
-            elif actual_pct > template_pct:
-                result["has_deviation"] = True
-                result["deviation_level"] = "minor"
-                result["risk_score_adjustment"] = 5
-                result["deviation_description"] = f"Garantía por encima del estándar: {actual_pct}% vs {template_pct}%"
-
-    elif clause_type == "renovacion":
-        if actual_values.get("is_automatic"):
-            # Renovación automática sin opción de cancelación fácil es desfavorable
-            if not actual_values.get("cancellation_notice_days"):
-                result["has_deviation"] = True
-                result["deviation_level"] = "moderate"
-                result["risk_score_adjustment"] = 10
-                result["deviation_description"] = "Renovación automática sin plazo de aviso para cancelar"
-
-    elif clause_type == "incremento":
-        template_vars = template.get("variables", {})
-        template_pct = template_vars.get("porcentaje", 10)
-
-        if "max_increase_percentage" in actual_values:
-            actual_pct = actual_values["max_increase_percentage"]
-
-            if actual_pct > template_pct:
-                result["has_deviation"] = True
-                result["deviation_level"] = "moderate"
-                result["risk_score_adjustment"] = 10
-                result["deviation_description"] = f"Incremento máximo elevado: {actual_pct}% vs estándar de {template_pct}%"
-
+    actual_days = actual_values.get("notice_days")
+    template_days = template_vars.get("dias")
+    if actual_days is not None and template_days is not None and actual_days < template_days:
+        result["has_deviation"] = True
+        result["deviation_level"] = (
+            "major" if actual_days < template_days * 0.5 else "moderate"
+        )
+        result["risk_score_adjustment"] = (
+            20 if actual_days < template_days * 0.5 else 10
+        )
+        result["deviation_description"] = (
+            f"Días de aviso previo insuficientes: {actual_days} días "
+            f"vs estándar de {template_days} días"
+        )
     return result
 
+
+def _check_penalidades(result, actual_values, template):
+    template_vars = template.get("variables", {})
+    template_pct = template_vars.get("porcentaje", 5)
+    actual_pct = actual_values.get("penalty_percentage")
+    if actual_pct is None:
+        return result
+    if actual_pct > template_pct * 2:
+        result.update({
+            "has_deviation": True,
+            "deviation_level": "major",
+            "risk_score_adjustment": 20,
+            "deviation_description": (
+                f"Penalidad excesiva: {actual_pct}% vs estándar de {template_pct}%"
+            ),
+        })
+    elif actual_pct > template_pct:
+        result.update({
+            "has_deviation": True,
+            "deviation_level": "moderate",
+            "risk_score_adjustment": 10,
+            "deviation_description": (
+                f"Penalidad高于标准: {actual_pct}% vs estándar de {template_pct}%"
+            ),
+        })
+    return result
+
+
+def _check_garantia(result, actual_values, template):
+    template_vars = template.get("variables", {})
+    template_pct = template_vars.get("porcentaje", 10)
+    actual_pct = actual_values.get("guarantee_percentage")
+    if actual_pct is None:
+        return result
+    if actual_pct > template_pct * 2:
+        result.update({
+            "has_deviation": True,
+            "deviation_level": "major",
+            "risk_score_adjustment": 20,
+            "deviation_description": (
+                f"Garantía excesiva: {actual_pct}% vs estándar de {template_pct}%"
+            ),
+        })
+    elif actual_pct > template_pct:
+        result.update({
+            "has_deviation": True,
+            "deviation_level": "minor",
+            "risk_score_adjustment": 5,
+            "deviation_description": (
+                f"Garantía por encima del estándar: {actual_pct}% vs {template_pct}%"
+            ),
+        })
+    return result
+
+
+def _check_renovacion(result, actual_values, template):
+    if actual_values.get("is_automatic") and not actual_values.get("cancellation_notice_days"):
+        result.update({
+            "has_deviation": True,
+            "deviation_level": "moderate",
+            "risk_score_adjustment": 10,
+            "deviation_description": (
+                "Renovación automática sin plazo de aviso para cancelar"
+            ),
+        })
+    return result
+
+
+def _check_incremento(result, actual_values, template):
+    template_vars = template.get("variables", {})
+    template_pct = template_vars.get("porcentaje", 10)
+    actual_pct = actual_values.get("max_increase_percentage")
+    if actual_pct is not None and actual_pct > template_pct:
+        result.update({
+            "has_deviation": True,
+            "deviation_level": "moderate",
+            "risk_score_adjustment": 10,
+            "deviation_description": (
+                f"Incremento máximo elevado: {actual_pct}% vs estándar de {template_pct}%"
+            ),
+        })
+    return result
+
+
+_CLAUSE_HANDLERS = {
+    "terminacion": _check_terminacion,
+    "penalidades": _check_penalidades,
+    "garantia": _check_garantia,
+    "renovacion": _check_renovacion,
+    "incremento": _check_incremento,
+}
 
 def compare_contract_clauses_to_templates(
     clauses_by_type: dict[str, list[str]],

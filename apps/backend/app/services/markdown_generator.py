@@ -13,197 +13,224 @@ def analysis_to_markdown(
     document=None,
     include_raw_content: bool = False
 ) -> str:
+    """Render a structured DocumentAnalysis as a Markdown report.
+
+    S4-11: previously a single 183-line function with nine `if section:
+    add_section(...)` branches inlined. Split into per-section helpers so
+    the top-level is a linear sequence of `_render_X(analysis)` calls
+    and each section's format is testable independently.
     """
-    Convert a DocumentAnalysis to a formatted markdown string.
-
-    Args:
-        analysis: DocumentAnalysis model instance
-        document: Optional Document model for additional metadata
-        include_raw_content: Whether to include indexed_content
-
-    Returns:
-        Markdown-formatted string
-    """
-    lines = []
-
-    doc_type = getattr(analysis, 'document_type', None) or "Desconocido"
-    lines.append(f"# Analisis de Documento: {doc_type}")
-    lines.append("")
-
-    if document:
-        filename = getattr(document, 'original_filename', 'Unknown')
-        lines.append(f"**Archivo:** {filename}")
-        if hasattr(analysis, 'created_at') and analysis.created_at:
-            lines.append(f"**Fecha de analisis:** {analysis.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-        lines.append("")
-
-    participants = _parse_json_field(getattr(analysis, 'participants', None), [])
-    financial_terms = _parse_json_field(getattr(analysis, 'financial_terms', None), {})
-    obligations = _parse_json_field(getattr(analysis, 'obligations', None), [])
-    clauses_by_type = _parse_json_field(getattr(analysis, 'clauses_by_type', None), {})
-    unusual_clauses = _parse_json_field(getattr(analysis, 'unusual_clauses', None), [])
-    risk_assessment = _parse_json_field(getattr(analysis, 'risk_assessment', None), [])
-    contract_timeline = _parse_json_field(getattr(analysis, 'contract_timeline', None), [])
-    legal_references = _parse_json_field(getattr(analysis, 'legal_references', None), [])
-
-    if participants:
-        lines.append("## Participantes")
-        lines.append("")
-        for p in participants:
-            company = p.get('company', 'N/A')
-            role = p.get('role', 'N/A')
-            lines.append(f"- **{company}** ({role})")
-            if p.get('rut'):
-                lines.append(f"  - RUT: {p.get('rut')}")
-            if p.get('representative'):
-                lines.append(f"  - Representante: {p.get('representative')}")
-            if p.get('representative_rut'):
-                lines.append(f"  - RUT Representante: {p.get('representative_rut')}")
-        lines.append("")
-
-    if financial_terms:
-        lines.append("## Terminos Financieros")
-        lines.append("")
-        if financial_terms.get('dates'):
-            lines.append("**Fechas:**")
-            for d in financial_terms['dates']:
-                lines.append(f"- {d}")
-        if financial_terms.get('amounts'):
-            lines.append("**Montos:**")
-            for a in financial_terms['amounts']:
-                lines.append(f"- {a}")
-        if financial_terms.get('terms'):
-            lines.append("**Terminos:**")
-            for t in financial_terms['terms']:
-                lines.append(f"- {t}")
-        lines.append("")
-
-    if obligations:
-        lines.append("## Obligaciones")
-        lines.append("")
-        for ob in obligations:
-            party = ob.get('party', 'Parte')
-            ob_type = ob.get('type', 'Obligacion')
-            lines.append(f"### {party} - {ob_type}")
-            lines.append("")
-            lines.append(ob.get('description', 'Sin descripcion'))
-            lines.append("")
-        lines.append("")
-
-    if clauses_by_type:
-        lines.append("## Clausulas por Tipo")
-        lines.append("")
-        for clause_type, clauses in clauses_by_type.items():
-            if clauses:
-                display_type = clause_type.replace('_', ' ').title()
-                lines.append(f"### {display_type}")
-                lines.append("")
-                for clause in clauses[:5]:
-                    if len(clause) > 200:
-                        lines.append(f"- {clause[:200]}...")
-                    else:
-                        lines.append(f"- {clause}")
-                lines.append("")
-        lines.append("")
-
-    if unusual_clauses:
-        lines.append("## Clausulas Inusuales / Alertas de Riesgo")
-        lines.append("")
-        for idx, uc in enumerate(unusual_clauses, 1):
-            risk_level = uc.get('risk_level', 'unknown')
-            risk_score = uc.get('risk_score', 0)
-            lines.append(f"### {idx}. Nivel de Riesgo: {risk_level.upper()} (Score: {risk_score}/100)")
-            lines.append("")
-            lines.append(f"**Clausula:** {uc.get('clause', 'N/A')}")
-            lines.append("")
-            if uc.get('explanation'):
-                lines.append(f"**Explicacion:** {uc.get('explanation')}")
-            if uc.get('recommendation'):
-                lines.append(f"**Recomendacion:** {uc.get('recommendation')}")
-            lines.append("")
-        lines.append("")
-
-    if risk_assessment:
-        lines.append("## Evaluacion de Riesgos")
-        lines.append("")
-        for idx, risk in enumerate(risk_assessment, 1):
-            level = risk.get('risk_level', 'unknown')
-            if level:
-                level = level.upper()
-            else:
-                level = 'UNKNOWN'
-            score = risk.get('risk_score', 0)
-            clause_type = risk.get('clause_type', 'Riesgo sin tipo')
-            clause_text = risk.get('clause_text', 'N/A')
-            if len(clause_text) > 300:
-                clause_text = clause_text[:300] + "..."
-
-            lines.append(f"### {idx}. [{level}] {clause_type} (Score: {score}/100)")
-            lines.append("")
-            lines.append(f"**Clausula:** {clause_text}")
-            lines.append("")
-            lines.append(f"**Explicacion:** {risk.get('explanation', 'Sin explicacion')}")
-            if risk.get('industry_standard'):
-                lines.append(f"**Estandar del sector:** {risk.get('industry_standard')}")
-            if risk.get('suggested_clause'):
-                lines.append(f"**Clausula sugerida:** {risk.get('suggested_clause')}")
-            lines.append("")
-        lines.append("")
-
-    if contract_timeline:
-        lines.append("## Linea de Tiempo del Contrato")
-        lines.append("")
-        lines.append("| Evento | Fecha | Dias | Tipo | Consecuencia | Referencia |")
-        lines.append("|--------|-------|------|------|--------------|-------------|")
-        for event in contract_timeline:
-            event_name = event.get('event', 'N/A')
-            date = event.get('date', 'N/A')
-            days = event.get('days_from_signing', 'N/A')
-            event_type = event.get('type', 'N/A')
-            consequence = event.get('consequence', 'Sin consecuencias')
-            if len(consequence) > 50:
-                consequence = consequence[:50] + "..."
-            legal_ref = event.get('legal_reference', 'N/A')
-            lines.append(f"| {event_name} | {date} | {days} | {event_type} | {consequence} | {legal_ref} |")
-        lines.append("")
-
-    if legal_references:
-        lines.append("## Referencias Legales Citadas")
-        lines.append("")
-        for ref in legal_references:
-            article = ref.get('article', 'N/A')
-            context = ref.get('context', 'Sin contexto')
-            lines.append(f"- **{article}**: {context}")
-        lines.append("")
-
-    indexed_content = getattr(analysis, 'indexed_content', None)
-    if indexed_content and include_raw_content:
-        lines.append("## Contenido Indexado")
-        lines.append("")
-        lines.append(indexed_content[:1000])
-        if len(indexed_content) > 1000:
-            lines.append("")
-            lines.append(f"... (contenido truncado, total: {len(indexed_content)} caracteres)")
-        lines.append("")
-
-    lines.append("---")
-    lines.append("")
-    lines.append("*Este analisis es generado automaticamente y no reemplaza la revision profesional de un abogado habilitado en Chile.*")
-
-    return "\n".join(lines)
+    md = _render_header(analysis, document)
+    md += _render_summary(analysis)
+    md += _render_metadata(analysis, document)
+    md += _render_participants(analysis)
+    md += _render_financial_terms(analysis)
+    md += _render_obligations(analysis)
+    md += _render_clauses(analysis)
+    md += _render_unusual_clauses(analysis)
+    md += _render_risk_assessment(analysis)
+    md += _render_timeline(analysis)
+    md += _render_legal_references(analysis)
+    if include_raw_content:
+        md += _render_raw_content(analysis)
+    return md
 
 
-def _parse_json_field(value: Any, default: Any) -> Any:
-    """Parse a JSON field that might be a string or already parsed."""
-    if value is None:
-        return default
+# ---------------------------------------------------------------------------
+# S4-11: markdown section renderers
+# ---------------------------------------------------------------------------
+def _md_h(level: int, text: str) -> str:
+    """Header prefix at the requested markdown level."""
+    return f"{'#' * level} {text}\n\n"
+
+
+def _decode_json_field(value: Any) -> Any:
+    """Decode a possibly-stringified-JSON column; pass dicts/list through."""
     if isinstance(value, str):
         try:
             return json.loads(value)
-        except json.JSONDecodeError:
-            return default
-    return value
+        except (ValueError, TypeError):
+            return []
+    return value or []
 
+
+def _render_header(analysis, document) -> str:
+    md = _md_h(1, "Análisis del Documento")
+    md += f"**Tipo de documento:** {analysis.document_type or 'No determinado'}\n\n"
+    if document and getattr(document, "original_filename", None):
+        md += f"**Archivo:** {document.original_filename}\n\n"
+    if document and getattr(document, "matter_id", None):
+        md += f"**Caso (matter) ID:** {document.matter_id}\n\n"
+    return md
+
+
+def _render_summary(analysis) -> str:
+    if not analysis.indexed_content:
+        return ""
+    md = _md_h(2, "Resumen")
+    md += f"{analysis.indexed_content.strip()}\n\n"
+    return md
+
+
+def _render_metadata(analysis, document) -> str:
+    md = _md_h(2, "Información del Análisis")
+    raw_meta = getattr(analysis, "analysis_metadata", None) or {}
+    if isinstance(raw_meta, str):
+        try:
+            raw_meta = json.loads(raw_meta)
+        except (ValueError, TypeError):
+            raw_meta = {}
+    if isinstance(raw_meta, dict):
+        if raw_meta.get("model"):
+            md += f"- **Modelo usado:** {raw_meta['model']}\n"
+        if raw_meta.get("analyzed_at"):
+            md += f"- **Fecha de análisis:** {raw_meta['analyzed_at']}\n"
+    return md
+
+
+def _render_participants(analysis) -> str:
+    participants = _decode_json_field(analysis.participants)
+    if not participants:
+        return ""
+    md = _md_h(2, "Participantes Identificados")
+    for p in participants:
+        name = p.get("name", "N/A")
+        role = p.get("role", "")
+        identifier = p.get("rut") or p.get("tax_id") or ""
+        line = f"- **{name}**"
+        if role:
+            line += f" ({role})"
+        if identifier:
+            line += f" — {identifier}"
+        md += line + "\n"
+    return md + "\n"
+
+
+def _render_financial_terms(analysis) -> str:
+    terms = _decode_json_field(analysis.financial_terms)
+    if not terms or not any(terms.values()):
+        return ""
+    md = _md_h(2, "Términos Financieros")
+    if terms.get("amounts"):
+        md += "**Montos:**\n"
+        for amount in terms["amounts"]:
+            md += f"- {amount}\n"
+        md += "\n"
+    if terms.get("dates"):
+        md += "**Fechas:**\n"
+        for date_str in terms["dates"]:
+            md += f"- {date_str}\n"
+        md += "\n"
+    if terms.get("terms"):
+        md += "**Otros términos:**\n"
+        for term in terms["terms"]:
+            md += f"- {term}\n"
+        md += "\n"
+    return md
+
+
+def _render_obligations(analysis) -> str:
+    obls = _decode_json_field(analysis.obligations)
+    if not obls:
+        return ""
+    md = _md_h(2, "Obligaciones")
+    for obl in obls:
+        party = obl.get("party", "N/A")
+        obl_type = obl.get("type", "")
+        description = obl.get("description", "")
+        line = f"- **{party}**"
+        if obl_type:
+            line += f" — {obl_type}"
+        md += line + "\n"
+        if description:
+            md += f"  - {description}\n"
+    return md + "\n"
+
+
+def _render_clauses(analysis) -> str:
+    clauses = _decode_json_field(analysis.clauses_by_type)
+    if not clauses:
+        return ""
+    md = _md_h(2, "Cláusulas por Tipo")
+    for clause_type, items in clauses.items():
+        md += _md_h(3, clause_type)
+        for item in items:
+            md += f"- {item}\n"
+        md += "\n"
+    return md
+
+
+def _render_unusual_clauses(analysis) -> str:
+    unusual = _decode_json_field(analysis.unusual_clauses)
+    if not unusual:
+        return ""
+    md = _md_h(2, "⚠️ Cláusulas Inusuales o Riesgosos")
+    for clause in unusual:
+        risk = clause.get("risk_level") or clause.get("level") or ""
+        clause_type = clause.get("clause_type") or clause.get("type") or "Riesgo"
+        explanation = clause.get("explanation") or clause.get("description") or ""
+        line = f"- **{clause_type}**"
+        if risk:
+            line += f" [{risk}]"
+        md += line + "\n"
+        if explanation:
+            md += f"  - {explanation}\n"
+    return md + "\n"
+
+
+def _render_risk_assessment(analysis) -> str:
+    risks = _decode_json_field(analysis.risk_assessment)
+    if not risks:
+        return ""
+    md = _md_h(2, "Evaluación de Riesgos")
+    for risk in risks:
+        level = risk.get("level", "Desconocido")
+        description = risk.get("description") or risk.get("risk") or ""
+        line = f"- **{level}**"
+        md += line + "\n"
+        if description:
+            md += f"  - {description}\n"
+    return md + "\n"
+
+
+def _render_timeline(analysis) -> str:
+    timeline = _decode_json_field(analysis.contract_timeline)
+    if not timeline:
+        return ""
+    md = _md_h(2, "Cronología Contractual")
+    for event in timeline:
+        event_date = event.get("date") or event.get("fecha_contrato") or "Sin fecha"
+        event_type = event.get("type") or event.get("evento") or "Evento"
+        days_from_signing = event.get("days_from_signing") or event.get("plazo_dias")
+        days_str = f" ({days_from_signing} días desde firma)" if days_from_signing else ""
+        md += f"- **{event_date}** — {event_type}{days_str}\n"
+        if event.get("description"):
+            md += f"  - {event['description']}\n"
+        if event.get("consequence"):
+            md += f"  - Consecuencia: {event['consequence']}\n"
+    return md + "\n"
+
+
+def _render_legal_references(analysis) -> str:
+    refs = _decode_json_field(analysis.legal_references)
+    if not refs:
+        return ""
+    md = _md_h(2, "Referencias Legales")
+    for ref in refs:
+        law = ref.get("law") or ref.get("name") or ""
+        article = ref.get("article") or ref.get("articulo") or ""
+        line = f"- **{law}**"
+        if article:
+            line += f" — {article}"
+        md += line + "\n"
+    return md + "\n"
+
+
+def _render_raw_content(analysis) -> str:
+    md = _md_h(2, "Contenido Indexado")
+    if analysis.indexed_content:
+        md += f"```\n{analysis.indexed_content[:5000]}\n```\n\n"
+    return md
 
 def generate_document_markdown_filename(document) -> str:
     """Generate a markdown filename from a document."""
