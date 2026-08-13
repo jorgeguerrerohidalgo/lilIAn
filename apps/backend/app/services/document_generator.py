@@ -66,85 +66,124 @@ def fill_template(template_text: str, variables: dict) -> str:
     - {{#if variable}}...{{/if}} - condición if
     - {{#if variable}}...{{else}}...{{/if}} - condición if/else
     - {{#if !variable}}...{{/if}} - condición if negada
+
+    S4-13: previously this 86-line function held an if-block parser as a
+    nested closure. Extract the parser into module-level helpers so the
+    dispatcher becomes a clean two-step pipeline: process all if-blocks,
+    then substitute remaining variables.
     """
+    if_pattern = re.compile(r"\{\{#if\s*!?(\w+)\}\}", re.DOTALL)
 
-    if_pattern = re.compile(r'\{\{#if\s*!?(\w+)\}}', re.DOTALL)
+    result = _process_all_if_blocks(template_text, variables, if_pattern)
+    result = _substitute_remaining_variables(result, variables)
+    return result
 
-    def process_one_if(text):
-        """Encuentra y procesa el primer bloque if en el texto."""
-        match = if_pattern.search(text)
-        if not match:
-            return None
 
-        var_name = match.group(1)
-        is_negated = match.group(0).startswith('{{#if !')
-        start_pos = match.start()
-        after_open = match.end()
-
-        # Buscar el {{/if}} o {{else}} correspondiente
-        search_pos = after_open
-        depth = 1
-        else_pos = None
-
-        while depth > 0 and search_pos < len(text):
-            next_brace = text.find('{{', search_pos)
-            if next_brace == -1:
-                return None
-
-            if text[next_brace:].startswith('{{#if'):
-                depth += 1
-                search_pos = next_brace + 5
-            elif text[next_brace:].startswith('{{/if}}'):
-                depth -= 1
-                if depth == 0:
-                    endif_pos = next_brace
-                    break
-                search_pos = next_brace + 6
-            elif depth == 1 and text[next_brace:].startswith('{{else}}'):
-                else_pos = next_brace
-                search_pos = next_brace + 7
-            else:
-                search_pos = next_brace + 2
-        else:
-            return None
-
-        # Extraer contenido
-        if else_pos:
-            if_content = text[after_open:else_pos]
-            else_content = text[else_pos + 7:endif_pos]
-        else:
-            if_content = text[after_open:endif_pos]
-            else_content = None
-
-        # Evaluar condición
-        condition = bool(variables.get(var_name))
-        if is_negated:
-            condition = not condition
-
-        if condition:
-            replacement = if_content
-        else:
-            replacement = else_content if else_content else ""
-
-        # Retornar: texto antes + replacement + texto después del endif
-        return text[:start_pos] + replacement + text[endif_pos + 7:]
-
-    # Procesar todos los ifs iterativamente
+def _process_all_if_blocks(
+    template_text: str, variables: dict, if_pattern: re.Pattern
+) -> str:
+    """Iteratively scan for if/else/endif directives and expand each one
+    in place. Stops when no more if directives remain.
+    """
     result = template_text
     while True:
-        new_result = process_one_if(result)
+        new_result = _process_one_if_block(result, variables, if_pattern)
         if new_result is None:
             break
         result = new_result
-
-    # Procesar todas las variables restantes
-    for key, value in variables.items():
-        if value is None:
-            value = ""
-        result = result.replace('{{' + key + '}}', str(value))
-
     return result
 
+
+def _process_one_if_block(
+    text: str, variables: dict, if_pattern: re.Pattern
+) -> str | None:
+    """Process the first if-block in text, returning the rewritten string;
+    return None when no if-block remains.
+    """
+    match = if_pattern.search(text)
+    if not match:
+        return None
+
+    var_name, is_negated = _if_block_metadata(match)
+    start_pos = match.start()
+    after_open = match.end()
+
+    endif_pos, else_pos = _find_endif_and_else(text, after_open)
+    if endif_pos is None:
+        return None
+
+    if_content, else_content = _split_if_content(text, after_open, else_pos, endif_pos)
+
+    replacement = _eval_if_condition(variables, var_name, is_negated, if_content, else_content)
+    return text[:start_pos] + replacement + text[endif_pos + 7:]
+
+
+def _if_block_metadata(match: re.Match) -> tuple[str, bool]:
+    """Return (variable_name, is_negated) extracted from the if-open regex."""
+    return match.group(1), match.group(0).startswith("{{#if !")
+
+
+def _find_endif_and_else(text: str, search_start: int) -> tuple[int | None, int | None]:
+    """Walk the template tracking nested if-blocks; return (endif_pos, else_pos).
+
+    Both positions are absolute indices in ``text``. ``else_pos`` is None
+    when the if-block has no else branch.
+    """
+    search_pos = search_start
+    depth = 1
+    else_pos = None
+    while depth > 0 and search_pos < len(text):
+        next_brace = text.find("{{", search_pos)
+        if next_brace == -1:
+            return None, None
+        if text[next_brace:].startswith("{{#if"):
+            depth += 1
+            search_pos = next_brace + 5
+        elif text[next_brace:].startswith("{{/if}}"):
+            depth -= 1
+            if depth == 0:
+                return next_brace, else_pos
+            search_pos = next_brace + 6
+        elif depth == 1 and text[next_brace:].startswith("{{else}}"):
+            else_pos = next_brace
+            search_pos = next_brace + 7
+        else:
+            search_pos = next_brace + 2
+    return None, None
+
+
+def _split_if_content(
+    text: str, after_open: int, else_pos: int | None, endif_pos: int
+) -> tuple[str, str | None]:
+    """Slice the if/else content between directives. else_content is None
+    when the if-block has no else branch.
+    """
+    if else_pos is not None:
+        return text[after_open:else_pos], text[else_pos + 7:endif_pos]
+    return text[after_open:endif_pos], None
+
+
+def _eval_if_condition(
+    variables: dict, var_name: str, is_negated: bool, if_content: str, else_content: str | None
+) -> str:
+    """Return the replacement string based on whether the condition holds."""
+    truthy = bool(variables.get(var_name))
+    if is_negated:
+        truthy = not truthy
+    if truthy:
+        return if_content
+    return else_content if else_content else ""
+
+
+def _substitute_remaining_variables(template_text: str, variables: dict) -> str:
+    """Replace {{var}} occurrences with their stringified values after the
+    if-block pass has run.
+    """
+    result = template_text
+    for key, value in variables.items():
+        replacement = "" if value is None else str(value)
+        result = result.replace("{{" + key + "}}", replacement)
+    return result
 
 def generate_document(
     template_id: str,
