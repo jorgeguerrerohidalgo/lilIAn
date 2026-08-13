@@ -158,11 +158,13 @@ def delete_matter(
     # S1-11: explicit cascade cleanup so we don't leak orphans in the DB
     # or in storage. Order matters — child rows before the parent matter.
     # DocumentAnalysis doesn't have a matter_id column — its link to a
-    # matter is indirect via Document.matter_id. We join through Document
-    # before deletion.
+    # matter is indirect via Document. We resolve the document ids first
+    # and delete by subquery (SQLAlchemy forbids .delete() after .join()).
     db.query(RiskItem).filter(RiskItem.matter_id == matter_id).delete(synchronize_session=False)
     db.query(DocumentChunk).filter(DocumentChunk.matter_id == matter_id).delete(synchronize_session=False)
-    db.query(DocumentAnalysis).join(Document).filter(Document.matter_id == matter_id).delete(synchronize_session=False)
+    doc_ids = [d.id for d in db.query(Document.id).filter(Document.matter_id == matter_id).all()]
+    if doc_ids:
+        db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id.in_(doc_ids)).delete(synchronize_session=False)
     db.query(AnalysisReport).filter(AnalysisReport.matter_id == matter_id).delete(synchronize_session=False)
     db.query(DeadlineAlert).filter(DeadlineAlert.matter_id == matter_id).delete(synchronize_session=False)
     db.query(ChatMessage).filter(ChatMessage.matter_id == matter_id).delete(synchronize_session=False)
