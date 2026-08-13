@@ -69,7 +69,7 @@ app.include_router(legal_areas.router, prefix="/api/v1")
 app.include_router(deadline_alerts.router, prefix="/api/v1")
 app.include_router(document_generator.router, prefix="/api/v1")
 app.include_router(precedents.router, prefix="/api/v1")
-app.include_router(metrics.router, prefix="/api/v1")
+app.include_router(metrics.router)
 
 
 @app.get("/")
