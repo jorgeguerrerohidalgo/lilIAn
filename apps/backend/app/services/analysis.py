@@ -8,6 +8,7 @@ from app.models.analysis_report import AnalysisReport
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.matter import Matter
+from app.models.review import Review, ReviewStatus
 from app.models.risk_item import RiskItem
 
 # S1-06: phrases that strongly suggest the upstream document (or the LLM
@@ -1080,133 +1081,127 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
 # GATE DE REVISIÓN - Análisis no aprobado no debe usarse para decisiones
 # =============================================================================
 
-def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> dict[str, Any]:
-    """
-    Verifica si un análisis puede ser usado para decisiones automatizadas.
+def can_use_analysis_for_automated_decisions(
+    analysis_report_id: int, db
+) -> dict[str, Any]:
+    """Verifica si un análisis puede ser usado para decisiones automatizadas.
 
     Política explícita (S0-13):
     - Si ``requires_human_review=True``, el gate SOLO se abre cuando
-      ``review_approved=True`` (un Review humano en estado ``APPROVED``).
+      ``review_approved=True``.
     - Si ``requires_human_review=False``, el análisis puede usarse sin
-      revisión, pero la trazabilidad queda registrada explícitamente
-      vía ``review_status="auto_approved"`` en la respuesta. La
-      aplicación cliente debe mostrar esta distinción al usuario.
+      revisión con ``review_status="auto_approved"`` para que la UI
+      pueda distinguir.
     - Por defecto (sin información suficiente), el gate se mantiene
       cerrado para evitar decisiones legales sin auditoría.
 
-    Returns:
-        Dict con:
-        - can_use: bool indicating if analysis is approved for automated use
-        - requires_review: bool indicating if human review is required
-        - reason: str explaining why analysis cannot be used
-        - review_status: str with current review status if any
+    S4-17: previously a 99-line function with a chain of review-status
+    branches and dict comprehensions inline. Refactor into per-status
+    gate decisions so the top-level is a small switch-style flow.
     """
-    from app.models.review import Review, ReviewStatus
-
-    report = db.query(AnalysisReport).filter(
-        AnalysisReport.id == analysis_report_id
-    ).first()
-
+    report = (
+        db.query(AnalysisReport)
+        .filter(AnalysisReport.id == analysis_report_id)
+        .first()
+    )
     if not report:
-        return {
-            "can_use": False,
-            "requires_review": False,
-            "reason": "Analysis not found",
-            "review_status": None
-        }
+        return _missing_report_response()
 
-    # Si requiere revisión humana, gate SOLO se abre con review_approved=True.
-    if report.requires_human_review:
-        if report.review_approved:
-            return {
-                "can_use": True,
-                "requires_review": True,
-                "reason": None,
-                "review_status": "approved"
-            }
-        # Requiere revisión y NO está aprobada — buscar contexto del review.
-        latest_review = db.query(Review).filter(
-            Review.analysis_report_id == analysis_report_id
-        ).order_by(Review.created_at.desc()).first()
+    if not report.requires_human_review:
+        return _auto_approved_response()
 
-        if latest_review is None:
-            return {
-                "can_use": False,
-                "requires_review": True,
-                "reason": "Analysis requires human review but no review has been submitted",
-                "review_status": None
-            }
+    # requires_human_review=True path: gate opens only on approved review.
+    if report.review_approved:
+        return _approved_response()
 
-        if latest_review.status == ReviewStatus.PENDING:
-            return {
-                "can_use": False,
-                "requires_review": True,
-                "reason": "Analysis is pending review",
-                "review_status": "pending"
-            }
+    latest_review = _latest_review_for(db, analysis_report_id)
+    if latest_review is None:
+        return _no_review_response()
 
-        if latest_review.status == ReviewStatus.REJECTED:
-            return {
-                "can_use": False,
-                "requires_review": True,
-                "reason": f"Analysis was rejected: {latest_review.rejection_reason}",
-                "review_status": "rejected",
-                "suggested_changes": latest_review.suggested_changes
-            }
+    return _evaluate_review_status(latest_review)
 
-        if latest_review.status == ReviewStatus.DRAFT:
-            return {
-                "can_use": False,
-                "requires_review": True,
-                "reason": "Analysis review is still in draft state",
-                "review_status": "draft"
-            }
 
-        # Default conservador: NO permitir uso automatizado.
-        return {
-            "can_use": False,
-            "requires_review": True,
-            "reason": "Analysis cannot be used for automated decisions",
-            "review_status": latest_review.status
-        }
+def _missing_report_response() -> dict:
+    return {
+        "can_use": False,
+        "requires_review": False,
+        "reason": "Analysis not found",
+        "review_status": None,
+    }
 
-    # No requiere revisión humana: el análisis puede usarse, pero la
-    # respuesta deja explícito que fue auto-aprobado para que la UI pueda
-    # informar al usuario.
+
+def _auto_approved_response() -> dict:
+    """Returned when the report doesn't require human review.
+
+    The gate is open (``can_use=True``) but the response is annotated
+    ``review_status="auto_approved"`` so the UI can communicate this
+    distinction to the user.
+    """
     return {
         "can_use": True,
         "requires_review": False,
         "reason": None,
-        "review_status": "auto_approved"
+        "review_status": "auto_approved",
     }
 
 
-def update_analysis_review_status(analysis_report_id: int, review_status: str, db) -> None:
-    """
-    Actualiza el campo review_approved del análisis basado en el estado del review.
+def _approved_response() -> dict:
+    return {
+        "can_use": True,
+        "requires_review": True,
+        "reason": None,
+        "review_status": "approved",
+    }
 
-    Args:
-        analysis_report_id: ID del análisis
-        review_status: Estado del review (approved/rejected/pending)
-        db: sesión de base de datos
-    """
-    # S3-02: acquire a pessimistic lock so two concurrent reviewers can't
-    # race the same row and end up with an inconsistent review_approved
-    # value. The lock is released automatically when the transaction
-    # commits below.
-    report = (
-        db.query(AnalysisReport)
-        .filter(AnalysisReport.id == analysis_report_id)
-        .with_for_update()
+
+def _no_review_response() -> dict:
+    return {
+        "can_use": False,
+        "requires_review": True,
+        "reason": "Analysis requires human review but no review has been submitted",
+        "review_status": None,
+    }
+
+
+def _latest_review_for(db, analysis_report_id: int):
+    return (
+        db.query(Review)
+        .filter(Review.analysis_report_id == analysis_report_id)
+        .order_by(Review.created_at.desc())
         .first()
     )
 
-    if not report:
-        return
 
-    if review_status == "approved":
-        report.review_approved = True
-    elif review_status in ["pending", "draft", "rejected"]:
-        report.review_approved = False
+def _evaluate_review_status(latest_review) -> dict:
+    status = latest_review.status
+    if status == ReviewStatus.PENDING:
+        return {
+            "can_use": False,
+            "requires_review": True,
+            "reason": "Analysis is pending review",
+            "review_status": "pending",
+        }
+    if status == ReviewStatus.REJECTED:
+        return {
+            "can_use": False,
+            "requires_review": True,
+            "reason": f"Analysis was rejected: {latest_review.rejection_reason}",
+            "review_status": "rejected",
+            "suggested_changes": latest_review.suggested_changes,
+        }
+    if status == ReviewStatus.DRAFT:
+        return {
+            "can_use": False,
+            "requires_review": True,
+            "reason": "Analysis review is still in draft state",
+            "review_status": "draft",
+        }
+    # Default conservative: deny.
+    return {
+        "can_use": False,
+        "requires_review": True,
+        "reason": "Analysis cannot be used for automated decisions",
+        "review_status": status,
+    }
 
-    db.commit()
+
