@@ -161,9 +161,10 @@ def delete_matter(
 
     # S1-02: snapshot storage paths BEFORE we touch the DB. We need them
     # to call storage.delete_file() after the transaction commits, because
-    # once Documents are deleted the file_path column is gone.
+    # once Documents are deleted the storage_path column is gone.
+    # NOTE: the model column is `storage_path`, not `file_path`.
     storage_paths: list[tuple[int, str | None]] = [
-        (d.id, d.file_path)
+        (d.id, d.storage_path)
         for d in db.query(Document).filter(Document.matter_id == matter_id).all()
     ]
 
@@ -195,14 +196,14 @@ def delete_matter(
     # recoverable; orphan files are tracked separately for janitor jobs).
     from app.services.storage import delete_file as storage_delete_file
 
-    for doc_id, file_path in storage_paths:
-        if not file_path:
+    for doc_id, storage_path in storage_paths:
+        if not storage_path:
             continue
         try:
-            if not storage_delete_file(file_path):
+            if not storage_delete_file(storage_path):
                 logger.warning(
                     "storage_delete_returned_false",
-                    extra={"matter_id": matter_id, "doc_id": doc_id, "file_path": file_path},
+                    extra={"matter_id": matter_id, "doc_id": doc_id, "storage_path": storage_path},
                 )
         except Exception as exc:
             logger.error(
@@ -210,7 +211,7 @@ def delete_matter(
                 extra={
                     "matter_id": matter_id,
                     "doc_id": doc_id,
-                    "file_path": file_path,
+                    "storage_path": storage_path,
                     "error": str(exc),
                 },
             )
