@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
-from app.api.endpoints import auth, organizations, matters, documents, document_analysis, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas, deadline_alerts, document_generator, precedents
+from app.api.endpoints import auth, organizations, matters, documents, document_analysis, search, analysis, chat, lawyer, templates, saas, admin, clients, legal_areas, deadline_alerts, document_generator, precedents, metrics
 from app.core.config import settings
 
 app = FastAPI(
@@ -69,6 +69,7 @@ app.include_router(legal_areas.router, prefix="/api/v1")
 app.include_router(deadline_alerts.router, prefix="/api/v1")
 app.include_router(document_generator.router, prefix="/api/v1")
 app.include_router(precedents.router, prefix="/api/v1")
+app.include_router(metrics.router, prefix="/api/v1")
 
 
 @app.get("/")

@@ -7,12 +7,24 @@ from app.core.config import settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+def _truncate_password(password: str) -> str:
+    """Truncate password to 72 bytes for bcrypt compatibility.
+
+    passlib <1.8 with bcrypt>=4.2 raises ValueError on >72-byte inputs
+    (see S1-15 / CVE-2024-32661). Pre-truncating here keeps us compatible
+    with the new bcrypt API while documenting the limit explicitly.
+    """
+    if isinstance(password, str):
+        return password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return password[:72]
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(_truncate_password(plain_password), hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(_truncate_password(password))
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
