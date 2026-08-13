@@ -165,15 +165,11 @@ async def validate_matter_documents(
     matter_id: int,
     organization_id: int
 ) -> ValidationResult:
-    """
-    Validates all documents for a matter against the requirements.
+    """Validates all documents for a matter against the requirements.
 
-    Args:
-        matter_id: ID of the matter
-        organization_id: ID of the organization
-
-    Returns:
-        ValidationResult with all validation issues found
+    S4-14: previously this 95-line function embedded the full
+    cross-document consistency flow inline. Refactor into helpers per
+    data dimension so the top-level reads as the validation pipeline.
     """
     db = SessionLocal()
     try:
@@ -181,72 +177,31 @@ async def validate_matter_documents(
         if not matter:
             raise ValueError(f"Matter {matter_id} not found")
 
-        matter_type_value = matter.matter_type.value if hasattr(matter.matter_type, 'value') else str(matter.matter_type)
+        matter_type_value = (
+            matter.matter_type.value if hasattr(matter.matter_type, "value")
+            else str(matter.matter_type)
+        )
         requirements = get_matter_requirements(matter_type_value)
+        documents = _fetch_processed_documents(db, matter_id, organization_id)
 
-        documents = db.query(Document).filter(
-            Document.matter_id == matter_id,
-            Document.organization_id == organization_id,
-            Document.status == "processed"
-        ).all()
-
-        document_types_found: dict[str, int] = {}
-        for doc in documents:
-            doc_type = doc.detected_document_type or "unknown"
-            document_types_found[doc_type] = document_types_found.get(doc_type, 0) + 1
-
-        required_types = set(requirements.get("required", []))
-        recommended_types = set(requirements.get("recommended", []))
-        validation_types = requirements.get("validations", [])
-
-        present_types = set(document_types_found.keys())
-
-        missing_required = list(required_types - present_types)
-        missing_recommended = list(recommended_types - present_types)
-
+        document_types_found = _count_document_types(documents)
         all_data = await extract_all_matter_documents_data(matter_id, organization_id)
 
-        inconsistencies: list[Inconsistency] = []
-        warnings: list[str] = []
+        inconsistencies = _run_consistency_checks(
+            requirements, all_data
+        )
+        warnings, missing_required, missing_recommended = _compute_warnings(
+            requirements, document_types_found.keys()
+        )
 
-        if "name_consistency" in validation_types:
-            names = {doc_id: data.names for doc_id, data in all_data.items() if data.names}
-            inconsistencies.extend(_names_consistent(names))
+        is_valid, error_count = _evaluate_validity(
+            missing_required, inconsistencies
+        )
 
-        if "rut_consistency" in validation_types:
-            ruts = {doc_id: data.rut for doc_id, data in all_data.items()}
-            inconsistencies.extend(_rut_consistent(ruts))
-
-        if "company_name_consistency" in validation_types:
-            company_names = {doc_id: data.company_name for doc_id, data in all_data.items()}
-            inconsistencies.extend(_company_names_consistent(company_names))
-
-        if "employer_consistency" in validation_types or "role_consistency" in validation_types:
-            roles = {doc_id: data.roles for doc_id, data in all_data.items() if data.roles}
-            inconsistencies.extend(_roles_consistent(roles))
-
-        error_count = sum(1 for i in inconsistencies if i.severity == "error")
-        is_valid = len(missing_required) == 0 and error_count == 0
-
-        validation_summary = {
-            "total_documents": len(documents),
-            "document_types_found": document_types_found,
-            "required_types": list(required_types),
-            "required_found": list(required_types & present_types),
-            "required_missing": missing_required,
-            "recommended_found": list(recommended_types & present_types),
-            "recommended_missing": missing_recommended,
-            "total_inconsistencies": len(inconsistencies),
-            "errors": sum(1 for i in inconsistencies if i.severity == "error"),
-            "warnings": sum(1 for i in inconsistencies if i.severity == "warning")
-        }
-
-        if missing_required:
-            warnings.append(f"Documentos requeridos faltantes: {', '.join([get_document_type_label(t) for t in missing_required])}")
-
-        if missing_recommended:
-            warnings.append(f"Documentos recomendados faltantes: {', '.join([get_document_type_label(t) for t in missing_recommended])}")
-
+        validation_summary = _build_validation_summary(
+            documents, document_types_found, requirements,
+            missing_required, missing_recommended, inconsistencies,
+        )
         return ValidationResult(
             is_valid=is_valid,
             inconsistencies=inconsistencies,
@@ -254,8 +209,102 @@ async def validate_matter_documents(
             missing_recommended=missing_recommended,
             warnings=warnings,
             document_types_found=document_types_found,
-            validation_summary=validation_summary
+            validation_summary=validation_summary,
         )
-
     finally:
         db.close()
+
+
+def _fetch_processed_documents(db, matter_id: int, organization_id: int) -> list:
+    """Return the documents that have completed processing."""
+    return db.query(Document).filter(
+        Document.matter_id == matter_id,
+        Document.organization_id == organization_id,
+        Document.status == "processed",
+    ).all()
+
+
+def _count_document_types(documents: list) -> dict[str, int]:
+    """Build a histogram of detected_document_type across documents."""
+    counts: dict[str, int] = {}
+    for doc in documents:
+        doc_type = doc.detected_document_type or "unknown"
+        counts[doc_type] = counts.get(doc_type, 0) + 1
+    return counts
+
+
+def _run_consistency_checks(requirements: dict, all_data: dict) -> list:
+    """Apply each enabled consistency check and collect all issues."""
+    enabled = requirements.get("validations", [])
+    inconsistencies: list[Inconsistency] = []
+
+    if "name_consistency" in enabled:
+        names = {doc_id: data.names for doc_id, data in all_data.items() if data.names}
+        inconsistencies.extend(_names_consistent(names))
+
+    if "rut_consistency" in enabled:
+        ruts = {doc_id: data.rut for doc_id, data in all_data.items()}
+        inconsistencies.extend(_rut_consistent(ruts))
+
+    if "company_name_consistency" in enabled:
+        names = {doc_id: data.company_name for doc_id, data in all_data.items()}
+        inconsistencies.extend(_company_names_consistent(names))
+
+    if "employer_consistency" in enabled or "role_consistency" in enabled:
+        roles = {doc_id: data.roles for doc_id, data in all_data.items() if data.roles}
+        inconsistencies.extend(_roles_consistent(roles))
+
+    return inconsistencies
+
+
+def _compute_warnings(requirements: dict, present_types_iter) -> tuple[list, list, list]:
+    """Return (warnings, missing_required, missing_recommended)."""
+    required_types = set(requirements.get("required", []))
+    recommended_types = set(requirements.get("recommended", []))
+    present_types = set(present_types_iter)
+
+    missing_required = list(required_types - present_types)
+    missing_recommended = list(recommended_types - present_types)
+    warnings = []
+    if missing_required:
+        warnings.append(
+            f"Documentos requeridos faltantes: {', '.join(get_document_type_label(t) for t in missing_required)}"
+        )
+    if missing_recommended:
+        warnings.append(
+            f"Documentos recomendados faltantes: {', '.join(get_document_type_label(t) for t in missing_recommended)}"
+        )
+    return warnings, missing_required, missing_recommended
+
+
+def _evaluate_validity(missing_required: list, inconsistencies: list) -> tuple:
+    """A matter is valid when all required docs are present and no error-level
+    inconsistencies were found.
+    """
+    error_count = sum(1 for i in inconsistencies if i.severity == "error")
+    is_valid = len(missing_required) == 0 and error_count == 0
+    return is_valid, error_count
+
+
+def _build_validation_summary(
+    documents, document_types_found, requirements,
+    missing_required, missing_recommended, inconsistencies,
+) -> dict:
+    """Roll up everything the API consumer needs in one dict."""
+    required_types = set(requirements.get("required", []))
+    recommended_types = set(requirements.get("recommended", []))
+    present_types = set(document_types_found.keys())
+    return {
+        "total_documents": len(documents),
+        "document_types_found": document_types_found,
+        "required_types": list(required_types),
+        "required_found": list(required_types & present_types),
+        "required_missing": missing_required,
+        "recommended_found": list(recommended_types & present_types),
+        "recommended_missing": missing_recommended,
+        "total_inconsistencies": len(inconsistencies),
+        "errors": sum(1 for i in inconsistencies if i.severity == "error"),
+        "warnings": sum(1 for i in inconsistencies if i.severity == "warning"),
+    }
+
+
