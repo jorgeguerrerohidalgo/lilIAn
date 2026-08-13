@@ -4,6 +4,7 @@ from datetime import datetime
 
 import fitz
 from docx import Document as DocxDocument
+from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.document import Document
@@ -338,6 +339,10 @@ def process_document(document_id: int, force: bool = False) -> dict:
     """
     Procesa un documento de forma idempotente.
 
+    S4-07: previously this was a single 128-line function with nested
+    branches. Split into focused helpers below so the top-level reads
+    as a linear pipeline and each step is independently testable.
+
     Args:
         document_id: ID del documento a procesar
         force: Si True, fuerza el reprocesamiento incluso si ya fue procesado
@@ -364,92 +369,64 @@ def process_document(document_id: int, force: bool = False) -> dict:
             return {"error": "Documento no encontrado", "status": "error"}
 
         logger.info(f"[PROCESS] Doc {document_id}: status={document.status}, mime={document.mime_type}, path={document.storage_path}")  # S4-05
-        # Verificar si ya fue procesado (y no es forzado)
-        if document.status == "processed" and not force:
-            existing_chunks = db.query(DocumentChunk).filter(
-                DocumentChunk.document_id == document_id
-            ).count()
-            if existing_chunks > 0:
-                logger.info(f"[PROCESS] Doc {document_id} already processed, skipping")  # S4-05
-                return {
-                    "document_id": document_id,
-                    "status": "already_processed",
-                    "skipped": True,
-                    "message": "Documento ya fue procesado, usa force=True para reprocesar",
-                    "chunk_count": existing_chunks
-                }
+
+        # Idempotency: if already processed and not forcing, bail out.
+        skipped = _skip_already_processed(db, document, force)
+        if skipped is not None:
+            return skipped
 
         document.status = "processing"
         db.commit()
-        logger.info(f"[PROCESS] Doc {document_id} status -> processing")  # S4-05
-        # Inferir legal_area desde el matter
-        legal_area = None
-        if document.matter_id:
-            matter = db.query(Matter).filter(Matter.id == document.matter_id).first()
-            if matter and matter.matter_type:
-                legal_area = get_legal_area_from_matter_type(matter.matter_type.value)
-                logger.info(f"[PROCESS] Doc {document_id}: legal_area={legal_area}")  # S4-05
-        if document.storage_path:
-            from app.services.storage import get_file_path
-            file_path = get_file_path(document.storage_path)
-            logger.info(f"[PROCESS] Doc {document_id}: file_path={file_path}")  # S4-05
-            if file_path:
-                logger.info(f"[PROCESS] Doc {document_id}: Calling extract_text_from_file")  # S4-05
-                extracted_text = extract_text_from_file(file_path, document.mime_type)
-                document.extracted_text = extracted_text
-                logger.info(f"[PROCESS] Doc {document_id}: extracted_text length={len(extracted_text) if extracted_text else 0}")  # S4-05
-                logger.info(f"[PROCESS] Doc {document_id}: === EXTRACTED TEXT START ===")  # S4-05
-                logger.debug(extracted_text[:3000] if extracted_text else "EMPTY")  # S4-05
-                logger.info(f"[PROCESS] Doc {document_id}: === EXTRACTED TEXT END (total: {len(extracted_text) if extracted_text else 0} chars) ===")  # S4-05
-                if document.mime_type == "application/pdf":
-                    try:
-                        doc = fitz.open(file_path)
-                        document.page_count = len(doc)
-                        doc.close()
-                        logger.info(f"[PROCESS] Doc {document_id}: PDF page_count={document.page_count}")  # S4-05
-                    except Exception as e:
-                        logger.info(f"[PROCESS] Doc {document_id}: Error getting page count: {e}")  # S4-05
-                document.status = "processed"
-                document.processed_at = datetime.utcnow()
-                db.commit()
-                logger.info(f"[PROCESS] Doc {document_id}: status -> processed, extracted_text saved ({len(extracted_text) if extracted_text else 0} chars)")  # S4-05
-                # Crear chunks de forma idempotente
-                logger.info(f"[PROCESS] Doc {document_id}: Creating chunks")  # S4-05
-                chunk_result = create_chunks_for_document(
-                    document_id=document.id,
-                    extracted_text=extracted_text,
-                    organization_id=document.organization_id,
-                    matter_id=document.matter_id,
-                    db=db,
-                    legal_area=legal_area,
-                    force=force
-                )
-                logger.info(f"[PROCESS] Doc {document_id}: chunk_result={chunk_result}")  # S4-05
-                # Clasificar documento de forma async (no bloquea procesamiento)
-                logger.info(f"[PROCESS] Doc {document_id}: Calling _classify_document_async")  # S4-05
-                _classify_document_async(document.id)
+        logger.info(f"[PROCESS] Doc {document_id}: status -> processing")  # S4-05
 
-                logger.info(f"[PROCESS] Doc {document_id}: COMPLETED SUCCESSFULLY")  # S4-05
-                return {
-                    "document_id": document_id,
-                    "status": document.status,
-                    "extracted_length": len(document.extracted_text) if document.extracted_text else 0,
-                    "legal_area": legal_area.value if legal_area else None,
-                    "chunks_created": chunk_result.get("created", 0),
-                    "chunks_skipped": chunk_result.get("skipped", False),
-                    "content_hash": chunk_result.get("content_hash")
-                }
+        legal_area = _infer_legal_area(db, document)
+        if legal_area:
+            logger.info(f"[PROCESS] Doc {document_id}: legal_area={legal_area}")  # S4-05
 
-            else:
-                logger.info(f"[PROCESS] Doc {document_id}: ERROR file_path is None")  # S4-05
-                document.status = "failed"
-                db.commit()
-                return {"error": "Storage path no encontrado", "status": "failed"}
-        else:
-            logger.info(f"[PROCESS] Doc {document_id}: ERROR storage_path is None")  # S4-05
-            document.status = "failed"
-            db.commit()
-            return {"error": "No tiene storage_path", "status": "failed"}
+        # Storage resolution + extraction
+        if not document.storage_path:
+            return _fail_document(db, document, "No tiene storage_path")
+        from app.services.storage import get_file_path
+        file_path = get_file_path(document.storage_path)
+        if not file_path:
+            return _fail_document(db, document, "Storage path no encontrado")
+
+        extracted_text = _extract_and_store_text(db, document, file_path)
+        if extracted_text is None:
+            return _fail_document(db, document, "Text extraction failed")
+
+        # PDF page count is best-effort; never blocks processing.
+        _record_pdf_page_count(document, file_path)
+
+        document.status = "processed"
+        document.processed_at = datetime.utcnow()
+        db.commit()
+        logger.info(f"[PROCESS] Doc {document_id}: status -> processed, extracted_text saved ({len(extracted_text)} chars)")  # S4-05
+
+        chunk_result = create_chunks_for_document(
+            document_id=document.id,
+            extracted_text=extracted_text,
+            organization_id=document.organization_id,
+            matter_id=document.matter_id,
+            db=db,
+            legal_area=legal_area,
+            force=force,
+        )
+        logger.info(f"[PROCESS] Doc {document_id}: chunk_result={chunk_result}")  # S4-05
+
+        # Clasificar documento de forma async (no bloquea procesamiento)
+        _classify_document_async(document.id)
+
+        logger.info(f"[PROCESS] Doc {document_id}: COMPLETED SUCCESSFULLY")  # S4-05
+        return {
+            "document_id": document_id,
+            "status": document.status,
+            "extracted_length": len(document.extracted_text) if document.extracted_text else 0,
+            "legal_area": legal_area.value if legal_area else None,
+            "chunks_created": chunk_result.get("created", 0),
+            "chunks_skipped": chunk_result.get("skipped", False),
+            "content_hash": chunk_result.get("content_hash"),
+        }
 
     except Exception as e:
         logger.info(f"[PROCESS] Doc {document_id}: EXCEPTION {type(e).__name__}: {str(e)}")  # S4-05
@@ -462,6 +439,114 @@ def process_document(document_id: int, force: bool = False) -> dict:
     finally:
         db.close()
         logger.info(f"[PROCESS] Doc {document_id}: Finished, db closed")  # S4-05
+
+
+# ---------------------------------------------------------------------------
+# S4-07: process_document helpers
+# ---------------------------------------------------------------------------
+def _skip_already_processed(
+    db: Session, document: Document, force: bool
+) -> dict | None:
+    """Return a skip-result dict if the document was already processed;
+    otherwise return None so the pipeline continues.
+
+    S4-07 extraction: idempotency check isolated from process_document.
+    """
+    if document.status == "processed" and not force:
+        existing_chunks = (
+            db.query(DocumentChunk)
+            .filter(DocumentChunk.document_id == document.id)
+            .count()
+        )
+        if existing_chunks > 0:
+            logger.info(
+                f"[PROCESS] Doc {document.id} already processed, skipping"
+            )
+            return {
+                "document_id": document.id,
+                "status": "already_processed",
+                "skipped": True,
+                "message": (
+                    "Documento ya fue procesado, usa force=True para reprocesar"
+                ),
+                "chunk_count": existing_chunks,
+            }
+    return None
+
+
+def _infer_legal_area(db: Session, document: Document):
+    """Return the LegalArea derived from the document's matter type, or None.
+
+    S4-07 extraction: scoping the infer-legal-area step lets us add tests
+    for this lookup without going through the whole pipeline.
+    """
+    if not document.matter_id:
+        return None
+    matter = (
+        db.query(Matter).filter(Matter.id == document.matter_id).first()
+    )
+    if not matter or not matter.matter_type:
+        return None
+    return get_legal_area_from_matter_type(matter.matter_type.value)
+
+
+def _fail_document(db: Session, document: Document, error_msg: str) -> dict:
+    """Mark the document as failed and return the error response.
+
+    S4-07 extraction: shared failure path used by both the storage_path
+    resolution and extraction branches.
+    """
+    logger.info(f"[PROCESS] Doc {document.id}: {error_msg}")
+    document.status = "failed"
+    db.commit()
+    return {"error": error_msg, "status": "failed"}
+
+
+def _extract_and_store_text(
+    db: Session, document: Document, file_path: str
+) -> str | None:
+    """Extract text from the file and persist it on the Document row.
+
+    S4-07 extraction: returns the extracted text on success. The
+    storage backend should have already raised for I/O errors so a None
+    return here means the file disappeared mid-processing.
+    """
+    logger.info(f"[PROCESS] Doc {document.id}: Calling extract_text_from_file")
+    extracted_text = extract_text_from_file(file_path, document.mime_type)
+    document.extracted_text = extracted_text
+    logger.info(
+        f"[PROCESS] Doc {document.id}: extracted_text length="
+        f"{len(extracted_text) if extracted_text else 0}"
+    )
+    logger.info(f"[PROCESS] Doc {document.id}: === EXTRACTED TEXT START ===")
+    logger.debug(extracted_text[:3000] if extracted_text else "EMPTY")
+    logger.info(
+        f"[PROCESS] Doc {document.id}: === EXTRACTED TEXT END "
+        f"(total: {len(extracted_text) if extracted_text else 0} chars) ==="
+    )
+    return extracted_text
+
+
+def _record_pdf_page_count(document: Document, file_path: str) -> None:
+    """Best-effort PDF page count recording.
+
+    S4-07 extraction: swallows any PyMuPDF error so processing never
+    fails because of a side-channel metadata read.
+    """
+    if document.mime_type != "application/pdf":
+        return
+    try:
+        with fitz.open(file_path) as pdf_doc:
+            document.page_count = len(pdf_doc)
+        logger.info(
+            f"[PROCESS] Doc {document.id}: PDF page_count={document.page_count}"
+        )
+    except Exception as exc:
+        logger.info(
+            f"[PROCESS] Doc {document.id}: Error getting page count: {exc}"
+        )
+
+
 def _classify_document_async(document_id: int) -> None:
     """Clasifica un documento de forma asíncrona."""
     import asyncio

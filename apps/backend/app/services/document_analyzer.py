@@ -9,7 +9,6 @@ import json
 import logging
 from datetime import datetime
 
-from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.document_analysis import DocumentAnalysis
@@ -264,171 +263,253 @@ def get_rag_context_for_document_type(document_type: str, organization_id: int) 
 
 
 def analyze_document_full(document_id: int) -> DocumentAnalysis:
-    """Analiza un documento y genera estructura estilo Harvey.ai."""
-    from app.services.llm import get_llm_provider
+    """Analiza un documento y genera estructura estilo Harvey.ai.
 
+    S4-08: previously a single 166-line function with three side-effects
+    blocks (LLM call, deadline alerts, clause comparison) and three
+    error-swallowing try/except. Now each stage is its own helper and
+    the top-level reads as a linear pipeline.
+    """
     db = SessionLocal()
     try:
-        # Obtener documento
-        document = db.query(Document).filter(Document.id == document_id).first()
-        if not document:
-            raise ValueError(f"Documento {document_id} no encontrado")
+        document = _load_document_for_analysis(document_id)
+        extracted_text = _normalize_extracted_text(document)
 
-        # Verificar que tiene texto extraído
-        if not document.extracted_text:
-            raise ValueError("El documento no tiene texto extraído aún")
+        rag_context = get_rag_context_for_document_type(
+            document.detected_document_type or "unknown",
+            document.organization_id,
+        )
+        prompt = _build_analysis_prompt(extracted_text, rag_context)
 
-        # Asegurar que extracted_text es string
-        extracted_text = str(document.extracted_text) if document.extracted_text else ""
+        # Persist or update the analysis row once with a base shape; the
+        # downstream enrichment steps (deadlines, clauses) can keep
+        # writing to the same row without recreating it.
+        analysis = _get_or_create_analysis(db, document_id, document)
 
-        # Obtener contexto RAG basado en tipo de documento
-        doc_type = document.detected_document_type or "unknown"
-        rag_context = get_rag_context_for_document_type(doc_type, document.organization_id)
-
-        # Generar análisis con LLM
-        provider = get_llm_provider()
-        base_prompt = PROMPT_ANALYSIS.replace("{text}", extracted_text[:50000] if extracted_text else "")
-
-        # Incluir contexto RAG si está disponible
-        if rag_context:
-            prompt = base_prompt.replace(
-                "El texto del documento es:",
-                f"{rag_context}\n\nEl texto del documento es:"
-            )
-        else:
-            prompt = base_prompt
-
-        try:
-            result = provider.generate_structured(prompt, "", DOCUMENT_ANALYSIS_SCHEMA)
-        except Exception as e:
-            # Si falla, crear análisis vacío
-            result = {
-                "document_type": document.detected_document_type or "unknown",
-                "participants": [],
-                "financial_terms": {"dates": [], "amounts": [], "terms": []},
-                "obligations": [],
-                "clauses_by_type": {},
-                "unusual_clauses": [],
-                "legal_references": [],
-                "risk_assessment": [],
-                "contract_timeline": [],
-                "summary": f"Error en análisis: {str(e)}"
-            }
-
-        # Crear o actualizar análisis
-        analysis = db.query(DocumentAnalysis).filter(
-            DocumentAnalysis.document_id == document_id
-        ).first()
-
-        if not analysis:
-            analysis = DocumentAnalysis(
-                document_id=document_id,
-                organization_id=document.organization_id
-            )
-            db.add(analysis)
-
-        # Actualizar campos
-        analysis.document_type = result.get("document_type", document.detected_document_type)
-        analysis.participants = json.dumps(result.get("participants", []))
-        analysis.financial_terms = json.dumps(result.get("financial_terms", {}))
-        analysis.obligations = json.dumps(result.get("obligations", []))
-        analysis.clauses_by_type = json.dumps(result.get("clauses_by_type", {}))
-        analysis.unusual_clauses = json.dumps(result.get("unusual_clauses", []))
-        analysis.risk_assessment = json.dumps(result.get("risk_assessment", []))
-        analysis.contract_timeline = json.dumps(result.get("contract_timeline", []))
-        analysis.legal_references = json.dumps(result.get("legal_references", []))
-        analysis.indexed_content = result.get("summary", "")
-
-        # Metadata
-        analysis.analysis_metadata = json.dumps({
-            "model": settings.LLM_MODEL,
-            "analyzed_at": datetime.utcnow().isoformat()
-        })
+        result = _call_llm_with_fallback(document, prompt)
+        _persist_analysis_result(analysis, result)
 
         db.commit()
         db.refresh(analysis)
 
-        # Generate deadline alerts from contract_timeline
+        # Downstream enrichments are best-effort — failure of one
+        # shouldn't roll back the analysis itself.
         try:
-            import logging
-
-            from app.services.deadline_generator import generate_alerts_from_document
-            logger = logging.getLogger(__name__)
-            alert_ids = generate_alerts_from_document(document_id)
-            logger.info(f"Generated {len(alert_ids)} deadline alerts for document {document_id}")
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error generating deadline alerts: {e}", exc_info=True)
-            pass  # Don't fail analysis if alerts fail
-
-        # Compare clauses against templates to find deviations
-        try:
-            import logging
-
-            from app.services.clause_comparator import compare_contract_clauses_to_templates
-            logger = logging.getLogger(__name__)
-
-            clauses_by_type = result.get("clauses_by_type", {})
-            if clauses_by_type:
-                contract_type = document.detected_document_type or "contract_review"
-                deviations = compare_contract_clauses_to_templates(clauses_by_type, contract_type)
-                if deviations:
-                    logger.info(f"Found {len(deviations)} clause deviations in document {document_id}")
-
-                    # Add deviations to unusual_clauses if significant
-                    unusual_clauses = result.get("unusual_clauses", [])
-                    for deviation in deviations:
-                        if deviation.get("deviation_level") in ["major", "critical"]:
-                            unusual_clauses.append({
-                                "type": "template_deviation",
-                                "clause_type": deviation.get("clause_type"),
-                                "clause": deviation.get("clause_text"),
-                                "risk_level": "medium" if deviation.get("deviation_level") == "major" else "high",
-                                "explanation": deviation.get("description"),
-                                "risk_score": 60 + deviation.get("risk_score_adjustment", 0),
-                                "recommendation": f"Revisar vs estándar: {deviation.get('industry_default')}",
-                                "industry_standard": deviation.get("standard_clause"),
-                                "deviation_level": deviation.get("deviation_level")
-                            })
-
-                    # Update unusual_clauses in analysis
-                    analysis.unusual_clauses = json.dumps(unusual_clauses)
-                    db.commit()
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error comparing clauses to templates: {e}", exc_info=True)
-            pass  # Don't fail analysis if comparison fails
-
-        # Generate and store markdown info in metadata
-        try:
-            from app.services.markdown_generator import (
-                analysis_to_markdown,
-                generate_document_markdown_filename,
+            _enrich_with_deadline_alerts(document_id)
+        except Exception as exc:
+            logger.warning(
+                f"Deadline alerts enrichment failed for {document_id}: {exc}"
             )
-            markdown_content = analysis_to_markdown(analysis, document)
-            filename = generate_document_markdown_filename(document)
-            raw_metadata = analysis.analysis_metadata
-            if isinstance(raw_metadata, str):
-                metadata = json.loads(raw_metadata) if raw_metadata else {}
-            elif isinstance(raw_metadata, dict):
-                metadata = raw_metadata
-            else:
-                metadata = {}
-            metadata['markdown_filename'] = filename
-            metadata['markdown_generated_at'] = datetime.utcnow().isoformat()
-            metadata['markdown_size'] = len(markdown_content)
-            analysis.analysis_metadata = metadata
+        try:
+            _enrich_with_clause_comparisons(analysis, result, document)
             db.commit()
-            logger.info(f"Generated markdown for document {document_id}: {filename}")
-        except Exception as e:
-            logger.warning(f"Failed to generate markdown for document {document_id}: {e}")
+        except Exception as exc:
+            logger.warning(
+                f"Clause comparison enrichment failed for {document_id}: {exc}"
+            )
+        _attach_markdown_metadata(analysis, document)
+        db.commit()
 
         return analysis
-
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# S4-08: analyze_document_full pipeline helpers
+# ---------------------------------------------------------------------------
+def _load_document_for_analysis(document_id: int) -> Document:
+    """Return the document row or raise ValueError when missing or empty.
+
+    Empty extracted_text is treated as "not yet analyzed" — the caller
+    surfaces that as a 400 in the endpoint layer.
+    """
+    db = SessionLocal()
+    try:
+        document = (
+            db.query(Document).filter(Document.id == document_id).first()
+        )
+    finally:
+        db.close()
+    if not document:
+        raise ValueError(f"Documento {document_id} no encontrado")
+    if not document.extracted_text:
+        raise ValueError("El documento no tiene texto extraído aún")
+    return document
+
+
+def _normalize_extracted_text(document: Document) -> str:
+    """Coerce extracted_text to string (defensive: column is JSON-backed)."""
+    return str(document.extracted_text) if document.extracted_text else ""
+
+
+def _build_analysis_prompt(extracted_text: str, rag_context: str | None) -> str:
+    """Inject the document text (truncated to 50k chars) and optional RAG
+    context into the analysis prompt template.
+    """
+    truncated = extracted_text[:50_000] if extracted_text else ""
+    base_prompt = PROMPT_ANALYSIS.replace("{text}", truncated)
+    if rag_context:
+        return base_prompt.replace(
+            "El texto del documento es:",
+            f"{rag_context}\n\nEl texto del documento es:",
+        )
+    return base_prompt
+
+
+def _call_llm_with_fallback(document: Document, prompt: str) -> dict:
+    """Return the LLM-generated structured dict, or a graceful empty
+    shape when the provider fails. Failure is logged but never raised
+    because downstream code always needs SOMETHING to persist.
+    """
+    from app.services.llm import get_llm_provider
+
+    try:
+        provider = get_llm_provider()
+        return provider.generate_structured(prompt, "", DOCUMENT_ANALYSIS_SCHEMA)
+    except Exception as exc:
+        logger.warning(
+            f"LLM analysis failed for doc {document.id}: {exc}; "
+            "persisting empty shape"
+        )
+        return _empty_analysis_result(document)
+
+
+def _empty_analysis_result(document: Document) -> dict:
+    """Last-resort structure when the LLM call fails. Keeps the JSON
+    schema consistent so downstream consumers can rely on the shape.
+    """
+    return {
+        "document_type": document.detected_document_type or "unknown",
+        "participants": [],
+        "financial_terms": {"dates": [], "amounts": [], "terms": []},
+        "obligations": [],
+        "clauses_by_type": {},
+        "unusual_clauses": [],
+        "legal_references": [],
+        "risk_assessment": [],
+        "contract_timeline": [],
+        "summary": "",
+    }
+
+
+def _get_or_create_analysis(db, document_id: int, document: Document) -> DocumentAnalysis:
+    """Return the existing DocumentAnalysis row or create one with sane defaults."""
+    analysis = (
+        db.query(DocumentAnalysis)
+        .filter(DocumentAnalysis.document_id == document_id)
+        .first()
+    )
+    if analysis is None:
+        analysis = DocumentAnalysis(
+            document_id=document_id,
+            organization_id=document.organization_id,
+        )
+        db.add(analysis)
+    return analysis
+
+
+def _persist_analysis_result(analysis: DocumentAnalysis, result: dict) -> None:
+    """Apply the LLM dict to the row. JSON columns are encoded here so
+    the schema/export logic stays consistent.
+    """
+    analysis.document_type = result.get(
+        "document_type", analysis.document_type or "unknown"
+    )
+    analysis.participants = json.dumps(result.get("participants", []))
+    analysis.financial_terms = json.dumps(result.get("financial_terms", {}))
+    analysis.obligations = json.dumps(result.get("obligations", []))
+    analysis.clauses_by_type = json.dumps(result.get("clauses_by_type", {}))
+    analysis.unusual_clauses = json.dumps(result.get("unusual_clauses", []))
+    analysis.risk_assessment = json.dumps(result.get("risk_assessment", []))
+    analysis.contract_timeline = json.dumps(result.get("contract_timeline", []))
+    analysis.legal_references = json.dumps(result.get("legal_references", []))
+    analysis.indexed_content = result.get("summary", "")
+
+
+def _enrich_with_deadline_alerts(document_id: int) -> None:
+    """Generate deadline alerts derived from contract_timeline."""
+    from app.services.deadline_generator import generate_alerts_from_document
+
+    alert_ids = generate_alerts_from_document(document_id)
+    logger.info(
+        f"Generated {len(alert_ids)} deadline alerts for document {document_id}"
+    )
+
+
+def _enrich_with_clause_comparisons(
+    analysis: DocumentAnalysis, result: dict, document: Document
+) -> None:
+    """Compare clauses against the template library and append major/critical
+    deviations to ``unusual_clauses``.
+    """
+    clauses_by_type = result.get("clauses_by_type", {})
+    if not clauses_by_type:
+        return
+    from app.services.clause_comparator import (
+        compare_contract_clauses_to_templates,
+    )
+
+    contract_type = document.detected_document_type or "contract_review"
+    deviations = compare_contract_clauses_to_templates(
+        clauses_by_type, contract_type
+    )
+    if not deviations:
+        return
+
+    logger.info(
+        f"Found {len(deviations)} clause deviations in document {document.id}"
+    )
+
+    unusual = list(result.get("unusual_clauses", []))
+    for deviation in deviations:
+        level = deviation.get("deviation_level")
+        if level not in {"major", "critical"}:
+            continue
+        unusual.append({
+            "type": "template_deviation",
+            "clause_type": deviation.get("clause_type"),
+            "clause": deviation.get("clause_text"),
+            "risk_level": "medium" if level == "major" else "high",
+            "explanation": deviation.get("description"),
+            "risk_score": 60 + deviation.get("risk_score_adjustment", 0),
+            "recommendation": (
+                f"Revisar vs estándar: {deviation.get('industry_default')}"
+            ),
+            "industry_standard": deviation.get("standard_clause"),
+            "deviation_level": level,
+        })
+    analysis.unusual_clauses = json.dumps(unusual)
+
+
+def _attach_markdown_metadata(analysis: DocumentAnalysis, document: Document) -> None:
+    """Render the analysis to markdown and record filename + size in metadata
+    so the export endpoint can serve it later without recomputing.
+    """
+    from app.services.markdown_generator import (
+        analysis_to_markdown,
+        generate_document_markdown_filename,
+    )
+
+    markdown_content = analysis_to_markdown(analysis, document)
+    filename = generate_document_markdown_filename(document)
+
+    raw_metadata = analysis.analysis_metadata
+    if isinstance(raw_metadata, str):
+        metadata = json.loads(raw_metadata) if raw_metadata else {}
+    elif isinstance(raw_metadata, dict):
+        metadata = raw_metadata
+    else:
+        metadata = {}
+
+    metadata["markdown_filename"] = filename
+    metadata["markdown_generated_at"] = datetime.utcnow().isoformat()
+    metadata["markdown_size"] = len(markdown_content)
+    analysis.analysis_metadata = metadata
+    logger.info(
+        f"Generated markdown for document {document.id}: {filename}"
+    )
+
 
 
 def get_document_analysis(document_id: int) -> DocumentAnalysis | None:
