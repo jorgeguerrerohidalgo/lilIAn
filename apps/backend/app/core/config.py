@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # S2 regression guard: `.env` files in shared deployments often
+        # carry vars from another service (encryption keys, storage backends
+        # for other tools). With pydantic's default "forbid extras" the app
+        # would refuse to boot whenever someone adds a stray key. The trade-
+        # off is that typos in variable names go undetected, so the CI
+        # smoke test should still verify required-vars presence at startup.
+        extra = "ignore"
 
     def get_allowed_origins(self) -> list:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]

@@ -56,3 +56,4 @@ apps/frontend/tsconfig.tsbuildinfo
 .code-review-graph/
 # Claude Code local config (commit .claude/settings.json if reproducible setup needed)
 .claude/settings.local.json
+.env*
