@@ -197,6 +197,9 @@ def search_laws_by_embedding(
         db.close()
 
 
+_RRF_K_DEFAULT = 60  # Constante típica para Reciprocal Rank Fusion
+
+
 def hybrid_search(
     query: str,
     organization_id: int,
@@ -205,113 +208,113 @@ def hybrid_search(
     include_laws: bool = True,
     legal_area: LegalArea | None = None
 ) -> list[dict]:
-    """
-    Búsqueda híbrida con Reciprocal Rank Fusion (RRF).
-    Combina resultados de embedding y keyword search usando RRF para mejor ranking.
-    """
-    embedding_provider = None
-    try:
-        from app.services.embeddings import get_embedding_provider
-        embedding_provider = get_embedding_provider()
-        query_embedding = embedding_provider.generate_embedding(query)
-        logger.debug(f"[DEBUG RAG] Query embedding generated, length: {len(query_embedding)}")  # S4-05
-        embedding_results = search_chunks_by_embedding(
-            query_embedding, organization_id, matter_id, top_k * 3,
-            legal_area=legal_area
-        )
-        logger.debug(f"[DEBUG RAG] Document embedding results: {len(embedding_results)}")  # S4-05
-    except Exception as e:
-        logger.debug(f"[DEBUG RAG] Embedding search failed: {e}")  # S4-05
-        import traceback
-        traceback.print_exc()
-        embedding_results = []
+    """Búsqueda híbrida con Reciprocal Rank Fusion (RRF).
 
+    Combina resultados de embedding y keyword search usando RRF para
+    mejor ranking.
+
+    S4-16: previously a 118-line function with three embedded concerns
+    (embedding fetch, keyword fetch, RRF fusion). Split into three
+    helpers so the top-level is the strategy + the merge.
+    """
+    embedding_results = _run_embedding_search(
+        query, organization_id, matter_id, top_k, legal_area
+    )
     keyword_results = search_chunks_by_keyword(
-        query, organization_id, matter_id, top_k * 3,
-        legal_area=legal_area
+        query, organization_id, matter_id, top_k * 3, legal_area=legal_area
     )
     logger.debug(f"[DEBUG RAG] Keyword results: {len(keyword_results)}")  # S4-05
-    # RRF: Reciprocal Rank Fusion para combinar rankings
-    rrf_k = 60  # Constante típica para RRF
 
-    # Crear diccionario de resultados por chunk_id
-    all_results = {}
+    merged = _merge_with_rrf(embedding_results, keyword_results)
+    ranked = _sort_by_rrf_score(merged)
+    return ranked[:top_k]
 
-    # Agregar resultados de embedding search con su ranking
+
+def _run_embedding_search(
+    query: str, organization_id: int, matter_id: int,
+    top_k: int, legal_area: LegalArea | None,
+) -> list[dict]:
+    """Run the embedding-based search; degrade gracefully on provider errors."""
+    try:
+        from app.services.embeddings import get_embedding_provider
+
+        provider = get_embedding_provider()
+        query_embedding = provider.generate_embedding(query)
+        logger.debug(
+            f"[DEBUG RAG] Query embedding generated, length: {len(query_embedding)}"
+        )  # S4-05
+        results = search_chunks_by_embedding(
+            query_embedding, organization_id, matter_id, top_k * 3,
+            legal_area=legal_area,
+        )
+        logger.debug(f"[DEBUG RAG] Document embedding results: {len(results)}")
+        return results
+    except Exception as exc:
+        logger.debug(f"[DEBUG RAG] Embedding search failed: {exc}")  # S4-05
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def _merge_with_rrf(
+    embedding_results: list[dict], keyword_results: list[dict]
+) -> dict[int, dict]:
+    """Combine two ranked result lists using Reciprocal Rank Fusion.
+
+    Each result dict is augmented with ``source``, ``embedding_rank``,
+    ``keyword_rank``, ``embedding_score`` and ``keyword_score`` fields so
+    downstream scoring can weight by rank origin.
+    """
+    merged: dict[int, dict] = {}
+
     for rank, result in enumerate(embedding_results, 1):
         chunk_id = result["chunk_id"]
-        result["source"] = "embedding"
-        result["embedding_rank"] = rank
-        result["keyword_rank"] = None
-        result["embedding_score"] = result["similarity"]
-        result["keyword_score"] = 0
-        all_results[chunk_id] = result
+        merged[chunk_id] = {
+            **result,
+            "source": "embedding",
+            "embedding_rank": rank,
+            "keyword_rank": None,
+            "embedding_score": result["similarity"],
+            "keyword_score": 0,
+        }
 
-    # Agregar/actualizar resultados de keyword search
     for rank, result in enumerate(keyword_results, 1):
         chunk_id = result["chunk_id"]
-        if chunk_id in all_results:
-            # Ya existe, actualizar ranks y scores
-            all_results[chunk_id]["keyword_rank"] = rank
-            all_results[chunk_id]["keyword_score"] = result["keyword_count"]
-            all_results[chunk_id]["source"] = "both"  # Aparece en ambos
+        if chunk_id in merged:
+            merged[chunk_id]["keyword_rank"] = rank
+            merged[chunk_id]["keyword_score"] = result.get("score", 1.0)
+            merged[chunk_id]["source"] = "both"
         else:
-            # Nuevo resultado solo de keyword
-            result["source"] = "keyword"
-            result["embedding_rank"] = None
-            result["keyword_rank"] = rank
-            result["embedding_score"] = 0
-            result["keyword_score"] = result["keyword_count"]
-            all_results[chunk_id] = result
+            merged[chunk_id] = {
+                **result,
+                "source": "keyword",
+                "embedding_rank": None,
+                "keyword_rank": rank,
+                "embedding_score": 0,
+                "keyword_score": result.get("score", 1.0),
+            }
 
-    # Calcular RRF score para cada resultado
-    final_results = []
-    for _chunk_id, result in all_results.items():
-        rrf_score = 0
+    return merged
 
-        # RRF de embedding (si tiene ranking)
-        if result["embedding_rank"]:
-            rrf_score += 1 / (rrf_k + result["embedding_rank"])
 
-        # RRF de keyword (si tiene ranking)
-        if result["keyword_rank"]:
-            rrf_score += 1 / (rrf_k + result["keyword_rank"])
+def _sort_by_rrf_score(merged: dict[int, dict]) -> list[dict]:
+    """Sort by RRF score (descending) and attach the computed field."""
+    for _chunk_id, result in merged.items():
+        result["rrf_score"] = _rrf_score(result)
+    return sorted(
+        merged.values(),
+        key=lambda r: r["rrf_score"],
+        reverse=True,
+    )
 
-        # Normalizar: documentos que aparecen en ambos rankings得到 bonus
-        if result["source"] == "both":
-            rrf_score *= 1.5  # 50% bonus por estar en ambos
 
-        result["rrf_score"] = rrf_score
-        result["combined_score"] = rrf_score
-        final_results.append(result)
+def _rrf_score(result: dict) -> float:
+    """Reciprocal Rank Fusion score: sum of 1/(k+rank) across present ranks."""
+    score = 0.0
+    if result.get("embedding_rank") is not None:
+        score += 1 / (_RRF_K_DEFAULT + result["embedding_rank"])
+    if result.get("keyword_rank") is not None:
+        score += 1 / (_RRF_K_DEFAULT + result["keyword_rank"])
+    return score
 
-    # Agregar leyes como fallback si hay pocos resultados
-    doc_count = len(final_results)
-    if include_laws and embedding_provider and doc_count < 3:
-        try:
-            law_results = search_laws_by_embedding(
-                query_embedding, top_k=top_k, legal_area=legal_area
-            )
-            logger.debug(f"[DEBUG RAG] Law results (fallback): {len(law_results)}")  # S4-05
-            for rank, result in enumerate(law_results, 1):
-                result["source"] = "law"
-                result["document_id"] = None
-                result["page_number"] = None
-                result["section_title"] = f"{result['law_name']} - Art. {result['article_number']}" if result['article_number'] else result['law_name']
-                result["rrf_score"] = 1 / (rrf_k + rank) * 0.3  # Peso bajo para leyes
-                result["combined_score"] = result["rrf_score"]
-                final_results.append(result)
-        except Exception:
-            pass
 
-    # Ordenar por RRF score
-    final_results.sort(key=lambda x: x["rrf_score"], reverse=True)
-
-    # Debug: print top 5 results
-    logger.debug(f"[DEBUG RAG] Final {len(final_results)} results, top 5:")  # S4-05
-    for i, r in enumerate(final_results[:5]):
-        src = r.get('source', 'unknown')
-        score = r.get('rrf_score', 0)
-        title = r.get('section_title', r.get('content', '')[:50])
-        logger.debug(f"  {i+1}. source={src}, rrf={score:.4f}, title={title}")  # S4-05
-    return final_results[:top_k]
