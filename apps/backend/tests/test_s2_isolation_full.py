@@ -350,6 +350,14 @@ class TestMetricsCrossTenant:
         for i in range(4):
             _make_matter(db, org_b, user_b, f"MB {i}")
 
+        # Flush the metrics cache so the request count is fresh. The
+        # registry is a process-wide singleton and other tests may have
+        # already populated it; testing the cache invariants belongs in a
+        # dedicated registry test, not here.
+        from app.core.metrics import registry
+
+        registry.reset_for_test()
+
         res_a = client.get("/metrics", headers=_auth(user_a))
         res_b = client.get("/metrics", headers=_auth(user_b))
 
@@ -357,6 +365,10 @@ class TestMetricsCrossTenant:
         assert res_b.status_code == 200
         payload_a = res_a.json()
         payload_b = res_b.json()
-        # active_matters field present and isolated
-        assert payload_a.get("active_matters", -1) == 2, payload_a
-        assert payload_b.get("active_matters", -1) == 4, payload_b
+        # The endpoint tags the response with the caller's organization_id;
+        # each caller must see their own org, not the other tenant's.
+        assert payload_a.get("organization_id") == org_a.id, payload_a
+        assert payload_b.get("organization_id") == org_b.id, payload_b
+        # Counts returned for each call match the caller's matter count.
+        assert payload_a.get("active_matters") == 2, payload_a
+        assert payload_b.get("active_matters") == 4, payload_b

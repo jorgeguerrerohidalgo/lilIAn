@@ -66,6 +66,22 @@ class MetricsRegistry:
             self._active_documents = active_documents
             self._counts_loaded_at = time.time()
 
+    def reset_for_test(self) -> None:
+        """Clear all cached state. Test-only helper.
+
+        Production code never calls this; it exists so test_s2_isolation_full
+        can verify per-request scoping without depending on the order in
+        which the test suite hits `/metrics`. The 60-second cache TTL on
+        ``set_business_counts`` would otherwise let a previous test's
+        snapshot leak into the next one.
+        """
+        with self._lock:
+            self._routes.clear()
+            self._errors_total.clear()
+            self._active_matters = None
+            self._active_documents = None
+            self._counts_loaded_at = None
+
     def snapshot(self) -> dict:
         with self._lock:
             routes_out: list[dict] = []
