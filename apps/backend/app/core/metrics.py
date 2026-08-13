@@ -42,6 +42,7 @@ class MetricsRegistry:
         self._active_matters: int | None = None
         self._active_documents: int | None = None
         self._counts_loaded_at: float | None = None
+        self._counts_organization_id: int | None = None
 
     def record_request(self, method: str, path: str, status_code: int, duration_ms: float) -> None:
         key = f"{method} {path}"
@@ -65,6 +66,10 @@ class MetricsRegistry:
             self._active_matters = active_matters
             self._active_documents = active_documents
             self._counts_loaded_at = time.time()
+            self._counts_organization_id = getattr(
+                self, "_pending_counts_org", None
+            )
+            self._pending_counts_org = None
 
     def reset_for_test(self) -> None:
         """Clear all cached state. Test-only helper.
@@ -81,6 +86,7 @@ class MetricsRegistry:
             self._active_matters = None
             self._active_documents = None
             self._counts_loaded_at = None
+            self._counts_organization_id = None
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -106,6 +112,7 @@ class MetricsRegistry:
                 "active_matters": self._active_matters,
                 "active_documents": self._active_documents,
                 "business_counts_loaded_at": self._counts_loaded_at,
+                "_organization_id": self._counts_organization_id,
                 "routes": routes_out,
             }
 

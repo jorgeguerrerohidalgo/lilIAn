@@ -49,13 +49,20 @@ def get_metrics(
     implementation exposed global counts which leaked cross-tenant signals
     (S2-04). The registry layer is still process-wide, but the DB-derived
     counts are filtered to the organization of the authenticated caller.
+    S2 hardening: the counts cache is also keyed by organization_id so a
+    cache hit from Tenant A cannot be served to Tenant B.
     """
     snapshot = registry.snapshot()
-    counts_stale = (
+    cached_org = snapshot.get("_organization_id")
+    counts_stale = cached_org != membership.organization_id or (
+
         snapshot["business_counts_loaded_at"] is None
         or (datetime.utcnow().timestamp() - snapshot["business_counts_loaded_at"]) > 60
     )
     if counts_stale:
+        # Tell the registry which org this set of counts belongs to
+        # so the next snapshot() can detect org changes and re-load.
+        registry._pending_counts_org = membership.organization_id
         try:
             active_matters = (
                 db.query(func.count(Matter.id))
