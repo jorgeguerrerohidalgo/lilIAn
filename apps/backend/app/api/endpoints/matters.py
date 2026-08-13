@@ -1,12 +1,11 @@
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-import logging
-
 from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
-
 from app.models.analysis_report import AnalysisReport
 from app.models.chat import ChatMessage, ChatSession
 from app.models.client import Client

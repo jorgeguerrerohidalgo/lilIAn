@@ -12,7 +12,16 @@ extend-exclude = ["migrations", "__pycache__"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "W"]
-ignore = ["E501"]  # line length handled by formatter
+ignore = [
+  "E501",  # line length handled by formatter
+  # B008 (function-call-in-default-argument) generates 250+ false positives
+  # in async/DB code where the call is harmless (`Field(default=datetime.utcnow)`).
+  # The legitimate cases are easier to spot in code review. Sprint 6+.
+  "B008",
+  # UP045 keeps Optional[X] in legacy annotations - intentional in
+  # Pydantic schemas to keep backward compat with the schema export.
+  "UP045",
+]
 
 [tool.ruff.format]
 quote-style = "double"
