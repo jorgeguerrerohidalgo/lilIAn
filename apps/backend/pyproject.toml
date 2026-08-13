@@ -21,6 +21,10 @@ ignore = [
   # UP045 keeps Optional[X] in legacy annotations - intentional in
   # Pydantic schemas to keep backward compat with the schema export.
   "UP045",
+  # E402: project uses module docstrings after `import` to document the
+  # module intent near the top. Common Python convention (PEP 257),
+  # ruff prefers the opposite. Sprint 6+ tradeoff: keep our convention.
+  "E402",
 ]
 
 [tool.ruff.format]

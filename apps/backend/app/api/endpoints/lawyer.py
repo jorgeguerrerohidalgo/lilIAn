@@ -206,7 +206,7 @@ def update_matter_status(
     try:
         new_status = MatterStatus(status_data.new_status)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Estado no válido")
+        raise HTTPException(status_code=400, detail="Estado no válido") from None
 
     old_status = matter.status
 

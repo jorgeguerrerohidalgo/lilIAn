@@ -5,13 +5,13 @@ from datetime import datetime
 import fitz
 from docx import Document as DocxDocument
 
-logger = logging.getLogger(__name__)
-
 from app.core.database import SessionLocal
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.legal_area import get_legal_area_from_matter_type
 from app.models.matter import Matter
+
+logger = logging.getLogger(__name__)
 
 # S1-07: hard caps on PDF processing to avoid DoS / memory exhaustion.
 MAX_PDF_PAGES = 500

@@ -95,7 +95,10 @@ def search_precedents(
             used_search_type = "semantic"
         except Exception as e:
             if search_type == "semantic":
-                raise HTTPException(status_code=500, detail=f"Error en busqueda semantica: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error en busqueda semantica: {str(e)}",
+                ) from e
 
     if not results and (search_type == "keyword" or search_type == "hybrid"):
         results = search_precedents_by_keyword(

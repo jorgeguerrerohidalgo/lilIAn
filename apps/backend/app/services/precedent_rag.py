@@ -1,9 +1,9 @@
+import json
 import logging
 
 """
 Precedent RAG Service - Busqueda de precedentes judiciales chilenas
 """
-import json
 
 from sqlalchemy.orm import Session
 
