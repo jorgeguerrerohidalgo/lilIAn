@@ -1,10 +1,9 @@
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import List
 
-from app.models.legal_area import LegalArea
-from app.models.user import User
-from app.api.deps.auth import get_current_user
+from app.api.deps.auth import require_organization
+from app.models.organization_member import OrganizationMember
 
 router = APIRouter(prefix="/legal-areas", tags=["legal-areas"])
 
@@ -47,12 +46,16 @@ LEGAL_AREAS_INFO: dict[str, dict] = {
 }
 
 
-@router.get("", response_model=List[LegalAreaResponse])
+@router.get("", response_model=list[LegalAreaResponse])
 def list_legal_areas(
-    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
 ):
     """
     Lista todas las áreas legales disponibles en el sistema.
+
+    S2-02: use ``require_organization`` so anonymous users can't enumerate
+    the catalogue. The membership dependency is unused at runtime but
+    enforced for RBAC consistency with every other endpoint.
     """
     return [
         LegalAreaResponse(

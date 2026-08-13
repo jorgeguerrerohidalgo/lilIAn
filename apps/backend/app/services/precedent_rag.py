@@ -1,16 +1,20 @@
+import logging
+
 """
 Precedent RAG Service - Busqueda de precedentes judiciales chilenas
 """
 import json
-from typing import List, Optional
+
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.precedent import Precedent
 from app.services.embeddings import get_embedding_provider
 
+logger = logging.getLogger(__name__)
 
-def cosine_similarity(a: List[float], b: List[float]) -> float:
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Calculate cosine similarity between two vectors."""
     import numpy as np
     a = np.array(a)
@@ -21,15 +25,15 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
 
 
 def search_precedents_by_embedding(
-    query_embedding: List[float],
+    query_embedding: list[float],
     organization_id: int,
-    court: Optional[str] = None,
-    year: Optional[int] = None,
-    legal_area: Optional[str] = None,
-    matter_type: Optional[str] = None,
+    court: str | None = None,
+    year: int | None = None,
+    legal_area: str | None = None,
+    matter_type: str | None = None,
     top_k: int = 5,
     similarity_threshold: float = 0.7
-) -> List[dict]:
+) -> list[dict]:
     """Search precedents by semantic similarity within an organization."""
     db = SessionLocal()
     try:
@@ -84,12 +88,12 @@ def search_precedents_by_embedding(
 def search_precedents_by_keyword(
     query: str,
     organization_id: int,
-    court: Optional[str] = None,
-    year: Optional[int] = None,
-    legal_area: Optional[str] = None,
-    matter_type: Optional[str] = None,
+    court: str | None = None,
+    year: int | None = None,
+    legal_area: str | None = None,
+    matter_type: str | None = None,
     top_k: int = 10
-) -> List[dict]:
+) -> list[dict]:
     """Search precedents by keyword in summary/decision within an organization."""
     db = SessionLocal()
     try:
@@ -135,9 +139,9 @@ def search_precedents_by_keyword(
 def get_precedent_context(
     query: str,
     organization_id: int,
-    court: Optional[str] = None,
-    year: Optional[int] = None,
-    legal_area: Optional[str] = None,
+    court: str | None = None,
+    year: int | None = None,
+    legal_area: str | None = None,
     top_k: int = 3
 ) -> str:
     """Returns formatted precedent context for RAG integration within an organization."""
@@ -216,5 +220,5 @@ def index_precedent(precedent_id: int, db: Session) -> bool:
         db.commit()
         return True
     except Exception as e:
-        print(f"Error indexing precedent {precedent_id}: {e}")
+        logger.debug(f"Error indexing precedent {precedent_id}: {e}")  # S4-05
         return False

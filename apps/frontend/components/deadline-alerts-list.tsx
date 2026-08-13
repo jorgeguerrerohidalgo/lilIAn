@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getApiUrl } from "@/lib/api";
+import { logger } from "../lib/logger";
+
+
+const API_URL = getApiUrl();
 
 interface DeadlineAlert {
   id: number;
@@ -50,8 +55,6 @@ const eventTypeLabels: Record<string, string> = {
   plazo_sin_penalidad: "Plazo sin Penalidad",
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 export function DeadlineAlertsList({ matterId }: Props) {
   const [alerts, setAlerts] = useState<DeadlineAlert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,18 +68,18 @@ export function DeadlineAlertsList({ matterId }: Props) {
   const fetchAlerts = async () => {
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("access_token");
-      console.log("Fetching alerts for matter:", matterId, "API_URL:", API_URL);
+      logger.info("Fetching alerts for matter:", matterId, "API_URL:", API_URL);
       const res = await fetch(`${API_URL}/api/v1/alerts/matters/${matterId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      console.log("Alerts response:", res.status, res.ok);
+      logger.info("Alerts response:", res.status, res.ok);
       if (res.ok) {
         const data = await res.json();
-        console.log("Alerts data:", data);
+        logger.info("Alerts data:", data);
         setAlerts(data);
       }
     } catch (error) {
-      console.error("Error fetching alerts:", error);
+      logger.error("Error fetching alerts:", error);
     } finally {
       setLoading(false);
     }
@@ -100,7 +103,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
         );
       }
     } catch (error) {
-      console.error("Error updating alert:", error);
+      logger.error("Error updating alert:", error);
     } finally {
       setUpdating(null);
     }

@@ -1,37 +1,41 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
-from app.models.chat import ChatSession, ChatMessage
-from app.models.matter import Matter
+from app.models.chat import ChatSession
 from app.models.legal_area import LegalArea
+from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
-from app.api.deps.auth import get_current_user, require_organization
 from app.services import chat as chat_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+# S3-06: cap user-supplied chat input to prevent DoS / abuse of LLM budget.
+CHAT_MESSAGE_MAX_LEN = 4_000
+
+
 class CreateSessionRequest(BaseModel):
     matter_id: int
-    title: Optional[str] = None
+    title: str | None = Field(default=None, max_length=200)
 
 
 class SendMessageRequest(BaseModel):
     session_id: int
-    message: str
-    legal_area_override: Optional[str] = None
+    message: str = Field(min_length=1, max_length=CHAT_MESSAGE_MAX_LEN)
+    legal_area_override: str | None = Field(default=None, max_length=64)
 
 
 class ChatMessageResponse(BaseModel):
     id: int
     role: str
     content: str
-    model_provider: Optional[str] = None
-    model_name: Optional[str] = None
+    model_provider: str | None = None
+    model_name: str | None = None
     created_at: str
 
     class Config:
@@ -41,7 +45,7 @@ class ChatMessageResponse(BaseModel):
 class ChatSessionResponse(BaseModel):
     id: int
     matter_id: int
-    title: Optional[str]
+    title: str | None
     created_at: str
     updated_at: str
 
@@ -86,9 +90,9 @@ def create_session(
     )
 
 
-@router.get("/sessions", response_model=List[ChatSessionResponse])
+@router.get("/sessions", response_model=list[ChatSessionResponse])
 def list_sessions(
-    matter_id: Optional[int] = None,
+    matter_id: int | None = None,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
@@ -114,7 +118,7 @@ def list_sessions(
     ]
 
 
-@router.get("/sessions/{session_id}/messages", response_model=List[ChatMessageResponse])
+@router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageResponse])
 def get_session_messages(
     session_id: int,
     current_user: User = Depends(get_current_user),
@@ -151,6 +155,8 @@ def send_message(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    import logging
+    logger = logging.getLogger(__name__)
     session = db.query(ChatSession).filter(
         ChatSession.id == request.session_id,
         ChatSession.organization_id == membership.organization_id
@@ -159,8 +165,12 @@ def send_message(
     if not session:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
 
-    # Obtener matter_type del caso
-    matter = db.query(Matter).filter(Matter.id == session.matter_id).first()
+    # S2-03: scope the matter lookup to the caller's organization so a
+    # dangling FK can't be exploited to read a Matter from another tenant.
+    matter = db.query(Matter).filter(
+        Matter.id == session.matter_id,
+        Matter.organization_id == membership.organization_id,
+    ).first()
     matter_type = matter.matter_type.value if matter and matter.matter_type else None
 
     # Convertir legal_area_override de string a enum si viene
@@ -177,6 +187,24 @@ def send_message(
         content=request.message
     )
 
+    # S3-03: write an audit row for every chat turn. We use a SHA-256
+    # prefix instead of the raw text so the audit table doesn't bloat
+    # with duplicates of every message.
+    try:
+        from app.services.audit import AuditLogger
+        AuditLogger(
+            db=db,
+            user_id=current_user.id,
+            organization_id=membership.organization_id,
+        ).log_chat_message(
+            session_id=request.session_id,
+            message_id=0,  # user message id is set after persistence
+            role="user",
+            content_preview=request.message,
+        )
+    except Exception as exc:
+        logger.warning("audit_log_chat_user_failed: %s", exc)
+
     response_content, error = chat_service.generate_chat_response(
         session_id=request.session_id,
         matter_id=session.matter_id,
@@ -192,6 +220,21 @@ def send_message(
         content=response_content,
         metadata={"error": error} if error else None
     )
+
+    try:
+        from app.services.audit import AuditLogger
+        AuditLogger(
+            db=db,
+            user_id=current_user.id,
+            organization_id=membership.organization_id,
+        ).log_chat_message(
+            session_id=request.session_id,
+            message_id=saved_message.get("id", 0),
+            role="assistant",
+            content_preview=response_content or "",
+        )
+    except Exception as exc:
+        logger.warning("audit_log_chat_assistant_failed: %s", exc)
 
     return MessageResponse(
         content=response_content,

@@ -3,10 +3,9 @@ Precedent Analytics Service
 
 Provides aggregated statistics and trends for precedents.
 """
-from typing import List, Dict, Optional, Any
 from collections import Counter
+
 from sqlalchemy import func
-from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.precedent import Precedent
@@ -14,11 +13,11 @@ from app.models.precedent import Precedent
 
 def get_precedent_analytics(
     organization_id: int,
-    legal_area: Optional[str] = None,
-    court: Optional[str] = None,
-    year_from: Optional[int] = None,
-    year_to: Optional[int] = None,
-    matter_type: Optional[str] = None,
+    legal_area: str | None = None,
+    court: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    matter_type: str | None = None,
     include_text_analysis: bool = False
 ) -> dict:
     """Get aggregated analytics for precedents.

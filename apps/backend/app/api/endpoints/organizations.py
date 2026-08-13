@@ -1,18 +1,18 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
 
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
 from app.models.organization import Organization
-from app.models.organization_member import OrganizationMember, MemberRole
+from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
 from app.schemas.organization import OrganizationCreate, OrganizationResponse
-from app.api.deps.auth import get_current_user, require_organization
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
-@router.get("", response_model=List[OrganizationResponse])
+@router.get("", response_model=list[OrganizationResponse])
 def list_organizations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -67,26 +67,40 @@ def get_my_organization(
 
 @router.get("/me/members")
 def get_organization_members(
+    current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
-    members = db.query(OrganizationMember).filter(
+    # S1-12: a VIEWER/CLIENT must not see other members' email addresses.
+    # OWNER/ADMIN see everyone; everyone else sees only themselves.
+    is_privileged = membership.role in {MemberRole.OWNER, MemberRole.ADMIN, MemberRole.PLATFORM_ADMIN}
+
+    query = db.query(OrganizationMember).filter(
         OrganizationMember.organization_id == membership.organization_id
-    ).all()
+    )
+    if not is_privileged:
+        query = query.filter(OrganizationMember.user_id == current_user.id)
+
+    members = query.all()
 
     result = []
     for m in members:
         user = db.query(User).filter(User.id == m.user_id).first()
+        if user is None:
+            continue
+        user_payload = {
+            "id": user.id,
+            "full_name": user.full_name,
+            "status": user.status.value if hasattr(user.status, 'value') else user.status,
+        }
+        # Email is sensitive — only include it for privileged roles.
+        if is_privileged:
+            user_payload["email"] = user.email
         result.append({
             "id": m.id,
             "user_id": m.user_id,
             "role": m.role.value,
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "full_name": user.full_name,
-                "status": user.status.value if hasattr(user.status, 'value') else user.status
-            } if user else None
+            "user": user_payload,
         })
 
     return result

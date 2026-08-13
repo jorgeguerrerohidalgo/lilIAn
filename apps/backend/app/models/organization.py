@@ -1,18 +1,20 @@
-from sqlalchemy import Column, String, Integer, DateTime, Enum
-from sqlalchemy.orm import relationship
-from datetime import datetime
 import enum
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, Enum, Integer, String
+from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 
 
-class OrganizationType(str, enum.Enum):
+class OrganizationType(enum.StrEnum):
     INTERNAL = "internal"
     LAW_FIRM = "law_firm"
     COMPANY = "company"
     INDIVIDUAL = "individual"
 
 
-class OrganizationStatus(str, enum.Enum):
+class OrganizationStatus(enum.StrEnum):
     ACTIVE = "active"
     SUSPENDED = "suspended"
     INACTIVE = "inactive"

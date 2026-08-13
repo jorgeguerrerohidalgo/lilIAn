@@ -1,21 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
-from typing import List
-import json
 
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
 from app.models.analysis_report import AnalysisReport
-from app.models.risk_item import RiskItem
 from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
+from app.models.risk_item import RiskItem
 from app.models.user import User
 from app.schemas.analysis import (
-    AnalysisReportResponse,
     AnalysisReportDetailResponse,
+    AnalysisReportResponse,
+    GenerateAnalysisRequest,
     RiskItemResponse,
-    GenerateAnalysisRequest
 )
-from app.api.deps.auth import get_current_user, require_organization
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -55,7 +54,7 @@ def generate_analysis(
     }
 
 
-@router.get("/matters/{matter_id}", response_model=List[AnalysisReportResponse])
+@router.get("/matters/{matter_id}", response_model=list[AnalysisReportResponse])
 def list_matter_analyses(
     matter_id: int,
     current_user: User = Depends(get_current_user),
@@ -149,7 +148,7 @@ def get_latest_analysis(
     return AnalysisReportDetailResponse(**response_data)
 
 
-@router.get("/matters/{matter_id}/risks", response_model=List[RiskItemResponse])
+@router.get("/matters/{matter_id}/risks", response_model=list[RiskItemResponse])
 def list_matter_risks(
     matter_id: int,
     current_user: User = Depends(get_current_user),

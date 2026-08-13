@@ -1,9 +1,9 @@
-from typing import Optional
+
 import fitz
 from docx import Document as DocxDocument
 
 
-def extract_text_from_file(file_path: str, mime_type: Optional[str]) -> str:
+def extract_text_from_file(file_path: str, mime_type: str | None) -> str:
     if not file_path or not mime_type:
         return ""
 
@@ -17,7 +17,7 @@ def extract_text_from_file(file_path: str, mime_type: Optional[str]) -> str:
         else:
             return ""
     except Exception as e:
-        return f"Error extracting text: {str(e)}"
+        return f"Error extracting text: {e!s}"
 
 
 def extract_text_from_pdf(file_path: str) -> str:

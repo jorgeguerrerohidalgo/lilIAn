@@ -4,9 +4,9 @@ Data Extraction Service
 Extracts structured data from documents using LLM.
 """
 
-from typing import Optional
-from pydantic import BaseModel
 import logging
+
+from pydantic import BaseModel
 
 from app.core.database import SessionLocal
 from app.models.document import Document
@@ -17,15 +17,15 @@ logger = logging.getLogger(__name__)
 class ExtractedDocumentData(BaseModel):
     """Structured data extracted from a document."""
     names: list[str] = []
-    rut: Optional[str] = None
-    company_name: Optional[str] = None
-    company_rut: Optional[str] = None
+    rut: str | None = None
+    company_name: str | None = None
+    company_rut: str | None = None
     addresses: list[str] = []
     dates: list[str] = []
     amounts: list[str] = []
     roles: list[str] = []  # deudor, acreedor, representante, etc.
-    email: Optional[str] = None
-    phone: Optional[str] = None
+    email: str | None = None
+    phone: str | None = None
 
 
 DATA_EXTRACTION_SCHEMA = {

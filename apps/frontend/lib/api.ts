@@ -18,8 +18,18 @@ export function getApiUrl(): string {
   return 'http://localhost:8000';
 }
 
+import { getLegacyToken } from './auth-cookie';
+
 /**
- * Fetch wrapper that auto-selects API URL
+ * Fetch wrapper that auto-selects API URL and includes auth credentials.
+ *
+ * Auth strategy (S0-04):
+ * - Prefers the HttpOnly `lilian_auth_token` cookie, sent automatically by
+ *   the browser on same-origin requests.
+ * - Falls back to a legacy `Authorization: Bearer <jwt>` header built from
+ *   localStorage so older call-sites keep working during the migration.
+ * - Uses `credentials: 'include'` so cross-origin requests still carry the
+ *   cookie once the backend CORS config is tightened.
  */
 export async function apiFetch<T>(
   endpoint: string,
@@ -28,12 +38,23 @@ export async function apiFetch<T>(
   const baseUrl = getApiUrl();
   const url = baseUrl ? `${baseUrl}${endpoint}` : endpoint;
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+
+  // Attach Authorization only as a fallback when no cookie will travel
+  // alongside the request. Once the migration completes this branch is
+  // removed entirely.
+  const legacyToken = getLegacyToken();
+  if (legacyToken && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${legacyToken}`;
+  }
+
   const res = await fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
+    credentials: 'include',
   });
 
   if (!res.ok) {

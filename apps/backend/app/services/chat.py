@@ -1,15 +1,10 @@
 from datetime import datetime
-from typing import List, Tuple, Optional
-import json
 
-from app.core.database import SessionLocal
-from app.models.chat import ChatSession, ChatMessage
-from app.models.matter import Matter
-from app.models.document import Document
-from app.models.document_chunk import DocumentChunk
-from app.models.legal_area import LegalArea, MATTER_TYPE_TO_LEGAL_AREA
 from app.core.config import settings
-
+from app.core.database import SessionLocal
+from app.models.chat import ChatMessage, ChatSession
+from app.models.document import Document
+from app.models.legal_area import MATTER_TYPE_TO_LEGAL_AREA, LegalArea
 
 SYSTEM_PROMPT_CHAT = """Eres un asistente legal chileno especializado en análisis documental y apoyo jurídico preliminar.
 
@@ -171,7 +166,7 @@ Pregunta del usuario: {question}""",
 }
 
 
-def get_chat_prompt_for_area(legal_area: Optional[LegalArea]) -> str:
+def get_chat_prompt_for_area(legal_area: LegalArea | None) -> str:
     """Retorna el prompt según el área legal."""
     if legal_area is None:
         return SYSTEM_PROMPT_CHAT
@@ -179,10 +174,10 @@ def get_chat_prompt_for_area(legal_area: Optional[LegalArea]) -> str:
 
 
 def get_chat_system_prompt(
-    matter_type: Optional[str],
+    matter_type: str | None,
     context: str,
     question: str,
-    legal_area: Optional[LegalArea] = None
+    legal_area: LegalArea | None = None
 ) -> str:
     """Genera el prompt del sistema para chat, especializado por área legal."""
     # Si se pasó legal_area override, usarlo directamente
@@ -201,15 +196,15 @@ def get_relevant_context(
     organization_id: int,
     query: str,
     top_k: int = 5,
-    legal_area: Optional[LegalArea] = None,
+    legal_area: LegalArea | None = None,
     include_precedents: bool = True
 ) -> str:
-    from app.services.rag import hybrid_search
     from app.services.embeddings import get_embedding_provider
+    from app.services.rag import hybrid_search
 
     try:
         provider = get_embedding_provider()
-        query_embedding = provider.generate_embedding(query)
+        provider.generate_embedding(query)
 
         results = hybrid_search(
             query=query,
@@ -264,7 +259,7 @@ def get_relevant_context(
         return f"Error al recuperar contexto: {str(e)}"
 
 
-def get_chat_history(session_id: int, limit: int = 10) -> List[dict]:
+def get_chat_history(session_id: int, limit: int = 10) -> list[dict]:
     db = SessionLocal()
     try:
         messages = db.query(ChatMessage).filter(
@@ -283,7 +278,7 @@ def get_chat_history(session_id: int, limit: int = 10) -> List[dict]:
         db.close()
 
 
-def create_chat_session(matter_id: int, organization_id: int, user_id: int, title: Optional[str] = None) -> ChatSession:
+def create_chat_session(matter_id: int, organization_id: int, user_id: int, title: str | None = None) -> ChatSession:
     db = SessionLocal()
     try:
         session = ChatSession(
@@ -313,7 +308,7 @@ def create_chat_session(matter_id: int, organization_id: int, user_id: int, titl
         db.close()
 
 
-def get_session_messages(session_id: int) -> List[ChatMessage]:
+def get_session_messages(session_id: int) -> list[ChatMessage]:
     db = SessionLocal()
     try:
         messages = db.query(ChatMessage).filter(
@@ -329,9 +324,9 @@ def generate_chat_response(
     matter_id: int,
     organization_id: int,
     user_message: str,
-    matter_type: Optional[str] = None,
-    legal_area_override: Optional[LegalArea] = None
-) -> Tuple[str, Optional[dict]]:
+    matter_type: str | None = None,
+    legal_area_override: LegalArea | None = None
+) -> tuple[str, dict | None]:
     from app.services.llm import get_llm_provider
 
     # Determinar área legal a usar
@@ -379,7 +374,7 @@ def save_chat_message(
     session_id: int,
     role: str,
     content: str,
-    metadata: Optional[dict] = None
+    metadata: dict | None = None
 ) -> dict:
     """Guarda un mensaje de chat y retorna un dict con los valores necesarios."""
     db = SessionLocal()

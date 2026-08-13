@@ -1,4 +1,3 @@
-from typing import List, Optional
 import re
 
 from app.models.legal_area import LegalArea
@@ -9,7 +8,7 @@ def split_text_into_chunks(
     chunk_size: int = 1000,
     overlap: int = 200,
     min_chunk_size: int = 200
-) -> List[dict]:
+) -> list[dict]:
     if not text or len(text.strip()) < min_chunk_size:
         if text and len(text.strip()) > 0:
             return [{
@@ -86,8 +85,8 @@ def create_chunks_for_document(
     extracted_text: str,
     organization_id: int,
     matter_id: int,
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     raw_chunks = split_text_into_chunks(extracted_text)
 
     chunks = []

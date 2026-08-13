@@ -1,10 +1,13 @@
-from typing import List, Optional, Tuple
 import json
+import logging
+
 import numpy as np
 
 from app.core.database import SessionLocal
 from app.models.document_chunk import DocumentChunk
 from app.models.legal_area import LegalArea
+
+logger = logging.getLogger(__name__)
 
 try:
     from app.models.law_chunk import LawChunk
@@ -13,7 +16,7 @@ except ImportError:
     LAW_CHUNKS_AVAILABLE = False
 
 
-def cosine_similarity(a: List[float], b: List[float]) -> float:
+def cosine_similarity(a: list[float], b: list[float]) -> float:
     a = np.array(a)
     b = np.array(b)
     norm_a = np.linalg.norm(a)
@@ -24,13 +27,13 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
 
 
 def search_chunks_by_embedding(
-    query_embedding: List[float],
+    query_embedding: list[float],
     organization_id: int,
     matter_id: int,
     top_k: int = 5,
     similarity_threshold: float = 0.3,  # DEBUG: lowering from 0.5 to 0.3
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     db = SessionLocal()
     try:
         # Usar SQL directo para evitar problemas con ORM
@@ -45,8 +48,7 @@ def search_chunks_by_embedding(
         result = db.execute(sql, {"org_id": organization_id, "matter_id": matter_id})
         rows = result.fetchall()
 
-        print(f"[DEBUG RAG] SQL direct result: {len(rows)} rows")
-
+        logger.debug(f"[DEBUG RAG] SQL direct result: {len(rows)} rows")  # S4-05
         # Convertir a objetos similar a chunk
         chunks = []
         for row in rows:
@@ -66,8 +68,7 @@ def search_chunks_by_embedding(
             }
             chunks.append(chunk_dict)
 
-        print(f"[DEBUG RAG] Found {len(chunks)} chunks in DB for org={organization_id}, matter={matter_id}")
-
+        logger.debug(f"[DEBUG RAG] Found {len(chunks)} chunks in DB for org={organization_id}, matter={matter_id}")  # S4-05
         results = []
         skipped_no_embedding = 0
         skipped_threshold = 0
@@ -94,12 +95,11 @@ def search_chunks_by_embedding(
                     })
                 else:
                     skipped_threshold += 1
-            except (json.JSONDecodeError, TypeError) as e:
+            except (json.JSONDecodeError, TypeError):
                 errors += 1
                 continue
 
-        print(f"[DEBUG RAG] Chunks processed: {len(results)} passed, {skipped_no_embedding} no embedding, {skipped_threshold} below threshold, {errors} errors")
-
+        logger.debug(f"[DEBUG RAG] Chunks processed: {len(results)} passed, {skipped_no_embedding} no embedding, {skipped_threshold} below threshold, {errors} errors")  # S4-05
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results[:top_k]
 
@@ -112,8 +112,8 @@ def search_chunks_by_keyword(
     organization_id: int,
     matter_id: int,
     top_k: int = 10,
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     db = SessionLocal()
     try:
         db_query = db.query(DocumentChunk).filter(
@@ -149,12 +149,12 @@ def search_chunks_by_keyword(
 
 
 def search_laws_by_embedding(
-    query_embedding: List[float],
+    query_embedding: list[float],
     law_code: str = None,
     top_k: int = 5,
     similarity_threshold: float = 0.5,
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     """Busca en chunks de leyes chilenas por embedding."""
     if not LAW_CHUNKS_AVAILABLE:
         return []
@@ -203,8 +203,8 @@ def hybrid_search(
     matter_id: int,
     top_k: int = 5,
     include_laws: bool = True,
-    legal_area: Optional[LegalArea] = None
-) -> List[dict]:
+    legal_area: LegalArea | None = None
+) -> list[dict]:
     """
     Búsqueda híbrida con Reciprocal Rank Fusion (RRF).
     Combina resultados de embedding y keyword search usando RRF para mejor ranking.
@@ -214,14 +214,14 @@ def hybrid_search(
         from app.services.embeddings import get_embedding_provider
         embedding_provider = get_embedding_provider()
         query_embedding = embedding_provider.generate_embedding(query)
-        print(f"[DEBUG RAG] Query embedding generated, length: {len(query_embedding)}")
+        logger.debug(f"[DEBUG RAG] Query embedding generated, length: {len(query_embedding)}")  # S4-05
         embedding_results = search_chunks_by_embedding(
             query_embedding, organization_id, matter_id, top_k * 3,
             legal_area=legal_area
         )
-        print(f"[DEBUG RAG] Document embedding results: {len(embedding_results)}")
+        logger.debug(f"[DEBUG RAG] Document embedding results: {len(embedding_results)}")  # S4-05
     except Exception as e:
-        print(f"[DEBUG RAG] Embedding search failed: {e}")
+        logger.debug(f"[DEBUG RAG] Embedding search failed: {e}")  # S4-05
         import traceback
         traceback.print_exc()
         embedding_results = []
@@ -230,8 +230,7 @@ def hybrid_search(
         query, organization_id, matter_id, top_k * 3,
         legal_area=legal_area
     )
-    print(f"[DEBUG RAG] Keyword results: {len(keyword_results)}")
-
+    logger.debug(f"[DEBUG RAG] Keyword results: {len(keyword_results)}")  # S4-05
     # RRF: Reciprocal Rank Fusion para combinar rankings
     RRF_K = 60  # Constante típica para RRF
 
@@ -293,7 +292,7 @@ def hybrid_search(
             law_results = search_laws_by_embedding(
                 query_embedding, top_k=top_k, legal_area=legal_area
             )
-            print(f"[DEBUG RAG] Law results (fallback): {len(law_results)}")
+            logger.debug(f"[DEBUG RAG] Law results (fallback): {len(law_results)}")  # S4-05
             for rank, result in enumerate(law_results, 1):
                 result["source"] = "law"
                 result["document_id"] = None
@@ -309,11 +308,10 @@ def hybrid_search(
     final_results.sort(key=lambda x: x["rrf_score"], reverse=True)
 
     # Debug: print top 5 results
-    print(f"[DEBUG RAG] Final {len(final_results)} results, top 5:")
+    logger.debug(f"[DEBUG RAG] Final {len(final_results)} results, top 5:")  # S4-05
     for i, r in enumerate(final_results[:5]):
         src = r.get('source', 'unknown')
         score = r.get('rrf_score', 0)
         title = r.get('section_title', r.get('content', '')[:50])
-        print(f"  {i+1}. source={src}, rrf={score:.4f}, title={title}")
-
+        logger.debug(f"  {i+1}. source={src}, rrf={score:.4f}, title={title}")  # S4-05
     return final_results[:top_k]

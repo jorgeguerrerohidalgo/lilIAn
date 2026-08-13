@@ -1,9 +1,9 @@
-from enum import Enum
+from enum import StrEnum
 
 from app.models.matter import MatterType
 
 
-class LegalArea(str, Enum):
+class LegalArea(StrEnum):
     """Áreas del derecho soportadas por el sistema."""
     LABOR = "labor"
     CIVIL = "civil"

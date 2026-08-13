@@ -10,19 +10,18 @@ El directorio debe contener PDFs de leyes con nombre significativo, ej:
     - ley_proteccion_consumidor.pdf
 """
 
-import os
-import sys
 import json
+import os
 import re
+import sys
 
 sys.path.insert(0, '/app')
 
 from app.core.database import SessionLocal, engine
 from app.models.law_chunk import LawChunk
 from app.models.legal_area import get_legal_area_from_law_code
-from app.services.embeddings import get_embedding_provider
 from app.services.document_processor import extract_text_from_file
-
+from app.services.embeddings import get_embedding_provider
 
 LAWS_METADATA = {
     # Códigos principales
@@ -257,7 +256,7 @@ def main(laws_directory: str):
     Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
-    embedding_provider = get_embedding_provider()
+    get_embedding_provider()
 
     try:
         # Procesar cada archivo en el directorio

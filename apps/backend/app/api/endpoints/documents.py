@@ -1,31 +1,69 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, BackgroundTasks
-from sqlalchemy.orm import Session
-from typing import List, Optional
-import json
 import logging
+import re
 
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
+
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
-from app.core.config import settings
 from app.models.document import Document
 from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
 from app.models.user import User
 from app.schemas.document import DocumentResponse
-from app.api.deps.auth import get_current_user, require_organization
 from app.services import storage
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_MIME_TYPES = [
+ALLOWED_MIME_TYPES = {
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
     "text/plain",
-]
+}
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+
+# Map magic-byte signatures to the canonical MIME type we accept.
+MAGIC_SIGNATURES = (
+    (b"%PDF-", "application/pdf"),
+    (b"PK\x03\x04", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "application/msword"),
+)
+
+_FILENAME_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _detect_mime_from_content(content: bytes) -> str | None:
+    """Detect MIME type from the actual file bytes (magic numbers).
+
+    Returning ``None`` means we could not positively identify the file as
+    one of the formats we accept.
+    """
+    for signature, mime in MAGIC_SIGNATURES:
+        if content.startswith(signature):
+            return mime
+    # text/plain: require ASCII/UTF-8 decodable without errors.
+    try:
+        content.decode("utf-8")
+        return "text/plain"
+    except UnicodeDecodeError:
+        return None
+
+
+def _sanitize_filename(name: str | None) -> str:
+    """Return a filesystem- and HTML-safe filename stripped of path components
+    and control characters. Falls back to ``"upload"`` if nothing usable remains.
+    """
+    if not name:
+        return "upload"
+    # Strip any directory components (basename only).
+    name = name.replace("\\", "/").split("/")[-1]
+    name = _FILENAME_SAFE_RE.sub("_", name)
+    name = name.strip("._") or "upload"
+    return name[:255]
 
 
 def process_document_background(document_id: int) -> None:
@@ -57,12 +95,6 @@ async def upload_document(
     if not matter:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
-    if file.content_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tipo de archivo no permitido. Tipos válidos: PDF, DOCX, DOC, TXT"
-        )
-
     content = await file.read()
 
     if len(content) > MAX_FILE_SIZE:
@@ -71,9 +103,30 @@ async def upload_document(
             detail=f"El archivo excede el tamaño máximo de {MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
+    detected_mime = _detect_mime_from_content(content)
+    if detected_mime is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de archivo no permitido. El contenido no coincide con un formato aceptado (PDF, DOCX, DOC, TXT)."
+        )
+
+    # Reject mismatched Content-Type headers unless they fall in the allowed set.
+    declared_mime = file.content_type
+    if declared_mime and declared_mime not in ALLOWED_MIME_TYPES:
+        logger.warning(
+            "Rejected upload with disallowed declared mime type",
+            extra={"matter_id": matter_id, "declared_mime": declared_mime, "user_id": current_user.id},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de archivo no permitido. Tipos válidos: PDF, DOCX, DOC, TXT"
+        )
+
+    safe_filename = _sanitize_filename(file.filename)
+
     storage_path, file_hash, file_size = storage.save_file(
         content,
-        file.filename,
+        safe_filename,
         membership.organization_id,
         matter_id
     )
@@ -82,9 +135,9 @@ async def upload_document(
         organization_id=membership.organization_id,
         matter_id=matter_id,
         uploaded_by_user_id=current_user.id,
-        original_filename=file.filename,
+        original_filename=safe_filename,
         storage_path=storage_path,
-        mime_type=file.content_type,
+        mime_type=detected_mime,
         file_size=file_size,
         file_hash=file_hash,
         status="uploaded"
@@ -99,7 +152,7 @@ async def upload_document(
     return document
 
 
-@router.get("/matters/{matter_id}/documents", response_model=List[DocumentResponse])
+@router.get("/matters/{matter_id}/documents", response_model=list[DocumentResponse])
 def list_matter_documents(
     matter_id: int,
     current_user: User = Depends(get_current_user),
@@ -201,9 +254,16 @@ def reprocess_document(
 
 
 def _process_document_background(document_id: int) -> None:
-    """Función que se ejecuta en background para procesar documentos."""
-    from app.services.document_processor import process_document
+    """Función que se ejecuta en background para procesar documentos.
+
+    S3-05: FastAPI's ``BackgroundTasks`` scheduler runs tasks in a
+    threadpool (not the event loop), so it's safe to use the sync
+    SQLAlchemy session here. If you ever need to call this from
+    ``async def`` code, dispatch through ``run_in_threadpool`` to
+    keep the event loop unblocked.
+    """
     from app.core.database import SessionLocal
+    from app.services.document_processor import process_document
 
     db = SessionLocal()
     try:
@@ -237,206 +297,3 @@ def _process_document_background(document_id: int) -> None:
             pass
     finally:
         db.close()
-
-
-@router.post("/{document_id}/analyze")
-def analyze_document(
-    document_id: int,
-    current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db)
-):
-    """Analiza un documento y extrae datos estructurados estilo Harvey.ai."""
-    import logging
-    logger = logging.getLogger(__name__)
-
-    from app.services.document_analyzer import analyze_document_full
-
-    document = db.query(Document).filter(
-        Document.id == document_id,
-        Document.organization_id == membership.organization_id
-    ).first()
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Documento no encontrado")
-
-    if not document.extracted_text:
-        raise HTTPException(
-            status_code=400,
-            detail="El documento aún no tiene texto extraído. Procesa primero."
-        )
-
-    try:
-        analysis = analyze_document_full(document_id)
-        return {
-            "message": "Documento analizado exitosamente",
-            "document_id": document_id,
-            "has_analysis": True
-        }
-    except Exception as e:
-        logger.error(f"Error analyzing document {document_id}: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error en análisis: {type(e).__name__}: {str(e)}")
-
-
-@router.get("/{document_id}/analysis")
-def get_document_analysis(
-    document_id: int,
-    current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db)
-):
-    """Obtiene el análisis estructurado de un documento."""
-    from app.services.document_analyzer import get_document_analysis as get_doc_analysis
-    import json
-
-    document = db.query(Document).filter(
-        Document.id == document_id,
-        Document.organization_id == membership.organization_id
-    ).first()
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Documento no encontrado")
-
-    analysis = get_doc_analysis(document_id)
-
-    if not analysis:
-        return {
-            "has_analysis": False,
-            "document_id": document_id
-        }
-
-    return {
-        "has_analysis": True,
-        "document_id": document_id,
-        "document_type": analysis.document_type,
-        "participants": json.loads(analysis.participants) if analysis.participants else [],
-        "financial_terms": json.loads(analysis.financial_terms) if analysis.financial_terms else {},
-        "obligations": json.loads(analysis.obligations) if analysis.obligations else [],
-        "clauses_by_type": json.loads(analysis.clauses_by_type) if analysis.clauses_by_type else {},
-        "unusual_clauses": json.loads(analysis.unusual_clauses) if analysis.unusual_clauses else [],
-        "risk_assessment": json.loads(analysis.risk_assessment) if analysis.risk_assessment else [],
-        "contract_timeline": json.loads(analysis.contract_timeline) if analysis.contract_timeline else [],
-        "legal_references": json.loads(analysis.legal_references) if analysis.legal_references else [],
-        "indexed_content": analysis.indexed_content,
-        "created_at": analysis.created_at.isoformat() if analysis.created_at else None
-    }
-
-
-@router.get("/{document_id}/analysis/markdown")
-def get_document_analysis_markdown(
-    document_id: int,
-    current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db)
-):
-    """Obtiene el análisis de un documento en formato markdown."""
-    from app.services.document_analyzer import get_document_analysis as get_doc_analysis
-    from app.services.markdown_generator import analysis_to_markdown
-
-    document = db.query(Document).filter(
-        Document.id == document_id,
-        Document.organization_id == membership.organization_id
-    ).first()
-
-    if not document:
-        raise HTTPException(status_code=404, detail="Documento no encontrado")
-
-    analysis = get_doc_analysis(document_id)
-
-    if not analysis:
-        raise HTTPException(
-            status_code=404,
-            detail="El documento no tiene análisis disponible"
-        )
-
-    markdown_content = analysis_to_markdown(analysis, document)
-
-    return {
-        "document_id": document_id,
-        "filename": f"{document.original_filename.rsplit('.', 1)[0]}_analysis.md",
-        "content": markdown_content,
-        "content_type": "text/markdown"
-    }
-
-
-@router.get("/matters/{matter_id}/risk-dashboard")
-def get_matter_risk_dashboard(
-    matter_id: int,
-    current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db),
-    level: Optional[str] = Query(None, description="Filter by risk level (high, medium, low)"),
-    risk_type: Optional[str] = Query(None, description="Filter by risk type (terminacion, penalidades, etc.)"),
-    sort_by: Optional[str] = Query("score", description="Sort by: score, level, type"),
-    sort_order: Optional[str] = Query("desc", description="Sort order: asc, desc"),
-):
-    """Obtiene dashboard agregado de riesgos de todos los documentos analizados de un matter."""
-    from app.models.document_analysis import DocumentAnalysis
-
-    # Verificar que el matter existe
-    matter = db.query(Matter).filter(
-        Matter.id == matter_id,
-        Matter.organization_id == membership.organization_id
-    ).first()
-
-    if not matter:
-        raise HTTPException(status_code=404, detail="Caso no encontrado")
-
-    # Obtener todos los análisis de documentos del matter
-    analyses = db.query(DocumentAnalysis).join(Document).filter(
-        Document.matter_id == matter_id,
-        Document.organization_id == membership.organization_id
-    ).all()
-
-    # Crear mapa de documentos para obtener nombres
-    doc_map = {a.document_id: a for a in analyses}
-
-    # Agregar riesgos
-    all_risks = []
-    risk_summary = {"high": 0, "medium": 0, "low": 0}
-    documents_analyzed = 0
-    risk_types = set()
-
-    for analysis in analyses:
-        if analysis.risk_assessment:
-            risks = json.loads(analysis.risk_assessment) if isinstance(analysis.risk_assessment, str) else analysis.risk_assessment
-            for risk in risks:
-                risk_copy = {**risk, "document_id": analysis.document_id}
-                # Incluir nombre del documento
-                risk_copy["document_name"] = analysis.document.original_filename if analysis.document else f"Documento {analysis.document_id}"
-                all_risks.append(risk_copy)
-                level = risk.get("risk_level", "low")
-                if level in risk_summary:
-                    risk_summary[level] += 1
-                # Track unique risk types
-                risk_type_val = risk.get("clause_type", "unknown")
-                if risk_type_val:
-                    risk_types.add(risk_type_val)
-            documents_analyzed += 1
-
-    # Filtrar por nivel si se especifica
-    if level:
-        all_risks = [r for r in all_risks if r.get("risk_level") == level]
-
-    # Filtrar por tipo si se especifica
-    if risk_type:
-        all_risks = [r for r in all_risks if r.get("clause_type") == risk_type]
-
-    # Ordenar
-    reverse = sort_order == "desc"
-    if sort_by == "score":
-        all_risks.sort(key=lambda x: x.get("risk_score", 0), reverse=reverse)
-    elif sort_by == "level":
-        level_order = {"high": 0, "medium": 1, "low": 2}
-        all_risks.sort(key=lambda x: level_order.get(x.get("risk_level", "low"), 3), reverse=reverse)
-    elif sort_by == "type":
-        all_risks.sort(key=lambda x: x.get("clause_type", ""), reverse=reverse)
-
-    return {
-        "matter_id": matter_id,
-        "documents_analyzed": documents_analyzed,
-        "total_risks": len(all_risks),
-        "risk_summary": risk_summary,
-        "risk_types": sorted(list(risk_types)),
-        "risks": all_risks
-    }

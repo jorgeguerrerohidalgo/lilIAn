@@ -1,14 +1,132 @@
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
 import json
+import re
+from typing import Any
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.analysis_report import AnalysisReport
-from app.models.risk_item import RiskItem
-from app.models.matter import Matter
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
-from app.core.config import settings
+from app.models.matter import Matter
+from app.models.risk_item import RiskItem
+
+# S1-06: phrases that strongly suggest the upstream document (or the LLM
+# itself) tried to break out of the analysis sandbox. When detected, the
+# analysis is automatically flagged for human review.
+_PROMPT_INJECTION_PATTERNS = (
+    re.compile(r"ignore (all )?previous instructions", re.IGNORECASE),
+    re.compile(r"ignore (all )?above instructions", re.IGNORECASE),
+    re.compile(r"disregard (the )?(system|previous) prompt", re.IGNORECASE),
+    re.compile(r"you are now (?!a legal)", re.IGNORECASE),
+    re.compile(r"new instructions?:", re.IGNORECASE),
+    re.compile(r"<\|im_start\|>|<\|im_end\|>", re.IGNORECASE),
+)
+
+# Allowed string fields and their character sets. Anything outside these
+# bounds is rejected as malformed output.
+_MAX_STRING_LEN = 8_000
+_MAX_LIST_ITEMS = 200
+
+
+def _detect_prompt_injection(payload: Any) -> bool:
+    """Walk the LLM output looking for injection patterns."""
+    if isinstance(payload, str):
+        return any(p.search(payload) for p in _PROMPT_INJECTION_PATTERNS)
+    if isinstance(payload, list):
+        return any(_detect_prompt_injection(item) for item in payload)
+    if isinstance(payload, dict):
+        return any(_detect_prompt_injection(v) for v in payload.values())
+    return False
+
+
+def _shape_is_acceptable(payload: Any) -> bool:
+    """Cheap shape check that prevents runaway responses from being persisted.
+
+    Enforces soft caps on string length, list length and nesting depth.
+    """
+    def _walk(value: Any, depth: int = 0) -> bool:
+        if depth > 8:
+            return False
+        if isinstance(value, str):
+            return len(value) <= _MAX_STRING_LEN
+        if isinstance(value, list):
+            if len(value) > _MAX_LIST_ITEMS:
+                return False
+            return all(_walk(item, depth + 1) for item in value)
+        if isinstance(value, dict):
+            if len(value) > 50:
+                return False
+            return all(_walk(v, depth + 1) for v in value.values())
+        return True
+
+    return _walk(payload)
+
+
+def _validate_llm_output(raw: Any) -> dict[str, Any]:
+    """S1-06: validate an LLM structured output before persisting.
+
+    Returns a normalized dict that ALWAYS has ``requires_human_review``
+    and a ``warnings`` list so callers can branch on trust.
+    """
+    warnings: list[str] = []
+    requires_human_review = False
+
+    if raw is None:
+        warnings.append("El LLM devolvió una respuesta vacía")
+        requires_human_review = True
+        normalized: dict[str, Any] = {
+            "resumen_ejecutivo": "",
+            "puntos_criticos": [],
+            "risks": [],
+            "confidence": "low",
+            "warnings": warnings,
+            "requires_human_review": True,
+        }
+        return normalized
+
+    if not isinstance(raw, dict):
+        warnings.append("El LLM no devolvió un objeto JSON válido")
+        requires_human_review = True
+        return {
+            "resumen_ejecutivo": str(raw)[:_MAX_STRING_LEN],
+            "puntos_criticos": [],
+            "risks": [],
+            "confidence": "low",
+            "warnings": warnings,
+            "requires_human_review": True,
+        }
+
+    if _detect_prompt_injection(raw):
+        warnings.append(
+            "El contenido del documento contenía instrucciones potencialmente "
+            "adversarias; el análisis fue marcado para revisión humana."
+        )
+        requires_human_review = True
+
+    if not _shape_is_acceptable(raw):
+        warnings.append(
+            "La respuesta del LLM excedió los límites esperados; se marcó "
+            "para revisión humana."
+        )
+        requires_human_review = True
+
+    # Coerce string fields into bounded strings so downstream code is safe.
+    def _bounded(value: Any) -> Any:
+        if isinstance(value, str):
+            return value[:_MAX_STRING_LEN]
+        if isinstance(value, list):
+            return [item for item in (_bounded(v) for v in value) if item is not None][:_MAX_LIST_ITEMS]
+        if isinstance(value, dict):
+            return {str(k)[:120]: _bounded(v) for k, v in value.items()}
+        return value
+
+    normalized = _bounded(raw)
+    normalized.setdefault("warnings", [])
+    normalized["warnings"] = list(normalized.get("warnings", [])) + warnings
+    normalized["requires_human_review"] = bool(
+        normalized.get("requires_human_review", False) or requires_human_review
+    )
+    return normalized
 
 
 # ==================== QUERIES RAG DINÁMICAS POR TIPO DE MATERIA ====================
@@ -576,8 +694,8 @@ def get_laws_context_for_rag(matter_type: str, organization_id: int) -> str:
     Usa queries específicas según el tipo de materia (laboral, civil, etc.)
     """
     try:
-        from app.services.rag import hybrid_search
         from app.services.embeddings import get_embedding_provider
+        from app.services.rag import hybrid_search
 
         provider = get_embedding_provider()
 
@@ -588,7 +706,7 @@ def get_laws_context_for_rag(matter_type: str, organization_id: int) -> str:
         # Por defecto usa "legislación chilena vigente" si no hay mapping específico
         query = QUERIES_RAG_POR_TIPO.get(mt, "legislación chilena vigente contratos obligaciones")
 
-        query_embedding = provider.generate_embedding(query)
+        provider.generate_embedding(query)
 
         results = hybrid_search(
             query=query,
@@ -630,73 +748,66 @@ def get_precedents_context_for_rag(matter_type: str, organization_id: int, top_k
         return ""
 
 
-def detect_normative_conflicts(
-    documents_text: str,
-    matter_type: str,
-    organization_id: int
-) -> dict:
-    """Detecta conflictos entre cláusulas del contrato y la legislación chilena vigente.
+def _empty_conflicts_result(summary: str, warnings: list) -> dict:
+    """Helper for the early-return paths in ``detect_normative_conflicts``."""
+    return {
+        "conflicts": [],
+        "observations": [],
+        "confidence": "low",
+        "summary": summary,
+        "warnings": warnings,
+        "requires_human_review": True,
+    }
 
-    Compara el contenido del contrato con las leyes relevantes indexadas
-    para identificar posibles contradicciones o cláusulas potencialmente abusivas.
 
-    Returns:
-        dict con:
-        - conflicts: lista de conflictos detectados
-        - observations: lista de cláusulas en observación
-        - confidence: nivel de confianza del análisis
-    """
-    from app.services.llm import get_llm_provider
+def _parse_conflicts_response(raw: str) -> dict:
+    """Extract a JSON object from the LLM response and normalize its fields."""
+    import json as _json
+    import re as _re
 
-    if not documents_text or len(documents_text.strip()) < 200:
-        return {
-            "conflicts": [],
-            "observations": [],
-            "confidence": "low",
-            "summary": "Texto insuficiente para análisis de conflictos normativos",
-            "warnings": ["Documento con texto insuficiente para análisis de conflictos"],
-            "requires_human_review": True
-        }
+    json_match = _re.search(r"\\{.*\\}", raw, _re.DOTALL)
+    if not json_match:
+        return _empty_conflicts_result(
+            "No se pudo parsear el análisis de conflictos",
+            ["Error al parsear respuesta del LLM"],
+        )
+    result = _json.loads(json_match.group(0))
+    return {
+        "conflicts": result.get("conflicts", []),
+        "observations": result.get("observations", []),
+        "confidence": "high",
+        "summary": result.get("summary", "Análisis completado"),
+    }
 
-    try:
-        # Obtener contexto legal relevante
-        laws_context = get_laws_context_for_rag(matter_type, organization_id)
 
-        if not laws_context:
-            return {
-                "conflicts": [],
-                "observations": [],
-                "confidence": "low",
-                "summary": "No se encontró contexto legal para comparar",
-                "warnings": ["Contexto legal no disponible - análisis de conflictos limitado"],
-                "requires_human_review": True
-            }
-
-        prompt = f"""Analiza el siguiente contrato y detecta conflictos con la legislación chilena.
+CONFLICTS_PROMPT_TEMPLATE = """Analiza el siguiente contrato y detecta conflictos con la legislación chilena.
 
 Identifica:
 1. CONFLICTOS: Cláusulas que contradicen directamente una ley o regulation chilena vigente
 2. OBSERVACIONES: Cláusulas que podrían ser problematicas o estar en zona gris legal
 
 CONTRATO:
-{documents_text[:15000]}
+{documents}
 
-LEGISLACIÓN APLICABLE:
-{laws_context}
+LEYES RELEVANTES:
+{laws}
 
-Responde en JSON con este formato exacto:
+Responde SOLO con JSON válido siguiendo este esquema:
 {{
     "conflicts": [
         {{
-            "clause": "Texto de la cláusula conflictiva",
-            "issue": "Descripción del conflicto",
-            "law": "Ley o artículo que se contradice",
-            "severity": "high|medium|low"
+            "clause": "Texto o resumen de la cláusula",
+            "law_reference": "Ley o artículo específico",
+            "severity": "high|medium|low",
+            "explanation": "Por qué hay conflicto",
+            "concern": "Motivo de preocupación",
+            "recommendation": "Recomendación"
         }}
     ],
     "observations": [
         {{
-            "clause": "Texto de la cláusula en observación",
+            "clause": "Texto o resumen de la cláusula",
+            "law_reference": "Ley relacionada",
             "concern": "Motivo de preocupación",
             "recommendation": "Recomendación"
         }}
@@ -704,46 +815,54 @@ Responde en JSON con este formato exacto:
     "summary": "Resumen ejecutivo del análisis"
 }}"""
 
+
+def detect_normative_conflicts(
+    documents_text: str,
+    matter_type: str,
+    organization_id: int,
+) -> dict:
+    """Detecta conflictos entre cláusulas del contrato y la legislación chilena vigente.
+
+    S4-03: split into helpers (``CONFLICTS_PROMPT_TEMPLATE``,
+    ``_parse_conflicts_response``, ``_empty_conflicts_result``) so this
+    orchestrator only owns the flow.
+    """
+    from app.services.llm import get_llm_provider
+
+    if not documents_text or len(documents_text.strip()) < 200:
+        return _empty_conflicts_result(
+            "Texto insuficiente para análisis de conflictos normativos",
+            ["Documento con texto insuficiente para análisis de conflictos"],
+        )
+
+    try:
+        laws_context = get_laws_context_for_rag(matter_type, organization_id)
+        if not laws_context:
+            return _empty_conflicts_result(
+                "No se encontró contexto legal para comparar",
+                ["Contexto legal no disponible - análisis de conflictos limitado"],
+            )
+
+        prompt = CONFLICTS_PROMPT_TEMPLATE.format(
+            documents=documents_text[:15000],
+            laws=laws_context[:5000],
+        )
+
         provider = get_llm_provider()
         response = provider.generate(
             prompt=prompt,
             system_prompt=None,
             max_tokens=2048,
-            temperature=0.3
+            temperature=0.3,
+        )
+        return _parse_conflicts_response(response)
+
+    except Exception as exc:
+        return _empty_conflicts_result(
+            f"Error en análisis de conflictos: {exc}",
+            [f"Error en análisis de conflictos: {exc}"],
         )
 
-        # Parsear JSON de la respuesta
-        import json
-        import re
-
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group(0))
-            return {
-                "conflicts": result.get("conflicts", []),
-                "observations": result.get("observations", []),
-                "confidence": "high",
-                "summary": result.get("summary", "Análisis completado")
-            }
-        else:
-            return {
-                "conflicts": [],
-                "observations": [],
-                "confidence": "low",
-                "summary": "No se pudo parsear el análisis de conflictos",
-                "warnings": ["Error al parsear respuesta del LLM"],
-                "requires_human_review": True
-            }
-
-    except Exception as e:
-        return {
-            "conflicts": [],
-            "observations": [],
-            "confidence": "low",
-            "summary": f"Error en análisis de conflictos: {str(e)}",
-            "warnings": [f"Error en análisis de conflictos: {str(e)}"],
-            "requires_human_review": True
-        }
 
 
 def analyze_contract(documents_text: str, matter_type: str, organization_id: int) -> dict:
@@ -782,7 +901,11 @@ DOCUMENTO:
 Proporciona el análisis en formato JSON siguiendo exactamente el esquema especificado."""
 
     try:
-        result = provider.generate_structured(prompt, system_prompt, RISK_ANALYSIS_SCHEMA)
+        raw_result = provider.generate_structured(prompt, system_prompt, RISK_ANALYSIS_SCHEMA)
+
+        # S1-06: validate, shape-check and flag for human review when the
+        # upstream document contains prompt-injection patterns.
+        result = _validate_llm_output(raw_result)
 
         # Detectar conflictos normativos si hay suficiente contexto legal
         if laws_context:
@@ -914,6 +1037,7 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
         validation_result = None
         try:
             import asyncio
+
             from app.services.document_validator import validate_matter_documents
 
             loop = asyncio.new_event_loop()
@@ -956,13 +1080,19 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
 # GATE DE REVISIÓN - Análisis no aprobado no debe usarse para decisiones
 # =============================================================================
 
-def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> Dict[str, Any]:
+def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> dict[str, Any]:
     """
     Verifica si un análisis puede ser usado para decisiones automatizadas.
 
-    Args:
-        analysis_report_id: ID del análisis a verificar
-        db: sesión de base de datos
+    Política explícita (S0-13):
+    - Si ``requires_human_review=True``, el gate SOLO se abre cuando
+      ``review_approved=True`` (un Review humano en estado ``APPROVED``).
+    - Si ``requires_human_review=False``, el análisis puede usarse sin
+      revisión, pero la trazabilidad queda registrada explícitamente
+      vía ``review_status="auto_approved"`` en la respuesta. La
+      aplicación cliente debe mostrar esta distinción al usuario.
+    - Por defecto (sin información suficiente), el gate se mantiene
+      cerrado para evitar decisiones legales sin auditoría.
 
     Returns:
         Dict con:
@@ -985,68 +1115,69 @@ def can_use_analysis_for_automated_decisions(analysis_report_id: int, db) -> Dic
             "review_status": None
         }
 
-    # Si el análisis no requiere revisión humana, puede usarse directamente
-    if not report.requires_human_review and not report.review_approved:
-        return {
-            "can_use": True,
-            "requires_review": False,
-            "reason": None,
-            "review_status": "auto_approved"
-        }
+    # Si requiere revisión humana, gate SOLO se abre con review_approved=True.
+    if report.requires_human_review:
+        if report.review_approved:
+            return {
+                "can_use": True,
+                "requires_review": True,
+                "reason": None,
+                "review_status": "approved"
+            }
+        # Requiere revisión y NO está aprobada — buscar contexto del review.
+        latest_review = db.query(Review).filter(
+            Review.analysis_report_id == analysis_report_id
+        ).order_by(Review.created_at.desc()).first()
 
-    # Si requiere revisión pero ya está aprobado, puede usarse
-    if report.requires_human_review and report.review_approved:
-        return {
-            "can_use": True,
-            "requires_review": True,
-            "reason": None,
-            "review_status": "approved"
-        }
+        if latest_review is None:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": "Analysis requires human review but no review has been submitted",
+                "review_status": None
+            }
 
-    # Si requiere revisión y no está aprobado, buscar último review
-    latest_review = db.query(Review).filter(
-        Review.analysis_report_id == analysis_report_id
-    ).order_by(Review.created_at.desc()).first()
+        if latest_review.status == ReviewStatus.PENDING:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": "Analysis is pending review",
+                "review_status": "pending"
+            }
 
-    if not latest_review:
+        if latest_review.status == ReviewStatus.REJECTED:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": f"Analysis was rejected: {latest_review.rejection_reason}",
+                "review_status": "rejected",
+                "suggested_changes": latest_review.suggested_changes
+            }
+
+        if latest_review.status == ReviewStatus.DRAFT:
+            return {
+                "can_use": False,
+                "requires_review": True,
+                "reason": "Analysis review is still in draft state",
+                "review_status": "draft"
+            }
+
+        # Default conservador: NO permitir uso automatizado.
         return {
             "can_use": False,
             "requires_review": True,
-            "reason": "Analysis requires human review but no review has been submitted",
-            "review_status": None
+            "reason": "Analysis cannot be used for automated decisions",
+            "review_status": latest_review.status
         }
 
-    if latest_review.status == ReviewStatus.PENDING:
-        return {
-            "can_use": False,
-            "requires_review": True,
-            "reason": "Analysis is pending review",
-            "review_status": "pending"
-        }
-
-    if latest_review.status == ReviewStatus.REJECTED:
-        return {
-            "can_use": False,
-            "requires_review": True,
-            "reason": f"Analysis was rejected: {latest_review.rejection_reason}",
-            "review_status": "rejected",
-            "suggested_changes": latest_review.suggested_changes
-        }
-
-    if latest_review.status == ReviewStatus.DRAFT:
-        return {
-            "can_use": False,
-            "requires_review": True,
-            "reason": "Analysis review is still in draft state",
-            "review_status": "draft"
-        }
-
-    # Por defecto, no permitir uso automatizado
+    # No requiere revisión humana: el análisis puede usarse, pero la
+    # respuesta deja explícito que fue auto-aprobado para que la UI pueda
+    # informar al usuario.
     return {
-        "can_use": False,
-        "requires_review": True,
-        "reason": "Analysis cannot be used for automated decisions",
-        "review_status": latest_review.status if latest_review else None
+        "can_use": True,
+        "requires_review": False,
+        "reason": None,
+        "review_status": "auto_approved"
     }
 
 
@@ -1059,9 +1190,16 @@ def update_analysis_review_status(analysis_report_id: int, review_status: str, d
         review_status: Estado del review (approved/rejected/pending)
         db: sesión de base de datos
     """
-    report = db.query(AnalysisReport).filter(
-        AnalysisReport.id == analysis_report_id
-    ).first()
+    # S3-02: acquire a pessimistic lock so two concurrent reviewers can't
+    # race the same row and end up with an inconsistent review_approved
+    # value. The lock is released automatically when the transaction
+    # commits below.
+    report = (
+        db.query(AnalysisReport)
+        .filter(AnalysisReport.id == analysis_report_id)
+        .with_for_update()
+        .first()
+    )
 
     if not report:
         return

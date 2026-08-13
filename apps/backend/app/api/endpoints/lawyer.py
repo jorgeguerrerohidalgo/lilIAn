@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
 
-from app.core.database import get_db
-from app.models.matter import Matter, MatterStatus
-from app.models.template import MatterNote, MatterStatusHistory
-from app.models.organization_member import OrganizationMember, MemberRole
-from app.models.user import User
-from app.models.analysis_report import AnalysisReport
-from app.models.risk_item import RiskItem
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.api.deps.auth import get_current_user, require_organization
+from app.core.database import get_db
+from app.models.analysis_report import AnalysisReport
+from app.models.matter import Matter, MatterStatus
+from app.models.organization_member import MemberRole, OrganizationMember
+from app.models.risk_item import RiskItem
+from app.models.template import MatterNote, MatterStatusHistory
+from app.models.user import User
 
 router = APIRouter(prefix="/lawyer", tags=["lawyer"])
 
@@ -36,7 +35,7 @@ class MatterNoteResponse(BaseModel):
 class MatterStatusUpdate(BaseModel):
     matter_id: int
     new_status: str
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class LawyerMatterResponse(BaseModel):
@@ -45,22 +44,22 @@ class LawyerMatterResponse(BaseModel):
     matter_type: str
     status: str
     urgency: str
-    description: Optional[str]
-    counterparty_name: Optional[str]
+    description: str | None
+    counterparty_name: str | None
     created_at: str
     updated_at: str
     risk_count: int
     has_analysis: bool
-    created_by_name: Optional[str] = None
+    created_by_name: str | None = None
 
     class Config:
         from_attributes = True
 
 
-@router.get("/cases", response_model=List[LawyerMatterResponse])
+@router.get("/cases", response_model=list[LawyerMatterResponse])
 def list_lawyer_cases(
-    status_filter: Optional[str] = None,
-    urgency_filter: Optional[str] = None,
+    status_filter: str | None = None,
+    urgency_filter: str | None = None,
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
@@ -156,7 +155,7 @@ def add_matter_note(
     )
 
 
-@router.get("/matters/{matter_id}/notes", response_model=List[MatterNoteResponse])
+@router.get("/matters/{matter_id}/notes", response_model=list[MatterNoteResponse])
 def get_matter_notes(
     matter_id: int,
     current_user: User = Depends(get_current_user),

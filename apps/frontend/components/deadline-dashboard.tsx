@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { logger } from "../lib/logger";
 
 interface AlertsSummary {
   total: number;
@@ -55,7 +56,7 @@ export function DeadlineDashboard() {
         setRecentAlerts(data.filter((a: DeadlineAlert) => a.status === "pending"));
       }
     } catch (error) {
-      console.error("Error fetching dashboard:", error);
+      logger.error("Error fetching dashboard:", error);
     } finally {
       setLoading(false);
     }

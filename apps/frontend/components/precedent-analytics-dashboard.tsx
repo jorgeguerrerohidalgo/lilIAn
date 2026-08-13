@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { getApiUrl } from "@/lib/api";
+import { logger } from "../lib/logger";
+
+
+const API_URL = getApiUrl();
 
 interface AnalyticsData {
   summary: {
@@ -24,8 +29,6 @@ interface FilterOptions {
   legal_areas: string[];
   year_range: { min: number; max: number };
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export function PrecedentAnalyticsDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -61,7 +64,7 @@ export function PrecedentAnalyticsDashboard() {
         if (data.year_range?.max) setYearTo(data.year_range.max.toString());
       }
     } catch (err) {
-      console.error("Error fetching filters:", err);
+      logger.error("Error fetching filters:", err);
     }
   };
 
@@ -90,7 +93,7 @@ export function PrecedentAnalyticsDashboard() {
       }
     } catch (err) {
       setError("Error de conexión");
-      console.error(err);
+      logger.error("Error fetching analytics:", err);
     } finally {
       setLoading(false);
     }

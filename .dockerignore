@@ -1,0 +1,69 @@
+# S6-02: .dockerignore for the lilIAn monorepo.
+# This trims the Docker build context dramatically (saves minutes per
+# build) and prevents secrets / build artefacts from leaking into the
+# image.
+.git
+.gitignore
+.github
+.vercel
+.claude
+.agents
+.claude-flow
+
+# Local secrets — MUST never enter the image.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.production.example
+
+# Python caches and virtualenvs
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/venv
+**/.venv
+**/env
+**/.env
+
+# Node / Next.js
+**/node_modules
+**/.next
+**/out
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/.pnp.*
+
+# Tests
+**/tests
+!**/apps/backend/tests
+**/coverage
+**/.nyc_output
+**/playwright-report
+**/test-results
+
+# Docs / media / scripts
+docs
+images
+**/*.md
+!apps/backend/README.md
+scripts
+**/Dockerfile
+**/Dockerfile.*
+
+# Build / CI artefacts
+**/.vite
+**/dist
+**/build
+**/__pycache__
+**/.mypy_cache
+**/.cache
+
+# OS noise
+.DS_Store
+Thumbs.db
+*.log

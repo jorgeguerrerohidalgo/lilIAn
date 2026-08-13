@@ -1,20 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
+from typing import Optional
 
-from app.core.database import get_db
-from app.models.subscription import Subscription, UsageEvent, Plan
-from app.models.organization import Organization
-from app.models.organization_member import OrganizationMember, MemberRole
-from app.models.document import Document
-from app.models.analysis_report import AnalysisReport
-from app.models.matter import Matter
-from app.models.user import User
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.api.deps.auth import get_current_user, require_organization
+from app.core.database import get_db
+from app.models.analysis_report import AnalysisReport
+from app.models.document import Document
+from app.models.matter import Matter
+from app.models.organization import Organization
+from app.models.organization_member import MemberRole, OrganizationMember
+from app.models.subscription import Plan, Subscription, UsageEvent
+from app.models.user import User
 
 router = APIRouter(prefix="/saas", tags=["saas"])
 
@@ -23,7 +24,7 @@ class PlanResponse(BaseModel):
     id: int
     name: str
     display_name: str
-    description: Optional[str]
+    description: str | None
     documents_limit: int
     analyses_limit: int
     users_limit: int
@@ -42,7 +43,7 @@ class SubscriptionResponse(BaseModel):
     users_limit: int
     monthly_price: int
     started_at: str
-    renews_at: Optional[str]
+    renews_at: str | None
     documents_used: int
     analyses_used: int
     users_used: int
@@ -62,9 +63,16 @@ class OrganizationMetrics(BaseModel):
     analyses_this_month: int
 
 
-@router.get("/plans", response_model=List[PlanResponse])
-def list_plans(db: Session = Depends(get_db)):
-    plans = db.query(Plan).filter(Plan.is_active == True).order_by(Plan.monthly_price).all()
+@router.get("/plans", response_model=list[PlanResponse])
+def list_plans(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List active plans. Requires authentication to avoid leaking competitive
+    pricing information to anonymous callers. Public marketing pages should
+    expose a separate, sanitised pricing endpoint (or copy) instead of this one.
+    """
+    plans = db.query(Plan).filter(Plan.is_active).order_by(Plan.monthly_price).all()
     return plans
 
 
@@ -120,7 +128,7 @@ def create_subscription(
     if membership.role not in [MemberRole.OWNER, MemberRole.ADMIN]:
         raise HTTPException(status_code=403, detail="Solo el dueño o admin puede modificar el plan")
 
-    plan = db.query(Plan).filter(Plan.name == plan_name, Plan.is_active == True).first()
+    plan = db.query(Plan).filter(Plan.name == plan_name, Plan.is_active).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado")
 
@@ -246,15 +254,25 @@ def record_usage_event(
     metadata: dict = None,
     db: Session = None
 ):
-    if db is None:
-        db = next(get_db().__iter__().__next__())
+    from app.core.database import SessionLocal
 
-    event = UsageEvent(
-        organization_id=organization_id,
-        user_id=user_id,
-        event_type=event_type,
-        quantity=quantity,
-        event_metadata=json.dumps(metadata) if metadata else None
-    )
-    db.add(event)
-    db.commit()
+    owns_session = db is None
+    if owns_session:
+        db = SessionLocal()
+    try:
+        event = UsageEvent(
+            organization_id=organization_id,
+            user_id=user_id,
+            event_type=event_type,
+            quantity=quantity,
+            event_metadata=json.dumps(metadata) if metadata else None
+        )
+        db.add(event)
+        db.commit()
+    except Exception:
+        if owns_session:
+            db.rollback()
+        raise
+    finally:
+        if owns_session:
+            db.close()

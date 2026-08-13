@@ -4,16 +4,16 @@ Endpoints para workflow de revisión de análisis.
 Workflow: draft → pending → approved/rejected
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import datetime
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
+from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
-from app.models.organization_member import OrganizationMember, MemberRole
-from app.api.deps.auth import get_current_user
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
@@ -27,20 +27,20 @@ class ReviewStatus(str):
 
 class ReviewCreate(BaseModel):
     analysis_report_id: int
-    comments: Optional[str] = None
+    comments: str | None = None
 
 
 class ReviewUpdate(BaseModel):
-    comments: Optional[str] = None
+    comments: str | None = None
 
 
 class ReviewApprove(BaseModel):
-    comments: Optional[str] = None
+    comments: str | None = None
 
 
 class ReviewReject(BaseModel):
     comments: str  # Required - must provide reason for rejection
-    suggested_changes: Optional[str] = None
+    suggested_changes: str | None = None
 
 
 class ReviewResponse(BaseModel):
@@ -48,12 +48,12 @@ class ReviewResponse(BaseModel):
     analysis_report_id: int
     status: str
     created_by_user_id: int
-    reviewed_by_user_id: Optional[int]
-    comments: Optional[str]
-    rejection_reason: Optional[str]
-    suggested_changes: Optional[str]
+    reviewed_by_user_id: int | None
+    comments: str | None
+    rejection_reason: str | None
+    suggested_changes: str | None
     created_at: str
-    reviewed_at: Optional[str]
+    reviewed_at: str | None
 
     class Config:
         from_attributes = True
@@ -73,7 +73,7 @@ def require_reviewer(membership: OrganizationMember) -> None:
 def create_review(
     review_data: ReviewCreate,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """
@@ -138,7 +138,7 @@ def create_review(
 def get_review(
     review_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """Obtiene un review por ID."""
@@ -169,11 +169,11 @@ def get_review(
     )
 
 
-@router.get("/analysis/{analysis_report_id}", response_model=List[ReviewResponse])
+@router.get("/analysis/{analysis_report_id}", response_model=list[ReviewResponse])
 def get_reviews_for_analysis(
     analysis_report_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """Obtiene todos los reviews para un análisis."""
@@ -205,7 +205,7 @@ def get_reviews_for_analysis(
 def submit_review(
     review_id: int,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """
@@ -257,7 +257,7 @@ def approve_review(
     review_id: int,
     approve_data: ReviewApprove,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """
@@ -318,7 +318,7 @@ def reject_review(
     review_id: int,
     reject_data: ReviewReject,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
     """

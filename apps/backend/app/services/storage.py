@@ -1,12 +1,28 @@
+import hashlib
+import logging
 import os
 import uuid
-import hashlib
-from typing import Optional, Tuple
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
+
+logger = logging.getLogger(__name__)
+
+STORAGE_ROOT = os.path.realpath(os.environ.get("STORAGE_PATH", "/app/storage/documents"))
 
 
-class StorageBackend(str, Enum):
+def _safe_join(relative_path: str) -> str | None:
+    """Resolve ``relative_path`` against STORAGE_ROOT and ensure the result stays
+    inside the storage sandbox. Returns ``None`` if the path would escape.
+    """
+    if not relative_path or os.path.isabs(relative_path):
+        return None
+    candidate = os.path.realpath(os.path.join(STORAGE_ROOT, relative_path))
+    if candidate != STORAGE_ROOT and not candidate.startswith(STORAGE_ROOT + os.sep):
+        return None
+    return candidate
+
+
+class StorageBackend(StrEnum):
     LOCAL = "local"
     SUPABASE = "supabase"
 
@@ -15,12 +31,12 @@ class StorageService(ABC):
     """Interface abstracta para storage."""
 
     @abstractmethod
-    def save_file(self, content: bytes, original_filename: str, organization_id: int, matter_id: int) -> Tuple[str, str, int]:
+    def save_file(self, content: bytes, original_filename: str, organization_id: int, matter_id: int) -> tuple[str, str, int]:
         """Guarda archivo y retorna (relative_path, file_hash, size)"""
         pass
 
     @abstractmethod
-    def get_file_path(self, relative_path: str) -> Optional[str]:
+    def get_file_path(self, relative_path: str) -> str | None:
         """Retorna path local del archivo o None si no existe"""
         pass
 
@@ -30,7 +46,7 @@ class StorageService(ABC):
         pass
 
     @abstractmethod
-    def get_file_content(self, relative_path: str) -> Optional[bytes]:
+    def get_file_content(self, relative_path: str) -> bytes | None:
         """Retorna contenido del archivo o None"""
         pass
 
@@ -39,13 +55,13 @@ class StorageService(ABC):
 # Implementación LOCAL (filesystem)
 # =============================================================================
 
-STORAGE_PATH = os.environ.get("STORAGE_PATH", "/app/storage/documents")
+STORAGE_PATH = STORAGE_ROOT
 
 
 class LocalStorage(StorageService):
     """Storage local usando filesystem."""
 
-    def save_file(self, content: bytes, original_filename: str, organization_id: int, matter_id: int) -> Tuple[str, str, int]:
+    def save_file(self, content: bytes, original_filename: str, organization_id: int, matter_id: int) -> tuple[str, str, int]:
         os.makedirs(STORAGE_PATH, exist_ok=True)
 
         file_hash = hashlib.sha256(content).hexdigest()
@@ -66,22 +82,22 @@ class LocalStorage(StorageService):
         relative_path = f"{organization_id}/{matter_id}/{unique_filename}"
         return relative_path, file_hash, len(content)
 
-    def get_file_path(self, relative_path: str) -> Optional[str]:
-        full_path = os.path.join(STORAGE_PATH, relative_path)
-        if os.path.exists(full_path):
+    def get_file_path(self, relative_path: str) -> str | None:
+        full_path = _safe_join(relative_path)
+        if full_path and os.path.exists(full_path):
             return full_path
         return None
 
     def delete_file(self, relative_path: str) -> bool:
-        full_path = os.path.join(STORAGE_PATH, relative_path)
-        if os.path.exists(full_path):
+        full_path = _safe_join(relative_path)
+        if full_path and os.path.exists(full_path):
             os.remove(full_path)
             return True
         return False
 
-    def get_file_content(self, relative_path: str) -> Optional[bytes]:
-        full_path = os.path.join(STORAGE_PATH, relative_path)
-        if os.path.exists(full_path):
+    def get_file_content(self, relative_path: str) -> bytes | None:
+        full_path = _safe_join(relative_path)
+        if full_path and os.path.exists(full_path):
             with open(full_path, "rb") as f:
                 return f.read()
         return None
@@ -96,18 +112,19 @@ class SupabaseStorage(StorageService):
 
     def __init__(self):
         from supabase import create_client
+
         from app.core.config import settings
 
         self.bucket_name = os.environ.get("SUPABASE_STORAGE_BUCKET", "documents")
         self.client = create_client(
             settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_KEY
+            settings.SUPABASE_SERVICE_ROLE_KEY
         )
 
     def _get_storage_path(self, organization_id: int, matter_id: int, filename: str) -> str:
         return f"{organization_id}/{matter_id}/{filename}"
 
-    def save_file(self, content: bytes, original_filename: str, organization_id: int, matter_id: int) -> Tuple[str, str, int]:
+    def save_file(self, content: bytes, original_filename: str, organization_id: int, matter_id: int) -> tuple[str, str, int]:
         file_hash = hashlib.sha256(content).hexdigest()
         ext = os.path.splitext(original_filename)[1].lower()
         unique_filename = f"{uuid.uuid4()}{ext}"
@@ -122,7 +139,7 @@ class SupabaseStorage(StorageService):
 
         return storage_path, file_hash, len(content)
 
-    def get_file_path(self, relative_path: str) -> Optional[str]:
+    def get_file_path(self, relative_path: str) -> str | None:
         """Para Supabase, retorna URL签署 del archivo."""
         try:
             url = self.client.storage.from_(self.bucket_name).create_signed_url(
@@ -140,7 +157,7 @@ class SupabaseStorage(StorageService):
         except Exception:
             return False
 
-    def get_file_content(self, relative_path: str) -> Optional[bytes]:
+    def get_file_content(self, relative_path: str) -> bytes | None:
         try:
             response = self.client.storage.from_(self.bucket_name).download(relative_path)
             return response
@@ -177,11 +194,11 @@ def get_storage() -> StorageService:
 # Funciones legacy para backward compatibility
 # =============================================================================
 
-def save_file(content: bytes, original_filename: str, organization_id: int, matter_id: int) -> Tuple[str, str, int]:
+def save_file(content: bytes, original_filename: str, organization_id: int, matter_id: int) -> tuple[str, str, int]:
     return get_storage().save_file(content, original_filename, organization_id, matter_id)
 
 
-def get_file_path(relative_path: str) -> Optional[str]:
+def get_file_path(relative_path: str) -> str | None:
     return get_storage().get_file_path(relative_path)
 
 
@@ -189,5 +206,5 @@ def delete_file(relative_path: str) -> bool:
     return get_storage().delete_file(relative_path)
 
 
-def get_file_content(relative_path: str) -> Optional[bytes]:
+def get_file_content(relative_path: str) -> bytes | None:
     return get_storage().get_file_content(relative_path)

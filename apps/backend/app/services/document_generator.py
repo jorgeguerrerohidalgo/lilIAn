@@ -6,15 +6,13 @@ Generates documents from templates with context from matters/documents.
 import json
 import re
 from datetime import datetime
-from typing import Dict, List, Optional
 from pathlib import Path
-
 
 # Ruta a los templates
 TEMPLATES_DIR = Path(__file__).parent / "document_templates"
 
 
-def get_all_templates() -> List[dict]:
+def get_all_templates() -> list[dict]:
     """Obtiene todos los templates disponibles."""
     templates = []
 
@@ -25,7 +23,7 @@ def get_all_templates() -> List[dict]:
         if file.name == "__init__.py":
             continue
         try:
-            with open(file, "r", encoding="utf-8") as f:
+            with open(file, encoding="utf-8") as f:
                 template_data = json.load(f)
                 templates.append(template_data)
         except Exception:
@@ -34,7 +32,7 @@ def get_all_templates() -> List[dict]:
     return templates
 
 
-def get_template_by_id(template_id: str) -> Optional[dict]:
+def get_template_by_id(template_id: str) -> dict | None:
     """Obtiene un template específico por su ID."""
     templates = get_all_templates()
     for template in templates:
@@ -43,13 +41,13 @@ def get_template_by_id(template_id: str) -> Optional[dict]:
     return None
 
 
-def get_templates_by_category(category: str) -> List[dict]:
+def get_templates_by_category(category: str) -> list[dict]:
     """Obtiene templates filtrados por categoría."""
     templates = get_all_templates()
     return [t for t in templates if t.get("category") == category]
 
 
-def get_categories() -> List[str]:
+def get_categories() -> list[str]:
     """Obtiene lista de categorías únicas."""
     templates = get_all_templates()
     categories = set(t.get("category", "") for t in templates)
@@ -65,7 +63,6 @@ def fill_template(template_text: str, variables: dict) -> str:
     - {{#if variable}}...{{else}}...{{/if}} - condición if/else
     - {{#if !variable}}...{{/if}} - condición if negada
     """
-    import re
 
     if_pattern = re.compile(r'\{\{#if\s*!?(\w+)\}}', re.DOTALL)
 
@@ -209,7 +206,6 @@ def generate_document(
 def get_chunks_text_for_matter(matter_id: int, organization_id: int, max_chars: int = 30000) -> str:
     """Obtiene el texto de los documentos de un matter."""
     from app.core.database import SessionLocal
-    from app.models.document import Document
     from app.models.document_chunk import DocumentChunk
 
     db = SessionLocal()

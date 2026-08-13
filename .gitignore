@@ -49,3 +49,10 @@ coverage/
 .env.backup
 apps/backend/laws/*.pdf
 .vercel
+# TypeScript incremental build cache
+*.tsbuildinfo
+apps/frontend/tsconfig.tsbuildinfo
+# Added by code-review-graph
+.code-review-graph/
+# Claude Code local config (commit .claude/settings.json if reproducible setup needed)
+.claude/settings.local.json

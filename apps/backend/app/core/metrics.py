@@ -19,8 +19,6 @@ import threading
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Deque
-
 
 MAX_LATENCY_SAMPLES = 1000
 
@@ -30,7 +28,7 @@ class _RouteStats:
     count: int = 0
     errors: int = 0
     latency_ms_total: float = 0.0
-    latency_samples: Deque[float] = field(default_factory=lambda: deque(maxlen=MAX_LATENCY_SAMPLES))
+    latency_samples: deque[float] = field(default_factory=lambda: deque(maxlen=MAX_LATENCY_SAMPLES))
 
 
 class MetricsRegistry:
@@ -96,7 +94,7 @@ class MetricsRegistry:
             }
 
 
-def _percentiles(samples: Deque[float]) -> tuple[float, float, float]:
+def _percentiles(samples: deque[float]) -> tuple[float, float, float]:
     if not samples:
         return 0.0, 0.0, 0.0
     ordered = sorted(samples)

@@ -1,10 +1,11 @@
 """
 Retry utilities with exponential backoff for LLM and embedding providers.
 """
-import time
 import logging
+import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Any, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 NON_RETRYABLE_STATUS_CODES = {401, 403}
 
 
-def is_retryable(e: Exception) -> Tuple[bool, Optional[int]]:
+def is_retryable(e: Exception) -> tuple[bool, int | None]:
     """Check if an exception is retryable. Returns (is_retryable, status_code)."""
     status = getattr(e, 'response', None)
     code = getattr(status, 'status_code', None) if status else None
