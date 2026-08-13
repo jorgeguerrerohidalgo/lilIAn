@@ -145,6 +145,9 @@ def get_document_analysis_markdown(
     }
 
 
+_RISK_LEVEL_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+
 @router.get("/matters/{matter_id}/risk-dashboard")
 def get_matter_risk_dashboard(
     matter_id: int,
@@ -156,69 +159,20 @@ def get_matter_risk_dashboard(
     sort_by: str | None = Query("score", description="Sort by: score, level, type"),
     sort_order: str | None = Query("desc", description="Sort order: asc, desc"),
 ):
-    """Obtiene dashboard agregado de riesgos de todos los documentos analizados de un matter."""
-    from app.models.document_analysis import DocumentAnalysis
+    """Obtiene dashboard agregado de riesgos de todos los documentos analizados de un matter.
 
-    matter = db.query(Matter).filter(
-        Matter.id == matter_id,
-        Matter.organization_id == membership.organization_id,
-    ).first()
+    S4-20: previously an 82-line function that did 5 things inline (matter
+    lookup, analyses fetch, risk extraction, summary aggregation, filter
+    and sort). Refactored into focused helpers so the top-level is a
+    readable pipeline of intent.
+    """
+    _load_matter(db, matter_id, membership.organization_id)  # validates 404
+    analyses = _load_analyses(db, matter_id, membership.organization_id)
 
-    if not matter:
-        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    all_risks, risk_summary, risk_types, documents_analyzed = _aggregate_risks(analyses)
 
-    analyses = (
-        db.query(DocumentAnalysis)
-        .join(Document)
-        .filter(
-            Document.matter_id == matter_id,
-            Document.organization_id == membership.organization_id,
-        )
-        .all()
-    )
-
-    all_risks = []
-    risk_summary = {"high": 0, "medium": 0, "low": 0}
-    documents_analyzed = 0
-    risk_types: set[str] = set()
-
-    for analysis in analyses:
-        if not analysis.risk_assessment:
-            continue
-        risks = (
-            json.loads(analysis.risk_assessment)
-            if isinstance(analysis.risk_assessment, str)
-            else analysis.risk_assessment
-        )
-        for risk in risks:
-            risk_copy = {**risk, "document_id": analysis.document_id}
-            risk_copy["document_name"] = (
-                analysis.document.original_filename
-                if analysis.document
-                else f"Documento {analysis.document_id}"
-            )
-            all_risks.append(risk_copy)
-            risk_level = risk.get("risk_level", "low")
-            if risk_level in risk_summary:
-                risk_summary[risk_level] += 1
-            risk_type_val = risk.get("clause_type", "unknown")
-            if risk_type_val:
-                risk_types.add(risk_type_val)
-        documents_analyzed += 1
-
-    if level:
-        all_risks = [r for r in all_risks if r.get("risk_level") == level]
-    if risk_type:
-        all_risks = [r for r in all_risks if r.get("clause_type") == risk_type]
-
-    reverse = sort_order == "desc"
-    if sort_by == "score":
-        all_risks.sort(key=lambda x: x.get("risk_score", 0), reverse=reverse)
-    elif sort_by == "level":
-        level_order = {"high": 0, "medium": 1, "low": 2}
-        all_risks.sort(key=lambda x: level_order.get(x.get("risk_level", "low"), 3), reverse=reverse)
-    elif sort_by == "type":
-        all_risks.sort(key=lambda x: x.get("clause_type", ""), reverse=reverse)
+    all_risks = _apply_risk_filters(all_risks, level, risk_type)
+    all_risks = _apply_risk_sort(all_risks, sort_by, sort_order)
 
     return {
         "matter_id": matter_id,
@@ -228,3 +182,109 @@ def get_matter_risk_dashboard(
         "risk_types": sorted(risk_types),
         "risks": all_risks,
     }
+
+
+# ---------------------------------------------------------------------------
+# S4-20: risk-dashboard helpers
+# ---------------------------------------------------------------------------
+def _load_matter(db, matter_id: int, organization_id: int) -> Matter:
+    matter = (
+        db.query(Matter)
+        .filter(
+            Matter.id == matter_id,
+            Matter.organization_id == organization_id,
+        )
+        .first()
+    )
+    if not matter:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+    return matter
+
+
+def _load_analyses(db, matter_id: int, organization_id: int) -> list:
+    from app.models.document_analysis import DocumentAnalysis
+
+    return (
+        db.query(DocumentAnalysis)
+        .join(Document)
+        .filter(
+            Document.matter_id == matter_id,
+            Document.organization_id == organization_id,
+        )
+        .all()
+    )
+
+
+def _parse_risk_assessment(raw) -> list:
+    """risk_assessment is JSON-as-text on the row; tolerate both shapes."""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return []
+    return raw
+
+
+def _risk_document_name(analysis) -> str:
+    if analysis.document:
+        return analysis.document.original_filename
+    return f"Documento {analysis.document_id}"
+
+
+def _aggregate_risks(analyses) -> tuple[list[dict], dict, set, int]:
+    """Walk analyses once, return (all_risks, summary, types, document_count)."""
+    all_risks: list[dict] = []
+    risk_summary = {"high": 0, "medium": 0, "low": 0}
+    risk_types: set[str] = set()
+    documents_analyzed = 0
+
+    for analysis in analyses:
+        risks = _parse_risk_assessment(analysis.risk_assessment)
+        if not risks:
+            continue
+        for risk in risks:
+            risk_copy = {**risk, "document_id": analysis.document_id}
+            risk_copy["document_name"] = _risk_document_name(analysis)
+            all_risks.append(risk_copy)
+
+            risk_level = risk.get("risk_level", "low")
+            if risk_level in risk_summary:
+                risk_summary[risk_level] += 1
+
+            risk_type_val = risk.get("clause_type", "unknown")
+            if risk_type_val:
+                risk_types.add(risk_type_val)
+        documents_analyzed += 1
+
+    return all_risks, risk_summary, risk_types, documents_analyzed
+
+
+def _apply_risk_filters(risks: list[dict], level: str | None, risk_type: str | None) -> list[dict]:
+    if level:
+        risks = [r for r in risks if r.get("risk_level") == level]
+    if risk_type:
+        risks = [r for r in risks if r.get("clause_type") == risk_type]
+    return risks
+
+
+def _apply_risk_sort(
+    risks: list[dict], sort_by: str | None, sort_order: str | None
+) -> list[dict]:
+    reverse = sort_order == "desc"
+    if sort_by == "score":
+        return sorted(risks, key=lambda x: x.get("risk_score", 0), reverse=reverse)
+    if sort_by == "level":
+        return sorted(
+            risks,
+            key=lambda x: _RISK_LEVEL_ORDER.get(x.get("risk_level", "low"), 3),
+            reverse=reverse,
+        )
+    if sort_by == "type":
+        return sorted(
+            risks, key=lambda x: x.get("clause_type", ""), reverse=reverse
+        )
+    return risks
+
+
