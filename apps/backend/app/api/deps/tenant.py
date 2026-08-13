@@ -29,7 +29,7 @@ def _resolve_organization_id(request: Request) -> int:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="organization_id inválido",
-            )
+            ) from None
 
     header_value = request.headers.get("X-Organization-Id")
     if header_value:
@@ -39,7 +39,7 @@ def _resolve_organization_id(request: Request) -> int:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="X-Organization-Id inválido",
-            )
+            ) from None
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,

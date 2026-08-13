@@ -24,7 +24,7 @@ def extract_text_from_pdf(file_path: str) -> str:
     text_parts = []
     try:
         doc = fitz.open(file_path)
-        for page_num, page in enumerate(doc):
+        for _page_num, page in enumerate(doc):
             text_parts.append(page.get_text())
         doc.close()
     except Exception:
@@ -42,11 +42,11 @@ def extract_text_from_docx(file_path: str) -> str:
 
 def extract_text_from_txt(file_path: str) -> str:
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             return f.read()
     except Exception:
         try:
-            with open(file_path, "r", encoding="latin-1") as f:
+            with open(file_path, encoding="latin-1") as f:
                 return f.read()
         except Exception:
             return ""

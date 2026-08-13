@@ -1,0 +1,15 @@
+# Workers run as a separate process. Inherit the same lint policy as the
+# backend so CI applies consistent rules.
+target-version = "py312"
+line-length = 100
+extend-exclude = ["__pycache__"]
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "N", "W"]
+ignore = [
+  "E501",
+  "B008",
+  "UP045",
+  "E402",
+  "BLE001",
+]

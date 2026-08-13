@@ -140,7 +140,7 @@ def get_latest_analysis(
         import json
         try:
             response_data["validation_summary"] = json.loads(report.validation_summary)
-        except:
+        except (ValueError, TypeError):
             response_data["validation_summary"] = None
 
     response_data["risks"] = risk_responses

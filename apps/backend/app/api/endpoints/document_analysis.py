@@ -62,7 +62,7 @@ def analyze_document(
         raise HTTPException(
             status_code=500,
             detail=f"Error en análisis: {type(exc).__name__}: {exc}",
-        )
+        ) from exc
 
 
 @router.get("/{document_id}/analysis")
