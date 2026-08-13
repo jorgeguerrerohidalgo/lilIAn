@@ -2,8 +2,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+import logging
+
 from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
+
 from app.models.analysis_report import AnalysisReport
 from app.models.chat import ChatMessage, ChatSession
 from app.models.client import Client
@@ -18,6 +21,8 @@ from app.models.user import User
 from app.schemas.matter import MatterCreate, MatterResponse, MatterUpdate
 
 router = APIRouter(prefix="/matters", tags=["matters"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[MatterResponse])
@@ -155,6 +160,14 @@ def delete_matter(
     if not matter:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
+    # S1-02: snapshot storage paths BEFORE we touch the DB. We need them
+    # to call storage.delete_file() after the transaction commits, because
+    # once Documents are deleted the file_path column is gone.
+    storage_paths: list[tuple[int, str | None]] = [
+        (d.id, d.file_path)
+        for d in db.query(Document).filter(Document.matter_id == matter_id).all()
+    ]
+
     # S1-11: explicit cascade cleanup so we don't leak orphans in the DB
     # or in storage. Order matters — child rows before the parent matter.
     # DocumentAnalysis doesn't have a matter_id column — its link to a
@@ -162,7 +175,7 @@ def delete_matter(
     # and delete by subquery (SQLAlchemy forbids .delete() after .join()).
     db.query(RiskItem).filter(RiskItem.matter_id == matter_id).delete(synchronize_session=False)
     db.query(DocumentChunk).filter(DocumentChunk.matter_id == matter_id).delete(synchronize_session=False)
-    doc_ids = [d.id for d in db.query(Document.id).filter(Document.matter_id == matter_id).all()]
+    doc_ids = [doc_id for doc_id, _ in storage_paths]
     if doc_ids:
         db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id.in_(doc_ids)).delete(synchronize_session=False)
     db.query(AnalysisReport).filter(AnalysisReport.matter_id == matter_id).delete(synchronize_session=False)
@@ -177,6 +190,31 @@ def delete_matter(
 
     db.delete(matter)
     db.commit()
+
+    # S1-02: delete physical files AFTER the DB commit so a storage
+    # failure does not roll back the DB cleanup (orphaned metadata is
+    # recoverable; orphan files are tracked separately for janitor jobs).
+    from app.services.storage import delete_file as storage_delete_file
+
+    for doc_id, file_path in storage_paths:
+        if not file_path:
+            continue
+        try:
+            if not storage_delete_file(file_path):
+                logger.warning(
+                    "storage_delete_returned_false",
+                    extra={"matter_id": matter_id, "doc_id": doc_id, "file_path": file_path},
+                )
+        except Exception as exc:
+            logger.error(
+                "storage_delete_raised",
+                extra={
+                    "matter_id": matter_id,
+                    "doc_id": doc_id,
+                    "file_path": file_path,
+                    "error": str(exc),
+                },
+            )
 
 
 @router.get("/{matter_id}/participants")
