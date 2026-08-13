@@ -18,9 +18,9 @@ URGENCY_RULES = {
     "aviso_previo": {"high": 7, "medium": 30, "low": 90},
     "renovacion": {"high": 7, "medium": 30, "low": 90},
     "pago": {"high": 7, "medium": 30, "low": 90},
-    "garantia": {"medium": 7, "low": 30, "low": 90},
+    "garantia": {"medium": 7, "low": 30, "high": 90},
     "firma": {"high": 7, "medium": 14, "low": 30},
-    "plazo_sin_penalidad": {"medium": 7, "low": 30, "low": 60},
+    "plazo_sin_penalidad": {"medium": 7, "low": 30, "high": 60},
 }
 
 DEFAULT_URGENCY = {"critical": 7, "high": 30, "medium": 90, "low": 180}

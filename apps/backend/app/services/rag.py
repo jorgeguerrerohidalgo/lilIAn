@@ -232,7 +232,7 @@ def hybrid_search(
     )
     logger.debug(f"[DEBUG RAG] Keyword results: {len(keyword_results)}")  # S4-05
     # RRF: Reciprocal Rank Fusion para combinar rankings
-    RRF_K = 60  # Constante típica para RRF
+    rrf_k = 60  # Constante típica para RRF
 
     # Crear diccionario de resultados por chunk_id
     all_results = {}
@@ -266,16 +266,16 @@ def hybrid_search(
 
     # Calcular RRF score para cada resultado
     final_results = []
-    for chunk_id, result in all_results.items():
+    for _chunk_id, result in all_results.items():
         rrf_score = 0
 
         # RRF de embedding (si tiene ranking)
         if result["embedding_rank"]:
-            rrf_score += 1 / (RRF_K + result["embedding_rank"])
+            rrf_score += 1 / (rrf_k + result["embedding_rank"])
 
         # RRF de keyword (si tiene ranking)
         if result["keyword_rank"]:
-            rrf_score += 1 / (RRF_K + result["keyword_rank"])
+            rrf_score += 1 / (rrf_k + result["keyword_rank"])
 
         # Normalizar: documentos que aparecen en ambos rankings得到 bonus
         if result["source"] == "both":
@@ -298,7 +298,7 @@ def hybrid_search(
                 result["document_id"] = None
                 result["page_number"] = None
                 result["section_title"] = f"{result['law_name']} - Art. {result['article_number']}" if result['article_number'] else result['law_name']
-                result["rrf_score"] = 1 / (RRF_K + rank) * 0.3  # Peso bajo para leyes
+                result["rrf_score"] = 1 / (rrf_k + rank) * 0.3  # Peso bajo para leyes
                 result["combined_score"] = result["rrf_score"]
                 final_results.append(result)
         except Exception:

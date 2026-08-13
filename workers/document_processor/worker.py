@@ -6,8 +6,9 @@ from rq import Queue, Worker
 # Add backend app to path for imports
 sys.path.insert(0, '/app')
 
-from app.core.config import settings
 from app.services.document_processor import process_document as backend_process_document
+
+from app.core.config import settings
 
 redis_conn = Redis.from_url(settings.REDIS_URL)
 queue = Queue("document_processing", connection=redis_conn)

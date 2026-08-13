@@ -6,6 +6,7 @@ El contenido completo permanece accesible, pero organizado y searchable.
 """
 
 import json
+import logging
 from datetime import datetime
 
 from app.core.config import settings
