@@ -155,43 +155,115 @@ def send_message(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    """Persist a user message, generate an LLM response, persist it,
+    and emit audit rows for both turns.
+
+    S4-19: previously a 92-line function that did its own DB lookups,
+    audit-log calls, and persistence in one body. Refactored to delegate
+    each step to a small helper so the top-level reads as a linear
+    pipeline. Audit logging is best-effort: a failure to write an audit
+    row never aborts the user-visible flow.
+    """
     import logging
     logger = logging.getLogger(__name__)
-    session = db.query(ChatSession).filter(
-        ChatSession.id == request.session_id,
-        ChatSession.organization_id == membership.organization_id
-    ).first()
 
-    if not session:
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
-
-    # S2-03: scope the matter lookup to the caller's organization so a
-    # dangling FK can't be exploited to read a Matter from another tenant.
-    matter = db.query(Matter).filter(
-        Matter.id == session.matter_id,
-        Matter.organization_id == membership.organization_id,
-    ).first()
-    matter_type = matter.matter_type.value if matter and matter.matter_type else None
-
-    # Convertir legal_area_override de string a enum si viene
-    legal_area_override = None
-    if request.legal_area_override:
-        try:
-            legal_area_override = LegalArea(request.legal_area_override.lower())
-        except ValueError:
-            pass
+    session = _load_chat_session(db, request.session_id, membership.organization_id)
+    matter = _load_matter_for_session(db, session, membership.organization_id)
+    matter_type = _resolve_matter_type(matter)
+    legal_area_override = _parse_legal_area_override(request.legal_area_override)
 
     chat_service.save_chat_message(
         session_id=request.session_id,
         role="user",
-        content=request.message
+        content=request.message,
+    )
+    _audit_user_message(db, current_user, membership, request, logger)
+
+    response_content, error = chat_service.generate_chat_response(
+        session_id=request.session_id,
+        matter_id=session.matter_id,
+        organization_id=membership.organization_id,
+        user_message=request.message,
+        matter_type=matter_type,
+        legal_area_override=legal_area_override,
     )
 
-    # S3-03: write an audit row for every chat turn. We use a SHA-256
-    # prefix instead of the raw text so the audit table doesn't bloat
-    # with duplicates of every message.
+    saved_message = chat_service.save_chat_message(
+        session_id=request.session_id,
+        role="assistant",
+        content=response_content,
+        metadata={"error": error} if error else None,
+    )
+    _audit_assistant_message(
+        db, current_user, membership, request.session_id, saved_message, response_content, logger
+    )
+
+    return MessageResponse(
+        content=response_content,
+        session_id=request.session_id,
+        message_id=saved_message["id"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# S4-19: send_message helpers
+# ---------------------------------------------------------------------------
+def _load_chat_session(db, session_id: int, organization_id: int) -> ChatSession:
+    session = (
+        db.query(ChatSession)
+        .filter(
+            ChatSession.id == session_id,
+            ChatSession.organization_id == organization_id,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    return session
+
+
+def _load_matter_for_session(db, session: ChatSession, organization_id: int):
+    """Look up the matter for the session, scoped to the caller's org.
+
+    S2-03: scoping by organization_id here prevents a dangling-FK
+    exploit where a forged session_id could pull a Matter from another
+    tenant via session.matter_id.
+    """
+    return (
+        db.query(Matter)
+        .filter(
+            Matter.id == session.matter_id,
+            Matter.organization_id == organization_id,
+        )
+        .first()
+    )
+
+
+def _resolve_matter_type(matter) -> str | None:
+    if matter and matter.matter_type:
+        return matter.matter_type.value
+    return None
+
+
+def _parse_legal_area_override(raw: str | None) -> LegalArea | None:
+    if not raw:
+        return None
     try:
-        from app.services.audit import AuditLogger
+        return LegalArea(raw.lower())
+    except ValueError:
+        return None
+
+
+def _audit_user_message(
+    db, current_user, membership, request, logger
+) -> None:
+    """Best-effort audit row for the user turn.
+
+    S3-03: the audit table records a SHA-256 prefix instead of the raw
+    text so it doesn't bloat with duplicates of every message.
+    """
+    from app.services.audit import AuditLogger
+    try:
         AuditLogger(
             db=db,
             user_id=current_user.id,
@@ -205,30 +277,20 @@ def send_message(
     except Exception as exc:
         logger.warning("audit_log_chat_user_failed: %s", exc)
 
-    response_content, error = chat_service.generate_chat_response(
-        session_id=request.session_id,
-        matter_id=session.matter_id,
-        organization_id=membership.organization_id,
-        user_message=request.message,
-        matter_type=matter_type,
-        legal_area_override=legal_area_override
-    )
 
-    saved_message = chat_service.save_chat_message(
-        session_id=request.session_id,
-        role="assistant",
-        content=response_content,
-        metadata={"error": error} if error else None
-    )
-
+def _audit_assistant_message(
+    db, current_user, membership, session_id: int, saved_message: dict,
+    response_content: str, logger,
+) -> None:
+    """Best-effort audit row for the assistant turn."""
+    from app.services.audit import AuditLogger
     try:
-        from app.services.audit import AuditLogger
         AuditLogger(
             db=db,
             user_id=current_user.id,
             organization_id=membership.organization_id,
         ).log_chat_message(
-            session_id=request.session_id,
+            session_id=session_id,
             message_id=saved_message.get("id", 0),
             role="assistant",
             content_preview=response_content or "",
@@ -236,27 +298,4 @@ def send_message(
     except Exception as exc:
         logger.warning("audit_log_chat_assistant_failed: %s", exc)
 
-    return MessageResponse(
-        content=response_content,
-        session_id=request.session_id,
-        message_id=saved_message["id"]
-    )
 
-
-@router.delete("/sessions/{session_id}", status_code=204)
-def delete_session(
-    session_id: int,
-    current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
-    db: Session = Depends(get_db)
-):
-    session = db.query(ChatSession).filter(
-        ChatSession.id == session_id,
-        ChatSession.organization_id == membership.organization_id
-    ).first()
-
-    if not session:
-        raise HTTPException(status_code=404, detail="Sesión no encontrada")
-
-    db.delete(session)
-    db.commit()
