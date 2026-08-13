@@ -8,6 +8,7 @@ from app.models.analysis_report import AnalysisReport
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.matter import Matter
+from app.models.review import Review, ReviewStatus
 from app.models.risk_item import RiskItem
 
 # S1-06: phrases that strongly suggest the upstream document (or the LLM
@@ -1098,8 +1099,6 @@ def can_use_analysis_for_automated_decisions(
     branches and dict comprehensions inline. Refactor into per-status
     gate decisions so the top-level is a small switch-style flow.
     """
-    from app.models.review import Review, ReviewStatus
-
     report = (
         db.query(AnalysisReport)
         .filter(AnalysisReport.id == analysis_report_id)
@@ -1165,8 +1164,6 @@ def _no_review_response() -> dict:
 
 
 def _latest_review_for(db, analysis_report_id: int):
-    from app.models.review import Review
-
     return (
         db.query(Review)
         .filter(Review.analysis_report_id == analysis_report_id)
@@ -1176,8 +1173,6 @@ def _latest_review_for(db, analysis_report_id: int):
 
 
 def _evaluate_review_status(latest_review) -> dict:
-    from app.models.review import ReviewStatus
-
     status = latest_review.status
     if status == ReviewStatus.PENDING:
         return {
