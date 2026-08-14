@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     def resolved_embedding_api_key(self) -> str | None:
         return self.EMBEDDING_API_KEY or self.OPENAI_API_KEY
 
-    ALLOWED_ORIGINS: str = "*"
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
 
     RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_AUTH_PER_MINUTE: int = 10
@@ -58,7 +58,43 @@ class Settings(BaseSettings):
         extra = "ignore"
 
     def get_allowed_origins(self) -> list:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",")]
+        # S1-17: defense-in-depth — reject wildcard / "null" at the config
+        # layer so neither a missing env var nor a misconfigured deployment
+        # can expose the API to arbitrary origins. Wildcard with credentials
+        # is explicitly disallowed by the CORS spec and would let any site
+        # issue authenticated cross-origin requests on behalf of a logged-in
+        # user.
+        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+        if self.APP_ENV.lower() == "production":
+            forbidden = {"*", "null"}
+            bad = [o for o in origins if o.lower() in forbidden]
+            if bad:
+                raise RuntimeError(
+                    "ALLOWED_ORIGINS contains forbidden value(s) "
+                    f"{bad!r} in production. Wildcard (`*`) and `null` "
+                    "origins are not permitted."
+                )
+            if not origins:
+                raise RuntimeError(
+                    "ALLOWED_ORIGINS must be configured in production with "
+                    "an explicit comma-separated list of origins."
+                )
+        else:
+            # Development: filter dangerous values out and warn so devs
+            # notice before pushing to production.
+            import warnings
+            forbidden = {"*", "null"}
+            bad = [o for o in origins if o.lower() in forbidden]
+            if bad:
+                warnings.warn(
+                    f"ALLOWED_ORIGINS contains {bad!r} which is not safe for "
+                    "production. Falling back to a safe localhost default.",
+                    RuntimeWarning, stacklevel=2,
+                )
+                origins = ["http://localhost:3000"]
+
+        return origins
 
 
 settings = Settings()
