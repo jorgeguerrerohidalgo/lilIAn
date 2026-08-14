@@ -12,8 +12,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
 from app.models.matter import Matter, MatterStatus, MatterType, MatterUrgency

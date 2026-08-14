@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.services import analysis
 from app.services.analysis import (
     _validate_llm_output,
