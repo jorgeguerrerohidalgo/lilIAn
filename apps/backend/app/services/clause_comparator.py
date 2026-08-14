@@ -6,88 +6,118 @@ para detectar desviaciones y generar alertas.
 """
 import re
 
+_CLAUSE_VALUE_HANDLERS = None  # populated below
+
 
 def extract_clause_value(clause_text: str, clause_type: str) -> dict | None:
     """Extrae valores específicos de una cláusula para comparar.
 
-    Returns dict con valores relevantes para comparar contra el template.
+    S4-22: previously a 80-line function with a switch over clause_type
+    inline. Each clause-type branch is now its own extract_* helper
+    registered in a dispatcher table.
     """
-    values = {"raw_text": clause_text}
-
-    if clause_type == "terminacion":
-        # Extraer días de aviso previo
-        match = re.search(r'(\d+)\s*(?:d[ií]as?|días?)\s*(?:de\s*anticipaci[ió]n|previo)', clause_text.lower())
-        if match:
-            values["notice_days"] = int(match.group(1))
-        else:
-            # Buscar cualquier número seguido de días
-            match = re.search(r'(\d+)\s*(?:d[ií]as?|días?)', clause_text.lower())
-            if match:
-                values["notice_days"] = int(match.group(1))
-
-        # Detectar si permite terminación sin causa
-        values["allows_termination_without_cause"] = any(word in clause_text.lower() for word in [
-            "sin causa", "sin necesidad", "sin expresión", "libremente",
-            "a su total criterio", "sin expresión de causa"
-        ])
-
-        # Detectar si requiere causa justificada
-        values["requires_justified_cause"] = any(word in clause_text.lower() for word in [
-            "causa justificada", "incumplimiento", "justificado", "grave"
-        ])
-
-    elif clause_type == "penalidades":
-        # Extraer porcentaje de multa/penalidad
-        match = re.search(r'(\d+(?:\.\d+)?)\s*%', clause_text)
-        if match:
-            values["penalty_percentage"] = float(match.group(1))
-
-        # Detectar topes (máximo/mínimo)
-        match_max = re.search(r'(?:máximo|max|máx)[:\s]+(\d+(?:\.\d+)?)\s*%', clause_text.lower())
-        match_min = re.search(r'(?:mínimo|min|mín)[:\s]+(\d+(?:\.\d+)?)\s*%', clause_text.lower())
-        if match_max:
-            values["penalty_max"] = float(match_max.group(1))
-        if match_min:
-            values["penalty_min"] = float(match_min.group(1))
-
-    elif clause_type == "garantia":
-        # Extraer porcentaje de garantía
-        match = re.search(r'(\d+(?:\.\d+)?)\s*%', clause_text)
-        if match:
-            values["guarantee_percentage"] = float(match.group(1))
-
-        # Detectar tipo de garantía
-        values["has_bank_guarantee"] = "boleta bancaria" in clause_text.lower()
-        values["has_insurance"] = "seguro" in clause_text.lower()
-
-    elif clause_type == "confidencialidad":
-        # Extraer años de confidencialidad
-        match = re.search(r'(\d+)\s*(?:años?|anos?)', clause_text.lower())
-        if match:
-            values["confidentiality_years"] = int(match.group(1))
-
-    elif clause_type == "renovacion":
-        # Extraer meses de renovación automática
-        match = re.search(r'(\d+)\s*(?:meses?|meses)', clause_text.lower())
-        if match:
-            values["renewal_months"] = int(match.group(1))
-
-        # Detectar si es automática
-        values["is_automatic"] = "automátic" in clause_text.lower()
-
-        # Extraer días de aviso para no renovar
-        match = re.search(r'(\d+)\s*(?:días?|dias?)\s*(?:de\s*anticipación|previo)', clause_text.lower())
-        if match:
-            values["cancellation_notice_days"] = int(match.group(1))
-
-    elif clause_type == "incremento":
-        # Extraer porcentaje máximo de incremento
-        match = re.search(r'(\d+(?:\.\d+)?)\s*%', clause_text)
-        if match:
-            values["max_increase_percentage"] = float(match.group(1))
-
+    values: dict = {"raw_text": clause_text}
+    _ensure_handlers_loaded()
+    handler = _CLAUSE_VALUE_HANDLERS.get(clause_type)
+    if handler is not None:
+        handler(values, clause_text)
     return values if values != {"raw_text": clause_text} else None
 
+
+def _ensure_handlers_loaded() -> None:
+    """Lazy registry to avoid import cycles during module init."""
+    global _CLAUSE_VALUE_HANDLERS
+    if _CLAUSE_VALUE_HANDLERS is not None:
+        return
+    _CLAUSE_VALUE_HANDLERS = {
+        "terminacion": _extract_termination_values,
+        "penalidades": _extract_penalty_values,
+        "garantia": _extract_guarantee_values,
+        "confidencialidad": _extract_confidentiality_values,
+        "renovacion": _extract_renewal_values,
+        "incremento": _extract_increase_values,
+    }
+
+
+# ---------------------------------------------------------------------------
+# S4-22: per-clause-type extractors
+# ---------------------------------------------------------------------------
+_NOTICE_DAYS_PATTERNS = (
+    re.compile(r"(\d+)\s*(?:d[ií]as?|días?)\s*(?:de\s*anticipaci[ió]n|previo)"),
+    re.compile(r"(\d+)\s*(?:d[ií]as?|días?)"),
+)
+_PERCENTAGE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+_PCT_MAX_PATTERN = re.compile(r"(?:máximo|max|máx)[:\s]+(\d+(?:\.\d+)?)\s*%", re.IGNORECASE)
+_PCT_MIN_PATTERN = re.compile(r"(?:mínimo|min|mín)[:\s]+(\d+(?:\.\d+)?)\s*%", re.IGNORECASE)
+_YEARS_PATTERN = re.compile(r"(\d+)\s*(?:años?|anos?)", re.IGNORECASE)
+_MONTHS_PATTERN = re.compile(r"(\d+)\s*(?:meses?|meses)", re.IGNORECASE)
+_RENEWAL_NOTICE_DAYS = re.compile(r"(\d+)\s*(?:días?|dias?)\s*(?:de\s*anticipación|previo)", re.IGNORECASE)
+
+
+def _extract_termination_values(values: dict, clause_text: str) -> None:
+    text = clause_text.lower()
+    for pattern in _NOTICE_DAYS_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            values["notice_days"] = int(match.group(1))
+            break
+    values["allows_termination_without_cause"] = any(
+        phrase in text
+        for phrase in (
+            "sin causa", "sin necesidad", "sin expresión", "libremente",
+            "a su total criterio", "sin expresión de causa",
+        )
+    )
+    values["requires_justified_cause"] = any(
+        phrase in text
+        for phrase in (
+            "causa justificada", "incumplimiento", "justificado", "grave",
+        )
+    )
+
+
+def _extract_penalty_values(values: dict, clause_text: str) -> None:
+    match = _PERCENTAGE_PATTERN.search(clause_text)
+    if match:
+        values["penalty_percentage"] = float(match.group(1))
+    match_max = _PCT_MAX_PATTERN.search(clause_text.lower())
+    match_min = _PCT_MIN_PATTERN.search(clause_text.lower())
+    if match_max:
+        values["penalty_max"] = float(match_max.group(1))
+    if match_min:
+        values["penalty_min"] = float(match_min.group(1))
+
+
+def _extract_guarantee_values(values: dict, clause_text: str) -> None:
+    match = _PERCENTAGE_PATTERN.search(clause_text)
+    if match:
+        values["guarantee_percentage"] = float(match.group(1))
+    text = clause_text.lower()
+    values["has_bank_guarantee"] = "boleta bancaria" in text
+    values["has_insurance"] = "seguro" in text
+
+
+def _extract_confidentiality_values(values: dict, clause_text: str) -> None:
+    match = _YEARS_PATTERN.search(clause_text.lower())
+    if match:
+        values["confidentiality_years"] = int(match.group(1))
+
+
+def _extract_renewal_values(values: dict, clause_text: str) -> None:
+    text = clause_text.lower()
+    match = _MONTHS_PATTERN.search(text)
+    if match:
+        values["renewal_months"] = int(match.group(1))
+    values["is_automatic"] = "automátic" in text
+    match = _RENEWAL_NOTICE_DAYS.search(text)
+    if match:
+        values["cancellation_notice_days"] = int(match.group(1))
+
+
+def _extract_increase_values(values: dict, clause_text: str) -> None:
+    match = _PERCENTAGE_PATTERN.search(clause_text)
+    if match:
+        values["max_increase_percentage"] = float(match.group(1))
 
 def compare_clause_to_template(
     clause_type: str,

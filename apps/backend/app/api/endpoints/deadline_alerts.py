@@ -83,77 +83,109 @@ def list_alerts(
     return [alert_to_response(a) for a in alerts]
 
 
+_URGENCY_LEVELS = ("critical", "high", "medium", "low")
+_ACTIVE_STATUSES = ("pending", "acknowledged")
+
+
 @router.get("/summary", response_model=AlertsSummary)
 def get_alerts_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     membership: OrganizationMember = Depends(require_organization),
 ):
-    """Get summary of alerts for dashboard."""
+    """Get summary of alerts for dashboard.
+
+    S4-23: previously a 69-line function with 6 near-identical count
+    queries. Refactor into per-urgency count and an active-by-matter
+    helper. Top-level reads as a small data-aggregation pipeline.
+    """
     org_id = membership.organization_id
 
-    total = db.query(DeadlineAlert).filter(
-        DeadlineAlert.organization_id == org_id
-    ).count()
-
-    overdue = db.query(DeadlineAlert).filter(
-        DeadlineAlert.organization_id == org_id,
-        DeadlineAlert.is_overdue
-    ).count()
-
-    critical = db.query(DeadlineAlert).filter(
-        DeadlineAlert.organization_id == org_id,
-        DeadlineAlert.urgency == "critical",
-        DeadlineAlert.status.in_(["pending", "acknowledged"])
-    ).count()
-
-    high = db.query(DeadlineAlert).filter(
-        DeadlineAlert.organization_id == org_id,
-        DeadlineAlert.urgency == "high",
-        DeadlineAlert.status.in_(["pending", "acknowledged"])
-    ).count()
-
-    medium = db.query(DeadlineAlert).filter(
-        DeadlineAlert.organization_id == org_id,
-        DeadlineAlert.urgency == "medium",
-        DeadlineAlert.status.in_(["pending", "acknowledged"])
-    ).count()
-
-    low = db.query(DeadlineAlert).filter(
-        DeadlineAlert.organization_id == org_id,
-        DeadlineAlert.urgency == "low",
-        DeadlineAlert.status.in_(["pending", "acknowledged"])
-    ).count()
-
-    # Alerts by matter
-    matters = db.query(
-        DeadlineAlert.matter_id,
-        Matter.title,
-    ).join(Matter).filter(
-        DeadlineAlert.organization_id == org_id,
-        DeadlineAlert.status.in_(["pending", "acknowledged"])
-    ).group_by(
-        DeadlineAlert.matter_id, Matter.title
-    ).all()
-
-    by_matter = [
-        {"matter_id": m.matter_id, "matter_title": m.title, "count": db.query(DeadlineAlert).filter(
-            DeadlineAlert.matter_id == m.matter_id,
-            DeadlineAlert.status.in_(["pending", "acknowledged"])
-        ).count()}
-        for m in matters
-    ]
+    total = _count_alerts_for_org(db, org_id)
+    overdue = _count_overdue_for_org(db, org_id)
+    by_urgency = _count_active_by_urgency(db, org_id)
+    by_matter = _active_alerts_by_matter(db, org_id)
 
     return AlertsSummary(
         total=total,
         overdue=overdue,
-        critical=critical,
-        high=high,
-        medium=medium,
-        low=low,
+        critical=by_urgency["critical"],
+        high=by_urgency["high"],
+        medium=by_urgency["medium"],
+        low=by_urgency["low"],
         by_matter=by_matter,
     )
 
+
+# ---------------------------------------------------------------------------
+# S4-23: alerts-summary helpers
+# ---------------------------------------------------------------------------
+def _count_alerts_for_org(db, org_id: int) -> int:
+    return (
+        db.query(DeadlineAlert)
+        .filter(DeadlineAlert.organization_id == org_id)
+        .count()
+    )
+
+
+def _count_overdue_for_org(db, org_id: int) -> int:
+    return (
+        db.query(DeadlineAlert)
+        .filter(
+            DeadlineAlert.organization_id == org_id,
+            DeadlineAlert.is_overdue.is_(True),
+        )
+        .count()
+    )
+
+
+def _count_active_by_urgency(db, org_id: int) -> dict[str, int]:
+    """Return a {urgency: count} dict for active alerts (pending/acknowledged)."""
+    counts = {level: 0 for level in _URGENCY_LEVELS}
+    for level in _URGENCY_LEVELS:
+        counts[level] = (
+            db.query(DeadlineAlert)
+            .filter(
+                DeadlineAlert.organization_id == org_id,
+                DeadlineAlert.urgency == level,
+                DeadlineAlert.status.in_(_ACTIVE_STATUSES),
+            )
+            .count()
+        )
+    return counts
+
+
+def _active_alerts_by_matter(db, org_id: int) -> list[dict]:
+    """Return [{matter_id, matter_title, count}, ...] for active alerts."""
+    rows = (
+        db.query(DeadlineAlert.matter_id, Matter.title)
+        .join(Matter)
+        .filter(
+            DeadlineAlert.organization_id == org_id,
+            DeadlineAlert.status.in_(_ACTIVE_STATUSES),
+        )
+        .group_by(DeadlineAlert.matter_id, Matter.title)
+        .all()
+    )
+    return [
+        {
+            "matter_id": row.matter_id,
+            "matter_title": row.title,
+            "count": _active_count_for_matter(db, row.matter_id),
+        }
+        for row in rows
+    ]
+
+
+def _active_count_for_matter(db, matter_id: int) -> int:
+    return (
+        db.query(DeadlineAlert)
+        .filter(
+            DeadlineAlert.matter_id == matter_id,
+            DeadlineAlert.status.in_(_ACTIVE_STATUSES),
+        )
+        .count()
+    )
 
 @router.get("/matters/{matter_id}", response_model=list[dict])
 def get_matter_alerts(
