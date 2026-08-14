@@ -121,12 +121,15 @@ export function PrecedentAnalyticsDashboard() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h3 className="font-medium mb-4">Filtros</h3>
+      <fieldset className="bg-white rounded-xl border border-slate-200 p-6">
+        <legend className="font-medium mb-4 px-1">Filtros</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm text-slate-600 mb-1">Tribunal</label>
+            <label htmlFor="pad-court" className="block text-sm text-slate-600 mb-1">
+              Tribunal
+            </label>
             <select
+              id="pad-court"
               value={selectedCourt}
               onChange={(e) => setSelectedCourt(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -138,8 +141,11 @@ export function PrecedentAnalyticsDashboard() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-slate-600 mb-1">Área Legal</label>
+            <label htmlFor="pad-area" className="block text-sm text-slate-600 mb-1">
+              Área Legal
+            </label>
             <select
+              id="pad-area"
               value={selectedArea}
               onChange={(e) => setSelectedArea(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -151,8 +157,11 @@ export function PrecedentAnalyticsDashboard() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-slate-600 mb-1">Año Desde</label>
+            <label htmlFor="pad-year-from" className="block text-sm text-slate-600 mb-1">
+              Año Desde
+            </label>
             <input
+              id="pad-year-from"
               type="number"
               value={yearFrom}
               onChange={(e) => setYearFrom(e.target.value)}
@@ -161,8 +170,11 @@ export function PrecedentAnalyticsDashboard() {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-600 mb-1">Año Hasta</label>
+            <label htmlFor="pad-year-to" className="block text-sm text-slate-600 mb-1">
+              Año Hasta
+            </label>
             <input
+              id="pad-year-to"
               type="number"
               value={yearTo}
               onChange={(e) => setYearTo(e.target.value)}
@@ -172,8 +184,9 @@ export function PrecedentAnalyticsDashboard() {
           </div>
         </div>
         <div className="mt-4 flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm" htmlFor="pad-text-analysis">
             <input
+              id="pad-text-analysis"
               type="checkbox"
               checked={includeTextAnalysis}
               onChange={(e) => setIncludeTextAnalysis(e.target.checked)}
@@ -182,7 +195,7 @@ export function PrecedentAnalyticsDashboard() {
             Incluir análisis de texto
           </label>
         </div>
-      </div>
+      </fieldset>
 
       {loading && (
         <div className="text-center py-12">

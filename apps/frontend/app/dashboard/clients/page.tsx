@@ -193,10 +193,11 @@ export default function ClientsPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-name" className="block text-sm font-medium text-gray-700 mb-1">
                   Nombre *
                 </label>
                 <input
+                  id="client-name"
                   type="text"
                   required
                   value={formData.name}
@@ -207,10 +208,11 @@ export default function ClientsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-company" className="block text-sm font-medium text-gray-700 mb-1">
                   Empresa
                 </label>
                 <input
+                  id="client-company"
                   type="text"
                   value={formData.company_name}
                   onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
@@ -220,10 +222,11 @@ export default function ClientsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-rut" className="block text-sm font-medium text-gray-700 mb-1">
                   RUT
                 </label>
                 <input
+                  id="client-rut"
                   type="text"
                   value={formData.rut}
                   onChange={(e) => setFormData({ ...formData, rut: e.target.value })}
@@ -233,10 +236,11 @@ export default function ClientsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-email" className="block text-sm font-medium text-gray-700 mb-1">
                   Email
                 </label>
                 <input
+                  id="client-email"
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -246,10 +250,11 @@ export default function ClientsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-phone" className="block text-sm font-medium text-gray-700 mb-1">
                   Teléfono
                 </label>
                 <input
+                  id="client-phone"
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -259,10 +264,11 @@ export default function ClientsPage() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-address" className="block text-sm font-medium text-gray-700 mb-1">
                   Dirección
                 </label>
                 <input
+                  id="client-address"
                   type="text"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
