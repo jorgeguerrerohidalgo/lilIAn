@@ -184,10 +184,22 @@ export default function ClientsPage() {
           </h2>
 
           {formError && (
-            <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{formError}</div>
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm"
+            >
+              {formError}
+            </div>
           )}
           {formSuccess && (
-            <div className="mb-4 p-3 bg-green-50 text-green-600 rounded-lg text-sm">{formSuccess}</div>
+            <div
+              role="status"
+              aria-live="polite"
+              className="mb-4 p-3 bg-green-50 text-green-600 rounded-lg text-sm"
+            >
+              {formSuccess}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">

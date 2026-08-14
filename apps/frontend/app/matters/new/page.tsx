@@ -107,7 +107,11 @@ export default function NewMatterPage() {
       </div>
 
       {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-200">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-200"
+        >
           {error}
         </div>
       )}

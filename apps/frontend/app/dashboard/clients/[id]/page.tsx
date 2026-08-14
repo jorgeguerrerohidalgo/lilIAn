@@ -122,7 +122,11 @@ export default function ClientDetailPage() {
   if (error || !client) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="bg-red-50 text-red-600 p-4 rounded-lg"
+        >
           {error || "Cliente no encontrado"}
         </div>
         <button
