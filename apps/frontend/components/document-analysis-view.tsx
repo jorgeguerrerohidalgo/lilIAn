@@ -175,7 +175,7 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
 
 
   return (
-    <div className="space-y-6" id="analysis-content">
+    <div className="space-y-6" id="analysis-content" aria-live="polite">
       {/* Header with Print/PDF buttons */}
       <div className="flex items-center justify-between mb-4">
         <div>

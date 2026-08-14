@@ -109,7 +109,7 @@ export function PrecedentAnalyticsDashboard() {
     : 1;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-live="polite">
       {/* Header */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
         <h2 className="text-lg font-semibold mb-2">

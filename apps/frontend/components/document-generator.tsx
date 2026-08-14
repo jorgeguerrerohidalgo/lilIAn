@@ -190,6 +190,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         <div className="flex flex-wrap gap-2 mb-6">
           <button
             onClick={() => setSelectedCategory(null)}
+            aria-pressed={!selectedCategory}
             className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
               !selectedCategory
                 ? "bg-ink text-white border-ink"
@@ -202,6 +203,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
+              aria-pressed={selectedCategory === cat}
               className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                 selectedCategory === cat
                   ? "bg-ink text-white border-ink"

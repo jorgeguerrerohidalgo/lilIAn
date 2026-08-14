@@ -76,7 +76,12 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm">
+          <div
+            id="login-error"
+            role="alert"
+            aria-live="assertive"
+            className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm"
+          >
             {error}
           </div>
         )}
@@ -91,6 +96,8 @@ export default function LoginPage() {
             placeholder="tu@email.com"
             autoComplete="email"
             required
+            aria-describedby={error ? "login-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Input
@@ -102,6 +109,8 @@ export default function LoginPage() {
             placeholder="••••••••"
             autoComplete="current-password"
             required
+            aria-describedby={error ? "login-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">

@@ -118,7 +118,7 @@ export default function MattersPage() {
       </div>
 
       {/* Cases List */}
-      <Card padding="none">
+      <Card padding="none" aria-live="polite">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 border-4 border-border border-t-coral rounded-full animate-spin" />
@@ -170,11 +170,13 @@ export default function MattersPage() {
                     )}
                     <span className="text-ink/30">•</span>
                     <span className="text-ink/40">
-                      {new Date(matter.created_at).toLocaleDateString("es-CL", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      <time dateTime={matter.created_at}>
+                        {new Date(matter.created_at).toLocaleDateString("es-CL", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </time>
                     </span>
                     {(matter.urgency === "high" || matter.urgency === "urgent") && (
                       <>

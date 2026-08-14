@@ -70,7 +70,7 @@ export function DocumentStatus({ documents, validationSummary, matterType }: Doc
   const matterLabel = MATTER_TYPE_LABELS[matterType] || matterType;
 
   return (
-    <div className="bg-cream rounded-xl border border-border p-6">
+    <div className="bg-cream rounded-xl border border-border p-6" aria-live="polite">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-ink">Estado de Documentos</h3>
         <button

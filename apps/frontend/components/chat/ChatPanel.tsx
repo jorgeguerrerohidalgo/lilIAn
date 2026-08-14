@@ -216,7 +216,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
           ))}
 
           {isLoading && (
-            <div className="flex gap-3">
+            <div className="flex gap-3" role="status" aria-live="polite">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center flex-shrink-0">
                 <BotIcon />
               </div>
@@ -226,6 +226,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
                   <span className="w-2 h-2 bg-ink/30 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-2 h-2 bg-ink/30 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
+                <span className="sr-only">El asistente está escribiendo...</span>
               </div>
             </div>
           )}

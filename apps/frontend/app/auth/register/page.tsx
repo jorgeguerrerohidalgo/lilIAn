@@ -83,7 +83,12 @@ export default function RegisterPage() {
         </div>
 
         {error && (
-          <div className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm">
+          <div
+            id="register-error"
+            role="alert"
+            aria-live="assertive"
+            className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm"
+          >
             {error}
           </div>
         )}
@@ -98,6 +103,8 @@ export default function RegisterPage() {
             placeholder="Tu nombre completo"
             autoComplete="name"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Input
@@ -109,6 +116,8 @@ export default function RegisterPage() {
             placeholder="tu@email.com"
             autoComplete="email"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Input
@@ -120,6 +129,8 @@ export default function RegisterPage() {
             placeholder="••••••••"
             autoComplete="new-password"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Input
@@ -131,6 +142,8 @@ export default function RegisterPage() {
             placeholder="••••••••"
             autoComplete="new-password"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">

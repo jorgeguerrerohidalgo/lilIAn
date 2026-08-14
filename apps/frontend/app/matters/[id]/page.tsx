@@ -665,7 +665,9 @@ export default function MatterDetailPage() {
             <div className="flex">
               <dt className="w-40 text-gray-500">Creado:</dt>
               <dd className="text-gray-900">
-                {new Date(matter.created_at).toLocaleDateString("es-CL")}
+                <time dateTime={matter.created_at}>
+                  {new Date(matter.created_at).toLocaleDateString("es-CL")}
+                </time>
               </dd>
             </div>
           </dl>
@@ -758,7 +760,7 @@ export default function MatterDetailPage() {
                           className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
                         >
                           {(processingDocId === doc.id || doc.status === "queued" || doc.status === "processing") ? (
-                            <span className="flex items-center gap-1">
+                            <span role="status" aria-live="polite" className="flex items-center gap-1">
                               <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -779,7 +781,7 @@ export default function MatterDetailPage() {
                           className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-purple-500 disabled:opacity-50"
                         >
                           {analyzingDocId === doc.id ? (
-                            <span className="flex items-center gap-1">
+                            <span role="status" aria-live="polite" className="flex items-center gap-1">
                               <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -800,7 +802,7 @@ export default function MatterDetailPage() {
                           className="px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-orange-500 disabled:opacity-50"
                         >
                           {analyzingDocId === doc.id ? (
-                            <span className="flex items-center gap-1">
+                            <span role="status" aria-live="polite" className="flex items-center gap-1">
                               <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -831,10 +833,13 @@ export default function MatterDetailPage() {
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"
                       >
                         {deletingDocId === doc.id ? (
-                          <svg aria-hidden="true" className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
+                          <span role="status" aria-live="polite" className="inline-flex items-center">
+                            <svg aria-hidden="true" className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span className="sr-only">Eliminando documento...</span>
+                          </span>
                         ) : (
                           <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -971,7 +976,7 @@ export default function MatterDetailPage() {
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
             >
               {analyzing ? (
-              <span className="flex items-center gap-2">
+              <span role="status" aria-live="polite" className="flex items-center gap-2">
                 <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -984,7 +989,7 @@ export default function MatterDetailPage() {
               <div className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{analysisError}</div>
             )}
             {analysisSuccess && (
-              <div className="mt-3 p-4 bg-blue-50 rounded-lg">
+              <div className="mt-3 p-4 bg-blue-50 rounded-lg" role="status" aria-live="polite">
                 <div className="flex items-center gap-3">
                   <svg aria-hidden="true" className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -1005,7 +1010,9 @@ export default function MatterDetailPage() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold">Informe de Análisis</h2>
                 <span className="text-sm text-gray-500">
-                  {new Date(analysis.created_at).toLocaleDateString("es-CL")}
+                  <time dateTime={analysis.created_at}>
+                    {new Date(analysis.created_at).toLocaleDateString("es-CL")}
+                  </time>
                 </span>
               </div>
 
@@ -1224,7 +1231,9 @@ export default function MatterDetailPage() {
                       >
                         <p className="text-sm font-medium truncate">{session.title || `Chat ${session.id}`}</p>
                         <p className="text-xs text-gray-500">
-                          {new Date(session.updated_at).toLocaleDateString("es-CL")}
+                          <time dateTime={session.updated_at}>
+                            {new Date(session.updated_at).toLocaleDateString("es-CL")}
+                          </time>
                         </p>
                       </button>
                     ))}
@@ -1300,10 +1309,12 @@ export default function MatterDetailPage() {
                             <p className={`text-xs mt-1 ${
                               msg.role === "user" ? "text-primary-200" : "text-gray-400"
                             }`}>
-                              {new Date(msg.created_at).toLocaleTimeString("es-CL", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              <time dateTime={msg.created_at}>
+                                {new Date(msg.created_at).toLocaleTimeString("es-CL", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </time>
                             </p>
                           </div>
                         </div>

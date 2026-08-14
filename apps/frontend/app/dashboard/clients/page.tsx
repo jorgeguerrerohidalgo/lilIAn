@@ -186,6 +186,7 @@ export default function ClientsPage() {
 
           {formError && (
             <div
+              id="client-form-error"
               role="alert"
               aria-live="assertive"
               className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm"
@@ -216,6 +217,8 @@ export default function ClientsPage() {
                   aria-required="true"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Juan Pérez"
                 />
@@ -230,6 +233,8 @@ export default function ClientsPage() {
                   type="text"
                   value={formData.company_name}
                   onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Empresa ABC SpA"
                 />
@@ -244,6 +249,8 @@ export default function ClientsPage() {
                   type="text"
                   value={formData.rut}
                   onChange={(e) => setFormData({ ...formData, rut: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="12.345.678-9"
                 />
@@ -258,6 +265,8 @@ export default function ClientsPage() {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="juan@email.com"
                 />
@@ -272,6 +281,8 @@ export default function ClientsPage() {
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="+56 9 1234 5678"
                 />
@@ -286,6 +297,8 @@ export default function ClientsPage() {
                   type="text"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Av. Principal 123, Santiago"
                 />
@@ -299,6 +312,8 @@ export default function ClientsPage() {
                   id="client-notes"
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Notas adicionales sobre el cliente..."

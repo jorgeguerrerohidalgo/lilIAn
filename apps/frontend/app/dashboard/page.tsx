@@ -158,7 +158,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Cases List */}
-      <Card padding="none" elevated>
+      <Card padding="none" elevated aria-live="polite">
         <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="font-heading font-semibold text-lg text-foreground">Casos recientes</h2>
         </div>
@@ -206,11 +206,13 @@ export default function DashboardPage() {
                     </span>
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-400">
-                      {new Date(matter.created_at).toLocaleDateString("es-CL", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
+                      <time dateTime={matter.created_at}>
+                        {new Date(matter.created_at).toLocaleDateString("es-CL", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </time>
                     </span>
                     {(matter.urgency === "high" || matter.urgency === "urgent") && (
                       <>
