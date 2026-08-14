@@ -49,6 +49,11 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  // S5 accessibility: remember the element that opened the panel so we can
+  // restore focus to it when the panel closes (WCAG 2.4.3 Focus Order).
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,6 +62,36 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // S5 accessibility: Escape key closes the panel and restores focus.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // S5 accessibility: trap focus inside the dialog while it is open, move
+  // initial focus to the close button on open, and restore focus to the
+  // trigger on close (WCAG 2.4.3 Focus Order).
+  useEffect(() => {
+    if (isOpen) {
+      previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+      // Defer to next tick so the panel is in the DOM.
+      const id = window.setTimeout(() => {
+        closeButtonRef.current?.focus();
+      }, 0);
+      return () => {
+        window.clearTimeout(id);
+        previouslyFocusedRef.current?.focus?.();
+      };
+    }
+  }, [isOpen]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -84,7 +119,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
     }, 1500);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -105,10 +140,12 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
       {/* S5 accessibility: panel is a dialog with role + aria-modal + labelled by header h3. */}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="chat-panel-title"
         aria-hidden={!isOpen}
+        tabIndex={-1}
         className={clsx(
           'fixed top-0 right-0 h-full w-[380px] max-w-full flex flex-col',
           'bg-cream border-l border-border z-50 shadow-xl',
@@ -130,8 +167,10 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
             </div>
           </div>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-ink/50 hover:bg-soft hover:text-ink transition-colors"
+            aria-label="Cerrar chat"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-ink/50 hover:bg-soft hover:text-ink focus-visible:ring-2 focus-visible:ring-coral transition-colors"
           >
             <CloseIcon />
           </button>
@@ -201,14 +240,17 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyDown}
               placeholder="Escribe tu pregunta..."
+              aria-label="Escribe tu pregunta al asistente"
               className="flex-1 px-4 py-3 rounded-xl bg-cream border border-border text-sm text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral transition-all"
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className="w-11 h-11 rounded-xl bg-coral text-white flex items-center justify-center hover:bg-coral-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Enviar mensaje"
+              aria-busy={isLoading}
+              className="w-11 h-11 rounded-xl bg-coral text-white flex items-center justify-center hover:bg-coral-dark focus-visible:ring-2 focus-visible:ring-coral transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <SendIcon />
             </button>

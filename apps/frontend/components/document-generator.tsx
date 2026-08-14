@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getApiUrl } from "@/lib/api";
 import { logger } from "../lib/logger";
 
@@ -371,58 +371,131 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
       {/* Preview Modal */}
       {showModal && generatedDoc && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="doc-preview-title"
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-        >
-          <div className="bg-cream rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-border">
-            <div className="flex items-center justify-between p-6 border-b border-border">
-              <h2 id="doc-preview-title" className="text-lg font-semibold text-ink">
-                {generatedDoc.document_name}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                aria-label="Cerrar vista previa del documento"
-                className="p-2 hover:bg-soft rounded-lg transition-colors"
-              >
-                <svg
-                  className="h-5 w-5 text-ink/60"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <pre className="whitespace-pre-wrap font-mono text-sm text-ink2 bg-soft p-4 rounded-lg border border-border">
-                {generatedDoc.content}
-              </pre>
-            </div>
-            <div className="p-6 border-t border-border flex gap-3">
-              <button
-                onClick={handleDownload}
-                className="px-5 py-2.5 bg-green text-white rounded-lg font-medium text-sm hover:bg-green/90 flex items-center gap-2 transition-colors"
-              >
-                <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h14a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4v12m-4-4l4-4m0 0l4 4" />
-                </svg>
-                Descargar
-              </button>
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2.5 border border-border text-ink2 rounded-lg font-medium text-sm hover:bg-cream transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
+        <PreviewModal
+          documentName={generatedDoc.document_name ?? "Documento"}
+          content={generatedDoc.content}
+          onDownload={handleDownload}
+          onClose={() => setShowModal(false)}
+        />
       )}
+    </div>
+  );
+}
+
+// S5 accessibility: dedicated modal component with focus trap, Escape key
+// handler and focus restoration (WCAG 2.4.3 Focus Order).
+function PreviewModal({
+  documentName,
+  content,
+  onDownload,
+  onClose,
+}: {
+  documentName: string;
+  content: string | null;
+  onDownload: () => void;
+  onClose: () => void;
+}) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      // Simple focus trap: cycle Tab between first and last focusable.
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    },
+    [onClose]
+  );
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    document.addEventListener('keydown', handleKeyDown);
+    const id = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      window.clearTimeout(id);
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [handleKeyDown]);
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="doc-preview-title"
+        tabIndex={-1}
+        className="bg-cream rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-border"
+      >
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 id="doc-preview-title" className="text-lg font-semibold text-ink">
+            {documentName}
+          </h2>
+          <button
+            ref={closeButtonRef}
+            onClick={onClose}
+            aria-label="Cerrar vista previa del documento"
+            className="p-2 hover:bg-soft rounded-lg focus-visible:ring-2 focus-visible:ring-primary transition-colors"
+          >
+            <svg
+              className="h-5 w-5 text-ink/60"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <pre className="whitespace-pre-wrap font-mono text-sm text-ink2 bg-soft p-4 rounded-lg border border-border">
+            {content}
+          </pre>
+        </div>
+        <div className="p-6 border-t border-border flex gap-3">
+          <button
+            onClick={onDownload}
+            className="px-5 py-2.5 bg-green text-white rounded-lg font-medium text-sm hover:bg-green/90 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-green transition-colors"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h14a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4v12m-4-4l4-4m0 0l4 4" />
+            </svg>
+            Descargar
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2.5 border border-border text-ink2 rounded-lg font-medium text-sm hover:bg-cream focus-visible:ring-2 focus-visible:ring-primary transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
