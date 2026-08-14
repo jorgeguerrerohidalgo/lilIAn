@@ -40,7 +40,7 @@ const matterTypeLabels: Record<string, string> = {
 
 function PlusIcon() {
   return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
     </svg>
   );
@@ -48,7 +48,7 @@ function PlusIcon() {
 
 function BriefcaseIcon({ className = "w-12 h-12" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+    <svg aria-hidden="true" className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-2 4.166a2.25 2.25 0 01-2.155 2.154H7.911a2.25 2.25 0 01-2.154-2.155l.917-4.166m-1.173-2.833V3.75a2.25 2.25 0 012.25-2.25h9.75a2.25 2.25 0 012.25 2.25v1.833m-1.173-2.833l-1.173 2.833m1.173 2.833v8.25M18 18H6a2.25 2.25 0 01-2.25-2.25V6.75A2.25 2.25 0 013.75 4.5h16.5A2.25 2.25 0 0122.5 6.75v8.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6" />
     </svg>
   );
@@ -56,7 +56,7 @@ function BriefcaseIcon({ className = "w-12 h-12" }: { className?: string }) {
 
 function ChevronRightIcon() {
   return (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
     </svg>
   );
