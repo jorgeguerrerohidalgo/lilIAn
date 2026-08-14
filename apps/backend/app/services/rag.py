@@ -26,86 +26,124 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(np.dot(a, b) / (norm_a * norm_b))
 
 
+_EMBEDDING_SIMILARITY_DEFAULT = 0.3  # DEBUG: lowered from 0.5
+
+
 def search_chunks_by_embedding(
     query_embedding: list[float],
     organization_id: int,
     matter_id: int,
     top_k: int = 5,
-    similarity_threshold: float = 0.3,  # DEBUG: lowering from 0.5 to 0.3
-    legal_area: LegalArea | None = None
+    similarity_threshold: float = _EMBEDDING_SIMILARITY_DEFAULT,
+    legal_area: LegalArea | None = None,
 ) -> list[dict]:
+    """Search the document chunks for the closest embeddings.
+
+    S4-21: previously this 79-line function did 4 things inline (raw
+    SQL fetch, row->dict conversion, per-chunk similarity scoring,
+    sort+trim). Refactored into focused helpers so the top-level is
+    a linear fetch → score → sort → trim pipeline.
+    """
     db = SessionLocal()
     try:
-        # Usar SQL directo para evitar problemas con ORM
-        from sqlalchemy import text
-        sql = text("""
-            SELECT id, document_id, organization_id, matter_id, chunk_index,
-                   content, page_number, section_title, embedding, legal_area,
-                   chunk_metadata, created_at
-            FROM document_chunks
-            WHERE organization_id = :org_id AND matter_id = :matter_id
-        """)
-        result = db.execute(sql, {"org_id": organization_id, "matter_id": matter_id})
-        rows = result.fetchall()
-
-        logger.debug(f"[DEBUG RAG] SQL direct result: {len(rows)} rows")  # S4-05
-        # Convertir a objetos similar a chunk
-        chunks = []
-        for row in rows:
-            chunk_dict = {
-                "id": row[0],
-                "document_id": row[1],
-                "organization_id": row[2],
-                "matter_id": row[3],
-                "chunk_index": row[4],
-                "content": row[5],
-                "page_number": row[6],
-                "section_title": row[7],
-                "embedding": row[8],
-                "legal_area": row[9],
-                "chunk_metadata": row[10],
-                "created_at": row[11]
-            }
-            chunks.append(chunk_dict)
-
-        logger.debug(f"[DEBUG RAG] Found {len(chunks)} chunks in DB for org={organization_id}, matter={matter_id}")  # S4-05
-        results = []
-        skipped_no_embedding = 0
-        skipped_threshold = 0
-        errors = 0
-
-        for chunk in chunks:
-            if not chunk["embedding"]:
-                skipped_no_embedding += 1
-                continue
-
-            try:
-                stored_embedding = json.loads(chunk["embedding"])
-                similarity = cosine_similarity(query_embedding, stored_embedding)
-
-                if similarity >= similarity_threshold:
-                    results.append({
-                        "chunk_id": chunk["id"],
-                        "document_id": chunk["document_id"],
-                        "content": chunk["content"],
-                        "page_number": chunk["page_number"],
-                        "section_title": chunk["section_title"],
-                        "similarity": similarity,
-                        "chunk_index": chunk["chunk_index"]
-                    })
-                else:
-                    skipped_threshold += 1
-            except (json.JSONDecodeError, TypeError):
-                errors += 1
-                continue
-
-        logger.debug(f"[DEBUG RAG] Chunks processed: {len(results)} passed, {skipped_no_embedding} no embedding, {skipped_threshold} below threshold, {errors} errors")  # S4-05
-        results.sort(key=lambda x: x["similarity"], reverse=True)
-        return results[:top_k]
-
+        chunks = _fetch_chunks_for_matter(db, organization_id, matter_id)
+        scored, stats = _score_chunks(chunks, query_embedding, similarity_threshold)
+        _log_scoring_stats(stats, organization_id, matter_id, len(scored))
+        scored.sort(key=lambda x: x["similarity"], reverse=True)
+        return scored[:top_k]
     finally:
         db.close()
 
+
+# ---------------------------------------------------------------------------
+# S4-21: search_chunks_by_embedding helpers
+# ---------------------------------------------------------------------------
+_CHUNK_FIELDS = (
+    "id", "document_id", "organization_id", "matter_id", "chunk_index",
+    "content", "page_number", "section_title", "embedding", "legal_area",
+    "chunk_metadata", "created_at",
+)
+
+
+def _fetch_chunks_for_matter(db, organization_id: int, matter_id: int) -> list[dict]:
+    """Pull raw chunk rows via direct SQL and shape them as dicts."""
+    from sqlalchemy import text
+
+    sql = text(
+        "SELECT id, document_id, organization_id, matter_id, chunk_index, "
+        "content, page_number, section_title, embedding, legal_area, "
+        "chunk_metadata, created_at "
+        "FROM document_chunks "
+        "WHERE organization_id = :org_id AND matter_id = :matter_id"
+    )
+    rows = db.execute(
+        sql, {"org_id": organization_id, "matter_id": matter_id}
+    ).fetchall()
+    return [dict(zip(_CHUNK_FIELDS, row, strict=False)) for row in rows]
+
+
+def _score_chunks(
+    chunks: list[dict], query_embedding: list[float], threshold: float
+) -> tuple[list[dict], dict]:
+    """Compute similarity and return (scored_chunks, counters).
+
+    The counters dict tracks why chunks were excluded so the caller's
+    debug log can surface the breakdown.
+    """
+    scored: list[dict] = []
+    stats = {
+        "skipped_no_embedding": 0,
+        "skipped_threshold": 0,
+        "errors": 0,
+    }
+    for chunk in chunks:
+        result, status = _score_one_chunk(chunk, query_embedding, threshold)
+        if result is None:
+            stats[status] += 1
+            continue
+        scored.append(result)
+    return scored, stats
+
+
+def _score_one_chunk(
+    chunk: dict, query_embedding: list[float], threshold: float
+) -> tuple[dict | None, str | None]:
+    """Score a single chunk; return (result_dict, skip_reason) where
+    ``skip_reason`` is one of ``skipped_no_embedding``, ``skipped_threshold``,
+    ``errors`` when the chunk was excluded.
+    """
+    if not chunk["embedding"]:
+        return None, "skipped_no_embedding"
+    try:
+        stored_embedding = json.loads(chunk["embedding"])
+    except (json.JSONDecodeError, TypeError):
+        return None, "errors"
+
+    similarity = cosine_similarity(query_embedding, stored_embedding)
+    if similarity < threshold:
+        return None, "skipped_threshold"
+
+    return {
+        "chunk_id": chunk["id"],
+        "document_id": chunk["document_id"],
+        "content": chunk["content"],
+        "page_number": chunk["page_number"],
+        "section_title": chunk["section_title"],
+        "similarity": similarity,
+        "chunk_index": chunk["chunk_index"],
+    }, None
+
+
+def _log_scoring_stats(stats: dict, organization_id: int, matter_id: int, passed: int) -> None:
+    logger.debug(
+        f"[DEBUG RAG] Chunks processed: {passed} passed, "
+        f"{stats['skipped_no_embedding']} no embedding, "
+        f"{stats['skipped_threshold']} below threshold, "
+        f"{stats['errors']} errors"
+    )
+    logger.debug(
+        f"[DEBUG RAG] Found {passed} chunks in DB for org={organization_id}, matter={matter_id}"
+    )
 
 def search_chunks_by_keyword(
     query: str,
