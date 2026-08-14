@@ -254,14 +254,19 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
                 <span>{citation.source.section}</span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => onNavigate?.(citation)}
-              aria-label={`Abrir fuente: ${citation.source.type} (${Math.round(citation.relevance_score * 100)}% relevante) en nueva pestaña`}
+            <a
+              href={buildNavigationUrl(citation.source)}
+              aria-label={`Abrir fuente: ${citation.source.type} (${Math.round(citation.relevance_score * 100)}% relevante)`}
               className="citation-item-link"
+              onClick={(e) => {
+                if (onNavigate) {
+                  e.preventDefault();
+                  onNavigate(citation);
+                }
+              }}
             >
               Ver fuente →
-            </button>
+            </a>
           </div>
         ))}
       </div>

@@ -75,14 +75,16 @@ export function DocumentStatus({ documents, validationSummary, matterType }: Doc
         <h3 className="text-lg font-semibold text-ink">Estado de Documentos</h3>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-sm text-ink2 hover:text-ink"
+          aria-expanded={expanded}
+          aria-controls="doc-status-details"
+          className="text-sm text-ink2 hover:text-ink focus-visible:ring-2 focus-visible:ring-primary-500 rounded px-2"
         >
           {expanded ? "Ocultar detalles" : "Ver detalles"}
         </button>
       </div>
 
       {validationSummary && (
-        <div className="mb-4">
+        <div id="doc-status-details" className="mb-4">
           {/* Summary badges */}
           <div className="flex gap-3 flex-wrap">
             {validationSummary.errors > 0 && (
