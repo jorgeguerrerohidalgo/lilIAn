@@ -54,7 +54,7 @@ export function CitationLink({ citation, onNavigate }: CitationLinkProps) {
       >
         <span className="citation-text">&ldquo;{citation.quoted_text}&rdquo;</span>
         <span className="citation-badge">
-          <svg
+          <svg aria-hidden="true"
             className="w-3 h-3"
             fill="none"
             stroke="currentColor"

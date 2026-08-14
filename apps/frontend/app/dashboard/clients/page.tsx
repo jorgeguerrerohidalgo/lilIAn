@@ -168,7 +168,7 @@ export default function ClientsPage() {
             onClick={() => setShowForm(true)}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Nuevo Cliente
@@ -327,7 +327,7 @@ export default function ClientsPage() {
       {!showForm && (
         <div className="mb-4">
           <div className="relative">
-            <svg
+            <svg aria-hidden="true"
               className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
               fill="none"
               stroke="currentColor"
@@ -358,7 +358,7 @@ export default function ClientsPage() {
             <div className="p-8 text-center text-gray-500">Cargando clientes...</div>
           ) : clients.length === 0 ? (
             <div className="p-8 text-center">
-              <svg
+              <svg aria-hidden="true"
                 className="w-16 h-16 mx-auto text-gray-300 mb-4"
                 fill="none"
                 stroke="currentColor"
@@ -442,7 +442,7 @@ export default function ClientsPage() {
                             className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
                             title="Editar"
                           >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -456,7 +456,7 @@ export default function ClientsPage() {
                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
                             title="Eliminar"
                           >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"

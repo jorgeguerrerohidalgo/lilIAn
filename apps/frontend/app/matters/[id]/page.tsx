@@ -686,7 +686,7 @@ export default function MatterDetailPage() {
                 htmlFor="file-upload"
                 className="cursor-pointer flex flex-col items-center"
               >
-                <svg className="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="w-12 h-12 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
                 <span className="text-gray-600">
@@ -720,7 +720,7 @@ export default function MatterDetailPage() {
                 {documents.map((doc) => (
                   <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg aria-hidden="true" className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <div>
@@ -742,7 +742,7 @@ export default function MatterDetailPage() {
                         >
                           {(processingDocId === doc.id || doc.status === "queued" || doc.status === "processing") ? (
                             <span className="flex items-center gap-1">
-                              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                              <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                               </svg>
@@ -762,7 +762,7 @@ export default function MatterDetailPage() {
                         >
                           {analyzingDocId === doc.id ? (
                             <span className="flex items-center gap-1">
-                              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                              <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                               </svg>
@@ -782,7 +782,7 @@ export default function MatterDetailPage() {
                         >
                           {analyzingDocId === doc.id ? (
                             <span className="flex items-center gap-1">
-                              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                              <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                               </svg>
@@ -811,12 +811,12 @@ export default function MatterDetailPage() {
                         title="Eliminar documento"
                       >
                         {deletingDocId === doc.id ? (
-                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                          <svg aria-hidden="true" className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                           </svg>
                         ) : (
-                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                         )}
@@ -846,7 +846,7 @@ export default function MatterDetailPage() {
                     }}
                     className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
@@ -854,7 +854,7 @@ export default function MatterDetailPage() {
                 <div className="flex-1 overflow-y-auto p-4">
                   {loadingAnalysis ? (
                     <div className="flex flex-col items-center justify-center py-12">
-                      <svg className="animate-spin h-10 w-10 text-primary-600 mb-4" viewBox="0 0 24 24">
+                      <svg aria-hidden="true" className="animate-spin h-10 w-10 text-primary-600 mb-4" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
@@ -864,7 +864,7 @@ export default function MatterDetailPage() {
                     <DocumentAnalysisView analysis={selectedDocForAnalysis} />
                   ) : selectedDocForAnalysis && !selectedDocForAnalysis.has_analysis ? (
                     <div className="text-center py-12 text-gray-500">
-                      <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg aria-hidden="true" className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <p className="text-lg font-medium text-gray-700 mb-2">Documento no analizado</p>
@@ -883,7 +883,7 @@ export default function MatterDetailPage() {
                     </div>
                   ) : (
                     <div className="text-center py-12 text-gray-500">
-                      <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg aria-hidden="true" className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <p className="text-lg font-medium text-gray-700 mb-2">Error al cargar</p>
@@ -913,7 +913,7 @@ export default function MatterDetailPage() {
             >
               {analyzing ? (
               <span className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
@@ -927,7 +927,7 @@ export default function MatterDetailPage() {
             {analysisSuccess && (
               <div className="mt-3 p-4 bg-blue-50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
+                  <svg aria-hidden="true" className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
@@ -954,7 +954,7 @@ export default function MatterDetailPage() {
               {analysis.summary && (
                 <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
                   <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Resumen Ejecutivo
@@ -967,7 +967,7 @@ export default function MatterDetailPage() {
               {analysis.facts && (
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                     Puntos Críticos a Revisar
@@ -1018,7 +1018,7 @@ export default function MatterDetailPage() {
               {analysis.risks && analysis.risks.length > 0 && (
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     Riesgos Identificados
@@ -1057,7 +1057,7 @@ export default function MatterDetailPage() {
               {analysis.missing_information && (
                 <div className="mb-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
                   <h3 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     Información Faltante
@@ -1084,7 +1084,7 @@ export default function MatterDetailPage() {
               {analysis.next_steps && (
                 <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-100">
                   <h3 className="font-semibold text-purple-900 mb-2 flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
                     Próximos Pasos
@@ -1109,7 +1109,7 @@ export default function MatterDetailPage() {
 
               <div className="mt-6 p-4 bg-gray-100 rounded-lg border border-gray-200">
                 <div className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg aria-hidden="true" className="w-5 h-5 text-gray-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                   <p className="text-xs text-gray-600">
@@ -1273,7 +1273,7 @@ export default function MatterDetailPage() {
               ) : (
                 <div className="flex-1 flex items-center justify-center text-gray-500">
                   <div className="text-center">
-                    <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg aria-hidden="true" className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
                     <p>Selecciona una sesión o crea una nueva para chatear.</p>

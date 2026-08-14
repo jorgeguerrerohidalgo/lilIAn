@@ -269,7 +269,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                     </>
                   ) : (
                     <>
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
                       Sugerir desde caso
@@ -408,7 +408,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                 onClick={handleDownload}
                 className="px-5 py-2.5 bg-green text-white rounded-lg font-medium text-sm hover:bg-green/90 flex items-center gap-2 transition-colors"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h14a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4v12m-4-4l4-4m0 0l4 4" />
                 </svg>
                 Descargar
