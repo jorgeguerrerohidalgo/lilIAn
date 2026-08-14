@@ -47,25 +47,35 @@ def doc_worker():
     sys.modules["rq"].Worker = lambda *args, **kwargs: None  # type: ignore[attr-defined]
 
     # `from redis import Redis` — provide a stand-in class.
-    if "redis" not in sys.modules or not hasattr(sys.modules["redis"], "_doc_worker_stub"):
-        stub = types.ModuleType("redis")
-        stub._doc_worker_stub = True  # type: ignore[attr-defined]
+    # IMPORTANT: We save and restore the real `redis` module to avoid
+    # silently breaking other tests that rely on the real `RedisError`
+    # and friends. A previous version of this fixture replaced the
+    # global `redis` module and caused 30+ test_isolation failures.
+    saved_redis = sys.modules.get("redis")
 
-        class _FakeRedis:
-            @staticmethod
-            def from_url(url, **kwargs):
-                return None
+    class _FakeRedis:
+        @staticmethod
+        def from_url(url, **kwargs):
+            return None
 
-        stub.Redis = _FakeRedis  # type: ignore[attr-defined]
-        sys.modules["redis"] = stub
+    stub = types.ModuleType("redis")
+    stub._doc_worker_stub = True  # type: ignore[attr-defined]
+    stub.Redis = _FakeRedis  # type: ignore[attr-defined]
+    sys.modules["redis"] = stub
 
     worker_path = (
         Path(__file__).resolve().parents[1]
         / "workers" / "document_processor" / "doc_worker.py"
     )
-    spec = importlib.util.spec_from_file_location("doc_worker_under_test", worker_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    try:
+        spec = importlib.util.spec_from_file_location("doc_worker_under_test", worker_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    finally:
+        if saved_redis is not None:
+            sys.modules["redis"] = saved_redis
+        else:
+            sys.modules.pop("redis", None)
     return mod
 
 
