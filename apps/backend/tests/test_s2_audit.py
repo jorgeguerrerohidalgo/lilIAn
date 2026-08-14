@@ -22,9 +22,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.core.security import create_access_token, get_password_hash
 from app.main import app
-from app.models.analysis_report import AnalysisReport
-from app.models.document import Document
-from app.models.matter import Matter, MatterStatus, MatterUrgency
+from app.models.matter import Matter, MatterStatus, MatterType, MatterUrgency
 from app.models.organization import Organization, OrganizationType
 from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.precedent import Precedent
@@ -244,7 +242,7 @@ class TestSaasTenantIsolation:
                 organization_id=org_a.id,
                 created_by_user_id=user_a.id,
                 title=f"A {i}",
-                matter_type="civil",
+                matter_type=MatterType.OTHER,
                 status=MatterStatus.IN_PROGRESS,
                 urgency=MatterUrgency.MEDIUM,
             ))
@@ -253,7 +251,7 @@ class TestSaasTenantIsolation:
                 organization_id=org_b.id,
                 created_by_user_id=user_a.id,
                 title=f"B {i}",
-                matter_type="civil",
+                matter_type=MatterType.OTHER,
                 status=MatterStatus.IN_PROGRESS,
                 urgency=MatterUrgency.MEDIUM,
             ))
@@ -321,7 +319,7 @@ class TestSearchTenantIsolation:
             organization_id=org_b.id,
             created_by_user_id=user_a.id,
             title="B matter",
-            matter_type="civil",
+            matter_type=MatterType.OTHER,
             status=MatterStatus.IN_PROGRESS,
             urgency=MatterUrgency.MEDIUM,
         )
