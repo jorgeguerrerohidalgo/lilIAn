@@ -45,6 +45,19 @@ def create_client(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    """Crea un cliente nuevo en la organización del usuario.
+
+    Args:
+        client_data: Payload validado (``ClientCreate``) con nombre,
+            RUT, email, etc.
+        current_user: Usuario autenticado; se persiste como
+            ``created_by_user_id``.
+        membership: Membresía activa (inyecta ``organization_id``).
+        db: Sesión de SQLAlchemy inyectada por dependencia.
+
+    Returns:
+        ``ClientResponse`` con el cliente recién creado.
+    """
     client = Client(
         organization_id=membership.organization_id,
         created_by_user_id=current_user.id,
@@ -117,6 +130,21 @@ def update_client(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    """Reemplaza los campos editables de un cliente existente.
+
+    Args:
+        client_id: ID del cliente a actualizar.
+        client_data: Payload completo (``ClientCreate``).
+        current_user: Usuario autenticado.
+        membership: Membresía activa (inyecta ``organization_id``).
+        db: Sesión de SQLAlchemy inyectada por dependencia.
+
+    Returns:
+        ``ClientResponse`` con el cliente actualizado.
+
+    Raises:
+        HTTPException: 404 si el cliente no existe en la org.
+    """
     client = db.query(Client).filter(
         Client.id == client_id,
         Client.organization_id == membership.organization_id

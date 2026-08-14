@@ -15,16 +15,26 @@
 
 export const AUTH_COOKIE_NAME = "lilian_auth_token";
 
-/** Returns true when the auth cookie is present (browser-side only). */
+/**
+ * Comprueba si la cookie de autenticación está presente en el browser.
+ *
+ * Solo funciona en el cliente (no SSR). Retorna ``false`` durante
+ * server-side rendering.
+ *
+ * @returns ``true`` si la cookie existe, ``false`` en caso contrario.
+ */
 export function hasAuthCookie(): boolean {
   if (typeof document === "undefined") return false;
   return document.cookie.split("; ").some((c) => c.startsWith(`${AUTH_COOKIE_NAME}=`));
 }
 
 /**
- * Read a legacy token from localStorage. New code MUST NOT use this.
- * Existing components still calling ``localStorage.getItem("token")`` will
- * be migrated to cookie-based auth in subsequent sprints.
+ * Lee un token legacy desde localStorage. Código nuevo NO debe usar esto.
+ *
+ * Los componentes que aún llamen ``localStorage.getItem("token")`` se
+ * migrarán a auth basada en cookies en sprints posteriores.
+ *
+ * @returns Token legacy (``"token"`` o ``"access_token"``) o ``null``.
  */
 export function getLegacyToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -34,7 +44,11 @@ export function getLegacyToken(): string | null {
   );
 }
 
-/** Clear every local copy of the auth token. Call after logout. */
+/**
+ * Limpia todas las copias locales del token de auth. Llamar tras logout.
+ *
+ * No-op en SSR.
+ */
 export function clearLegacyTokens(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem("token");

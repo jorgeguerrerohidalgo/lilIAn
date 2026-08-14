@@ -1,7 +1,12 @@
 /**
- * Auto-detects API URL based on environment and context.
- * - In browser: uses relative URLs (same origin) OR explicit NEXT_PUBLIC_API_URL
- * - For cloudflare tunnels: requires explicit NEXT_PUBLIC_API_URL pointing to tunneled backend
+ * Resuelve la URL base del backend según el contexto de ejecución.
+ *
+ * Orden de prioridad:
+ *   1. ``NEXT_PUBLIC_API_URL`` (explícito, p.ej. tunnels de Cloudflare).
+ *   2. Cadena vacía en el browser (mismo origen, rutas relativas).
+ *   3. ``http://localhost:8000`` como fallback SSR.
+ *
+ * @returns URL base del backend (sin slash final).
  */
 export function getApiUrl(): string {
   // If explicitly set (for cloudflare tunnels, etc)
@@ -21,15 +26,20 @@ export function getApiUrl(): string {
 import { getLegacyToken } from './auth-cookie';
 
 /**
- * Fetch wrapper that auto-selects API URL and includes auth credentials.
+ * Wrapper de fetch que selecciona la URL del API e incluye credenciales.
  *
- * Auth strategy (S0-04):
- * - Prefers the HttpOnly `lilian_auth_token` cookie, sent automatically by
- *   the browser on same-origin requests.
- * - Falls back to a legacy `Authorization: Bearer <jwt>` header built from
- *   localStorage so older call-sites keep working during the migration.
- * - Uses `credentials: 'include'` so cross-origin requests still carry the
- *   cookie once the backend CORS config is tightened.
+ * Estrategia de auth (S0-04):
+ * - Prefiere la cookie HttpOnly ``lilian_auth_token``, enviada
+ *   automáticamente por el browser en requests same-origin.
+ * - Fallback a ``Authorization: Bearer <jwt>`` legacy construido desde
+ *   localStorage para mantener compatibilidad con código antiguo.
+ * - Usa ``credentials: 'include'`` para que requests cross-origin
+ *   sigan enviando la cookie una vez CORS esté endurecido.
+ *
+ * @param endpoint - Path del endpoint (ej: ``"/api/v1/matters"``).
+ * @param options - Opciones adicionales de ``fetch``.
+ * @returns Promesa con la respuesta parseada como JSON.
+ * @throws Error si la respuesta HTTP no es OK, con el ``detail`` del backend.
  */
 export async function apiFetch<T>(
   endpoint: string,

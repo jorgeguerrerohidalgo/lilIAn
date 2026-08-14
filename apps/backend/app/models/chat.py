@@ -18,6 +18,25 @@ class ChatSession(Base):
 
 
 class ChatMessage(Base):
+    """Mensaje individual dentro de una ``ChatSession``.
+
+    Representa un turno de la conversación (usuario o asistente). Los
+    mensajes del asistente (``role="assistant"``) registran el
+    ``model_provider`` y ``model_name`` usados para auditoría. El
+    ``message_metadata`` (JSON libre) guarda información adicional
+    como fuentes citadas, tokens consumidos, etc.
+
+    Attributes:
+        id: Identificador primario.
+        chat_session_id: FK a ``chat_sessions.id``.
+        role: ``"user"`` o ``"assistant"`` (típico de OpenAI Chat API).
+        content: Contenido textual del mensaje.
+        model_provider: Proveedor del modelo (``"openai"``, ``"anthropic"``).
+        model_name: Modelo concreto (``"gpt-4o-mini"``, ``"claude-..."``).
+        message_metadata: JSON libre con metadatos adicionales.
+        created_at: Timestamp de creación (UTC).
+    """
+
     __tablename__ = "chat_messages"
 
     id = Column(Integer, primary_key=True, index=True)

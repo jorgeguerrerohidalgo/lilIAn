@@ -152,6 +152,25 @@ def search_chunks_by_keyword(
     top_k: int = 10,
     legal_area: LegalArea | None = None
 ) -> list[dict]:
+    """Busca chunks por coincidencia literal de la consulta.
+
+    Filtra los chunks del caso y área legal indicada, cuenta las
+    ocurrencias de ``query`` (case-insensitive) en ``content`` y
+    devuelve los ``top_k`` con más matches, ordenados de mayor a menor
+    recuento.
+
+    Args:
+        query: Texto a buscar (case-insensitive).
+        organization_id: ID de la organización (multi-tenant).
+        matter_id: ID del caso donde buscar.
+        top_k: Número máximo de resultados.
+        legal_area: Filtro opcional por área legal.
+
+    Returns:
+        Lista de dicts con ``chunk_id``, ``document_id``, ``content``,
+        ``page_number``, ``section_title``, ``keyword_count`` y
+        ``chunk_index``. Lista vacía si no hay coincidencias.
+    """
     db = SessionLocal()
     try:
         db_query = db.query(DocumentChunk).filter(
@@ -254,6 +273,22 @@ def hybrid_search(
     S4-16: previously a 118-line function with three embedded concerns
     (embedding fetch, keyword fetch, RRF fusion). Split into three
     helpers so the top-level is the strategy + the merge.
+
+    Args:
+        query: Texto de la consulta del usuario.
+        organization_id: ID de la organización (multi-tenant).
+        matter_id: ID del caso sobre el que se busca.
+        top_k: Número máximo de resultados a devolver.
+        include_laws: Reservado para futuro filtrado por leyes; hoy se
+            ignora (mantenido por compatibilidad).
+        legal_area: Filtro opcional por área legal.
+
+    Returns:
+        Lista de chunks rankeados, cada uno con ``chunk_id``,
+        ``content``, ``page_number``, ``section_title``,
+        ``rrf_score``, ``source`` (``embedding``/``keyword``/``both``),
+        ``embedding_rank``, ``keyword_rank``, ``embedding_score`` y
+        ``keyword_score``.
     """
     embedding_results = _run_embedding_search(
         query, organization_id, matter_id, top_k, legal_area

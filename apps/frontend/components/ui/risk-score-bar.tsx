@@ -19,6 +19,20 @@ const RISK_LEVEL_LABELS: Record<string, string> = {
   critical: "Crítico",
 };
 
+/**
+ * Barra visual de nivel de riesgo (0-100) accesible.
+ *
+ * Implementa el patrón ARIA ``role="meter"`` con ``aria-valuemin``,
+ * ``aria-valuemax``, ``aria-valuenow`` y ``aria-valuetext`` para que
+ * los lectores de pantalla anuncien tanto el número como el nivel.
+ * El color se complementa con un label textual (Bajo/Medio/Alto/
+ * Crítico) para usuarios con daltonismo.
+ *
+ * @param props - {@link RiskScoreBarProps}.
+ * @param props.score - Puntuación 0-100 (se trunca a ese rango).
+ * @param props.level - Nivel cualitativo (``"low"``/``"medium"``/
+ *   ``"high"``/``"critical"``).
+ */
 export function RiskScoreBar({ score, level }: RiskScoreBarProps) {
   const width = Math.min(100, Math.max(0, score));
   const colorClass = RISK_LEVEL_COLORS[level] || "bg-slate-400";

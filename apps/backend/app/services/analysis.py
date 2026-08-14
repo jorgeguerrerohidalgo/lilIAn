@@ -64,10 +64,22 @@ def _shape_is_acceptable(payload: Any) -> bool:
 
 
 def _validate_llm_output(raw: Any) -> dict[str, Any]:
-    """S1-06: validate an LLM structured output before persisting.
+    """Valida la salida estructurada del LLM antes de persistirla.
 
+    S1-06: validate an LLM structured output before persisting.
     Returns a normalized dict that ALWAYS has ``requires_human_review``
     and a ``warnings`` list so callers can branch on trust.
+
+    Args:
+        raw: Salida cruda del LLM. Puede ser ``None``, una cadena, una
+            lista, un dict u otro tipo.
+
+    Returns:
+        dict normalizado con ``resumen_ejecutivo``, ``puntos_criticos``,
+        ``risks``, ``confidence``, ``warnings`` y
+        ``requires_human_review``. Los strings se truncan a
+        ``_MAX_STRING_LEN`` y las listas a ``_MAX_LIST_ITEMS`` para
+        evitar respuestas desbocadas.
     """
     warnings: list[str] = []
     requires_human_review = False
@@ -867,6 +879,27 @@ def detect_normative_conflicts(
 
 
 def analyze_contract(documents_text: str, matter_type: str, organization_id: int) -> dict:
+    """Analiza un contrato/documento legal y devuelve un informe estructurado.
+
+    Construye el system prompt específico para el ``matter_type``
+    (laboral, civil, consumo, familia, etc.), recupera contexto de
+    leyes y precedentes desde el RAG cuando están disponibles, invoca
+    al LLM con el esquema ``RISK_ANALYSIS_SCHEMA`` y normaliza el
+    resultado para hacerlo seguro de persistir.
+
+    Args:
+        documents_text: Texto concatenado de los documentos a analizar.
+        matter_type: Tipo de materia (ej: ``laboral``, ``contract_review``).
+        organization_id: ID de la organización (multi-tenant) usado para
+            filtrar el contexto de leyes indexadas.
+
+    Returns:
+        dict con el análisis validado. Incluye ``resumen_ejecutivo``,
+        ``puntos_criticos``, ``risks``, ``confidence``, ``warnings`` y,
+        si fue necesario revisión humana, ``requires_human_review=True``.
+        En caso de error devuelve un dict con ``error`` y un resumen
+        genérico.
+    """
     from app.services.llm import get_llm_provider
 
     if not documents_text or len(documents_text.strip()) < 100:
@@ -1012,6 +1045,24 @@ def create_analysis_report(
 
 
 def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: int) -> dict:
+    """Orquesta el análisis completo de un caso y persiste el informe.
+
+    Cambia el estado del caso a ``processing``, recupera los chunks
+    relevantes para el análisis, ejecuta la validación documental,
+    invoca ``analyze_contract`` y guarda el resultado en
+    ``AnalysisReport`` y ``RiskItem``.
+
+    Args:
+        matter_id: ID del caso a analizar.
+        organization_id: ID de la organización (multi-tenant).
+        user_id: ID del usuario que dispara el análisis; se persiste
+            como ``generated_by_user_id``.
+
+    Returns:
+        dict con ``report_id``, ``status`` (``completed`` o
+        ``missing_information``), ``confidence`` y ``risk_count``.
+        Si el caso no existe devuelve ``{"error": "Caso no encontrado"}``.
+    """
     db = SessionLocal()
     try:
         matter = db.query(Matter).filter(

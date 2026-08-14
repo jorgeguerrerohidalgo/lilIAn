@@ -288,13 +288,27 @@ def create_chunks_for_document(
     legal_area: str | None = None,
     force: bool = False,
 ) -> dict:
-    """
-    Crea chunks para un documento de forma idempotente.
+    """Crea chunks para un documento de forma idempotente.
 
     S4-06: split into helpers (``_should_skip_chunking``,
     ``_persist_chunks``, ``_existing_content_hash``,
     ``_normalize_extracted_text``) so this orchestrator only owns the
     control flow.
+
+    Args:
+        document_id: ID del documento al que pertenecen los chunks.
+        extracted_text: Texto completo extraído del documento.
+        organization_id: ID de la organización (multi-tenant).
+        matter_id: ID del caso al que pertenece el documento.
+        db: Sesión de SQLAlchemy activa.
+        legal_area: Área jurídica opcional para etiquetar los chunks.
+        force: Si ``True``, recrea los chunks aunque ya existan o el
+            contenido no haya cambiado.
+
+    Returns:
+        dict con ``created`` (cantidad de chunks creados),
+        ``skipped`` (bool), ``status`` (``created`` o ``skipped``) y,
+        cuando se crean, ``content_hash`` (sha256 truncado).
     """
     extracted_text = _normalize_extracted_text(extracted_text)
 
@@ -336,19 +350,23 @@ def create_chunks_for_document(
 
 
 def process_document(document_id: int, force: bool = False) -> dict:
-    """
-    Procesa un documento de forma idempotente.
+    """Procesa un documento de forma idempotente.
 
     S4-07: orquestador. Solo posee la sesión de BD, el lock de fila y el
     manejo de errores; el pipeline vive en ``_run_processing_pipeline``
     y cada paso en su propio helper privado.
 
     Args:
-        document_id: ID del documento a procesar
-        force: Si True, fuerza el reprocesamiento incluso si ya fue procesado
+        document_id: ID del documento a procesar.
+        force: Si ``True``, fuerza el reprocesamiento incluso si ya fue
+            procesado previamente.
 
     Returns:
-        dict con estado del procesamiento
+        dict con estado del procesamiento. Las claves típicas son
+        ``document_id``, ``status`` (``processed``, ``failed``,
+        ``already_processed``, ``error``), ``extracted_length``,
+        ``legal_area``, ``chunks_created``, ``chunks_skipped`` y
+        ``content_hash``.
     """
     logger.info(f"[PROCESS] START document_id={document_id}, force={force}")  # S4-05
     db = SessionLocal()
@@ -570,11 +588,21 @@ def _fail_document(db: Session, document: Document, error_msg: str) -> dict:
 def _extract_and_store_text(
     db: Session, document: Document, file_path: str
 ) -> str | None:
-    """Extract text from the file and persist it on the Document row.
+    """Extrae texto del archivo y lo persiste en la fila del Document.
 
     S4-07 extraction: returns the extracted text on success. The
     storage backend should have already raised for I/O errors so a None
     return here means the file disappeared mid-processing.
+
+    Args:
+        db: Sesión de SQLAlchemy utilizada para persistir el texto.
+        document: Instancia del modelo ``Document`` a actualizar.
+        file_path: Ruta absoluta al archivo físico en el backend de
+            storage.
+
+    Returns:
+        El texto extraído como cadena, o ``None`` si la extracción
+        devolvió una cadena vacía.
     """
     logger.info(f"[PROCESS] Doc {document.id}: Calling extract_text_from_file")
     extracted_text = extract_text_from_file(file_path, document.mime_type)

@@ -7,6 +7,16 @@ interface FloatingChatButtonProps {
   isOpen: boolean;
 }
 
+/**
+ * Botón flotante (FAB) que abre/cierra el chat con el asistente.
+ *
+ * Se oculta visualmente y se quita del tab order cuando el panel está
+ * abierto (el panel asume el foco).
+ *
+ * @param props - {@link FloatingChatButtonProps}.
+ * @param props.onClick - Handler al hacer click en el FAB.
+ * @param props.isOpen - Si el panel está abierto (oculta el FAB).
+ */
 export function FloatingChatButton({ onClick, isOpen }: FloatingChatButtonProps) {
   return (
     <button

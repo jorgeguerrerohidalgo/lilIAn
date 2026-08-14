@@ -20,11 +20,22 @@ export const passwordSchema = z
   .regex(/\d/, "Debe incluir al menos un dígito")
   .regex(/[^A-Za-z0-9]/, "Debe incluir al menos un símbolo");
 
+/**
+ * Esquema Zod para el formulario de login.
+ *
+ * Reutiliza ``emailSchema`` y exige contraseña no vacía.
+ */
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, "Contraseña requerida"),
 });
 
+/**
+ * Esquema Zod para el formulario de registro.
+ *
+ * Aplica ``passwordSchema`` (12+ chars, mayúsculas, minúsculas, dígito
+ * y símbolo) y refine adicional para confirmar la contraseña.
+ */
 export const registerSchema = z
   .object({
     email: emailSchema,
@@ -37,6 +48,12 @@ export const registerSchema = z
     path: ["confirmPassword"],
   });
 
+/**
+ * Esquema Zod para crear un caso (matter).
+ *
+ * Valida título (3-200), tipo (enum cerrado), descripción opcional
+ * (máx 2000), urgencia y contraparte.
+ */
 export const matterCreateSchema = z.object({
   title: z.string().min(3, "Título demasiado corto").max(200),
   matter_type: z.enum([

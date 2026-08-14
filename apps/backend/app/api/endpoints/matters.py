@@ -53,6 +53,23 @@ def create_matter(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    """Crea un nuevo caso para la organización del usuario actual.
+
+    Valida que el ``client_id`` opcional (cuando se proporciona) perte-
+    nezca a la misma organización, evitando leaks cross-tenant.
+
+    Args:
+        matter_data: Payload validado (``MatterCreate``).
+        current_user: Usuario autenticado que crea el caso.
+        membership: Membresía activa (inyecta ``organization_id``).
+        db: Sesión de SQLAlchemy inyectada por dependencia.
+
+    Returns:
+        ``MatterResponse`` con el caso recién creado.
+
+    Raises:
+        HTTPException: 404 si ``client_id`` no pertenece a la org.
+    """
     # S1-09: validate that client_id (when provided) belongs to the same
     # organization. Without this check, a user could attach a case to a
     # client from another organization, leaking its existence across tenants.
@@ -112,6 +129,26 @@ def update_matter(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    """Actualiza parcialmente un caso existente.
+
+    Aplica únicamente los campos presentes en el payload (partial update).
+    Si se modifica ``client_id`` se revalida que pertenezca a la misma
+    organización para evitar asignación cross-tenant.
+
+    Args:
+        matter_id: ID del caso a actualizar.
+        matter_data: Payload parcial validado (``MatterUpdate``).
+        current_user: Usuario autenticado.
+        membership: Membresía activa (inyecta ``organization_id``).
+        db: Sesión de SQLAlchemy inyectada por dependencia.
+
+    Returns:
+        ``MatterResponse`` con el caso actualizado.
+
+    Raises:
+        HTTPException: 404 si el caso no existe en la org o el nuevo
+            ``client_id`` no pertenece a la org.
+    """
     matter = db.query(Matter).filter(
         Matter.id == matter_id,
         Matter.organization_id == membership.organization_id
@@ -151,6 +188,27 @@ def delete_matter(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    """Elimina un caso y todos sus recursos asociados (cascade cleanup).
+
+    Borra en orden hijos→padre para evitar FK violations:
+    ``RiskItem`` → ``DocumentChunk`` → ``DocumentAnalysis`` →
+    ``AnalysisReport`` → ``DeadlineAlert`` → ``ChatMessage`` →
+    ``ChatSession`` → ``Document`` → ``Matter``. Los archivos físicos
+    se eliminan DESPUÉS del commit de la DB para que un fallo de
+    storage no haga rollback de la limpieza de metadatos.
+
+    Args:
+        matter_id: ID del caso a eliminar.
+        current_user: Usuario autenticado.
+        membership: Membresía activa (inyecta ``organization_id``).
+        db: Sesión de SQLAlchemy inyectada por dependencia.
+
+    Returns:
+        ``Response`` 204 No Content en éxito.
+
+    Raises:
+        HTTPException: 404 si el caso no existe en la org.
+    """
     matter = db.query(Matter).filter(
         Matter.id == matter_id,
         Matter.organization_id == membership.organization_id

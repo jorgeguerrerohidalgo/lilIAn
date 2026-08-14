@@ -49,9 +49,44 @@ function emit(level: LogLevel, message: string, meta?: unknown) {
   }
 }
 
+/**
+ * Logger centralizado del frontend lilIAn.
+ *
+ * Sustituye los ``console.log`` / ``console.error`` dispersos por una
+ * API que es no-op en producción (controlada por
+ * ``NEXT_PUBLIC_ENABLE_LOGS``) pero escribe en ``stderr`` en dev.
+ * Los errores siempre se emiten (incluso en producción) para que las
+ * herramientas de monitorización los capturen.
+ *
+ * IMPORTANTE: nunca loguear tokens, cookies ni PII con esta API.
+ */
 export const logger = {
+  /**
+   * Nivel debug: mensajes de diagnóstico, deshabilitados en producción.
+   *
+   * @param msg - Mensaje principal.
+   * @param meta - Metadatos opcionales (objeto, array o varios args).
+   */
   debug: (msg: string, ...meta: unknown[]) => emit("debug", msg, meta.length === 0 ? undefined : meta.length === 1 ? meta[0] : meta),
+  /**
+   * Nivel info: eventos informativos de negocio.
+   *
+   * @param msg - Mensaje principal.
+   * @param meta - Metadatos opcionales (objeto, array o varios args).
+   */
   info: (msg: string, ...meta: unknown[]) => emit("info", msg, meta.length === 0 ? undefined : meta.length === 1 ? meta[0] : meta),
+  /**
+   * Nivel warn: situaciones anómalas que no impiden el funcionamiento.
+   *
+   * @param msg - Mensaje principal.
+   * @param meta - Metadatos opcionales (objeto, array o varios args).
+   */
   warn: (msg: string, ...meta: unknown[]) => emit("warn", msg, meta.length === 0 ? undefined : meta.length === 1 ? meta[0] : meta),
+  /**
+   * Nivel error: errores recuperables. Siempre se emite, incluso en prod.
+   *
+   * @param msg - Mensaje principal.
+   * @param meta - Metadatos opcionales (objeto, array o varios args).
+   */
   error: (msg: string, ...meta: unknown[]) => emit("error", msg, meta.length === 0 ? undefined : meta.length === 1 ? meta[0] : meta),
 };

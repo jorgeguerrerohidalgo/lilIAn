@@ -392,8 +392,22 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
   );
 }
 
-// S5 accessibility: dedicated modal component with focus trap, Escape key
-// handler and focus restoration (WCAG 2.4.3 Focus Order).
+/**
+ * Modal de previsualización de un documento generado.
+ *
+ * Implementa el patrón modal accesible (WCAG 2.4.3 Focus Order):
+ * - ``role="dialog"`` + ``aria-modal="true"`` + ``aria-labelledby``.
+ * - Focus inicial en el botón de cierre.
+ * - Focus trap con cycle entre primer/último elemento focusable.
+ * - Escape key cierra el modal.
+ * - Restauración del foco al elemento que abrió el modal.
+ *
+ * @param props - Propiedades del modal.
+ * @param props.documentName - Nombre del documento (encabezado y nombre de descarga).
+ * @param props.content - Contenido del documento a previsualizar.
+ * @param props.onDownload - Handler al pulsar "Descargar".
+ * @param props.onClose - Handler al cerrar el modal.
+ */
 function PreviewModal({
   documentName,
   content,
