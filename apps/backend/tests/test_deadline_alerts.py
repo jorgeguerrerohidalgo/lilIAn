@@ -12,7 +12,7 @@ SQLAlchemy session and exercise the HTTP surface.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient

@@ -13,8 +13,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
