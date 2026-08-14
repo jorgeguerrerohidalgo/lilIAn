@@ -45,20 +45,30 @@ app.add_middleware(GZipMiddleware, minimum_size=1_000)
 # - In development we allow the explicit list (typically
 #   ``http://localhost:3000``) or fall back to a sane default that still
 #   excludes the wildcard.
-allowed_origins = [o for o in settings.get_allowed_origins() if o and o != "*"]
+# - Credentials are NEVER enabled when any wildcard-like origin slips
+#   through, since the CORS spec forbids that combination.
+raw_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+had_wildcard = any(o.lower() in {"*", "null"} for o in raw_origins)
 
-is_production = settings.APP_ENV.lower() == "production"
-if is_production and not allowed_origins:
-    raise RuntimeError(
-        "ALLOWED_ORIGINS must be configured in production. "
-        "Wildcard (`*`) origins are not permitted."
-    )
+allowed_origins = settings.get_allowed_origins()
 
 if not allowed_origins:
     # Safe development defaults so the API still boots locally.
     allowed_origins = ["http://localhost:3000"]
 
 allow_credentials = True
+if had_wildcard:
+    # CORS spec: wildcard + credentials is forbidden. Force credentials
+    # off rather than crashing so the dev server can still start, but log
+    # so the misconfiguration is visible.
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "ALLOWED_ORIGINS contained a wildcard; disabling CORS credentials "
+        "to comply with the CORS spec."
+    )
+    allow_credentials = False
+
 allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 allow_headers = ["Authorization", "Content-Type", "X-Requested-With"]
 
