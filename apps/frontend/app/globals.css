@@ -383,3 +383,23 @@ h4, h5, h6 { font-size: 0.875rem; } /* ~14px - Small labels */
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* S5 accessibility: respect prefers-reduced-motion to disable animations
+   for users with vestibular disorders or motion sensitivity. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* S5 accessibility: high-contrast focus ring that works for both
+   default and Windows High Contrast mode. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
