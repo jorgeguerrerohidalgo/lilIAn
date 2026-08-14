@@ -25,6 +25,8 @@ export function FloatingChatButton({ onClick, isOpen }: FloatingChatButtonProps)
         boxShadow: '0 8px 24px rgba(244, 74, 90, 0.35)',
       }}
       aria-label="Abrir chat con asistente"
+      tabIndex={isOpen ? -1 : 0}
+      aria-hidden={isOpen ? "true" : undefined}
     >
       {/* Bot Icon */}
       <svg aria-hidden="true" className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>

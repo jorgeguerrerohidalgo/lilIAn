@@ -296,12 +296,17 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
             <div className="space-y-4">
               {selectedTemplate.variables.map((variable) => (
                 <div key={variable.key}>
-                  <label className="block text-sm font-medium text-ink2 mb-1">
+                  <label
+                    htmlFor={`var-${variable.key}`}
+                    className="block text-sm font-medium text-ink2 mb-1"
+                  >
                     {variable.label}
                     {variable.required && <span className="text-coral ml-1">*</span>}
                   </label>
                   {variable.type === "textarea" ? (
                     <textarea
+                      id={`var-${variable.key}`}
+                      aria-label={variable.label}
                       value={variables[variable.key] || ""}
                       onChange={(e) =>
                         setVariables((prev) => ({
@@ -316,6 +321,8 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                   ) : (
                     <input
                       type="text"
+                      id={`var-${variable.key}`}
+                      aria-label={variable.label}
                       value={variables[variable.key] || ""}
                       onChange={(e) =>
                         setVariables((prev) => ({

@@ -49,6 +49,8 @@ export function CitationLink({ citation, onNavigate }: CitationLinkProps) {
         onClick={handleClick}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
+        onFocus={() => setShowTooltip(true)}
+        onBlur={() => setShowTooltip(false)}
         className="citation-trigger"
         title="Clic para ver fuente"
       >
@@ -255,6 +257,7 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
             <button
               type="button"
               onClick={() => onNavigate?.(citation)}
+              aria-label={`Abrir fuente: ${citation.source.type} (${Math.round(citation.relevance_score * 100)}% relevante) en nueva pestaña`}
               className="citation-item-link"
             >
               Ver fuente →
