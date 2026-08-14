@@ -17,8 +17,10 @@
 1. [Información general](#información-general)
 2. [Autenticación](#autenticación)
 3. [Convenciones](#convenciones)
-4. [Endpoints raíz](#endpoints-raíz)
-5. [Módulos](#módulos)
+4. [Rate limits](#rate-limits)
+5. [Referencia detallada por módulo](#referencia-detallada-por-módulo)
+6. [Endpoints raíz](#endpoints-raíz)
+7. [Módulos](#módulos)
    - [Auth](#1-auth)
    - [Organizations](#2-organizations)
    - [Matters (Casos)](#3-matters-casos)
@@ -97,6 +99,99 @@ El token se obtiene con `POST /api/v1/auth/login` (OAuth2 Password Flow) y se en
   "detail": "Mensaje de error en español"
 }
 ```
+
+Los `422` (fallo de validación) usan el formato estructurado de pydantic en lugar de `detail`:
+
+```json
+{
+  "detail": [
+    {
+      "type": "string_too_short",
+      "loc": ["body", "password"],
+      "msg": "String should have at least 8 characters"
+    }
+  ]
+}
+```
+
+---
+
+## Rate limits
+
+La API aplica dos capas de límites:
+
+| Capa | Origen | Alcance |
+|---|---|---|
+| Límite por plan | `OrganizationRateLimitMiddleware` (`app/core/rate_limit.py`) | Todos los requests autenticados, por organización |
+| Límite por endpoint | `@limiter.limit(...)` (slowapi) | Endpoints concretos, por IP |
+
+### Cabeceras de respuesta
+
+`OrganizationRateLimitMiddleware` añade a cada respuesta autenticada:
+
+| Cabecera | Significado |
+|---|---|
+| `X-RateLimit-Limit` | Límite efectivo del plan, requests/minuto |
+| `X-RateLimit-Remaining` | Peticiones restantes en la ventana actual |
+| `X-RateLimit-Reset` | Timestamp Unix del reinicio de la ventana |
+
+### Respuesta `429`
+
+Al agotar la cuota:
+
+```http
+HTTP/1.1 429 Too Many Requests
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1735689660
+Retry-After: 60
+Content-Type: application/json
+
+{"detail":"Rate limit exceeded"}
+```
+
+### Límites por plan
+
+Definidos en `app/core/rate_limit.py`:
+
+| Plan | Requests/minuto |
+|---|---|
+| `free` (default) | 100 |
+| `basic` | 500 |
+| `pro` | 2000 |
+| `enterprise` | Sin límite |
+
+El plan se resuelve por la suscripción `active` más reciente de la organización del token. Sin token o sin membresía, se aplica `free`.
+
+### Límites específicos por endpoint
+
+| Endpoint | Límite | Origen |
+|---|---|---|
+| `POST /api/v1/auth/register` | `10/minute` por IP | `@limiter.limit("10/minute")` — previene creación masiva de cuentas |
+| `POST /api/v1/auth/login` | `10/minute` por IP | `@limiter.limit("10/minute")` — previene fuerza bruta |
+| `GET /api/v1/precedents/analytics` | `10/minute` por IP | `@limiter.limit("10/minute")` — agregación costosa |
+
+> El contador del middleware vive en memoria del proceso. Con varias réplicas el límite efectivo se multiplica por el número de instancias; si necesitas un límite global, mueve el contador a Redis.
+
+---
+
+## Referencia detallada por módulo
+
+La documentación de cada módulo con ejemplos `curl` completos, esquemas de request/response, errores, rate limits y notas de seguridad vive en [`docs/api/endpoints/`](api/endpoints/):
+
+| Módulo | Documento |
+|---|---|
+| `auth` | [api/endpoints/auth.md](api/endpoints/auth.md) |
+| `matters` | [api/endpoints/matters.md](api/endpoints/matters.md) |
+| `clients` | [api/endpoints/clients.md](api/endpoints/clients.md) |
+| `documents` | [api/endpoints/documents.md](api/endpoints/documents.md) |
+| `chat` | [api/endpoints/chat.md](api/endpoints/chat.md) |
+| `analysis` | [api/endpoints/analysis.md](api/endpoints/analysis.md) |
+| `precedents` | [api/endpoints/precedents.md](api/endpoints/precedents.md) |
+| `search` | [api/endpoints/search.md](api/endpoints/search.md) |
+| `saas` | [api/endpoints/saas.md](api/endpoints/saas.md) |
+
+Los módulos restantes (`organizations`, `lawyer`, `templates`, `doc-templates`, `alerts`, `admin`, `legal-areas`, `metrics`) siguen listados sólo aquí por compatibilidad hacia atrás; migrar a su propio archivo es trabajo pendiente.
 
 ---
 
@@ -1465,19 +1560,58 @@ El endpoint `/metrics` (registrado en la raíz, sin prefijo `/api/v1`) está doc
 
 ## Códigos de error
 
-| Código | Significado | Cuándo ocurre |
-|---|---|---|
-| `400` | Bad Request | Datos inválidos, validación fallida, recurso duplicado |
-| `401` | Unauthorized | Token JWT ausente, inválido o expirado |
-| `403` | Forbidden | Permisos insuficientes para el rol del usuario |
-| `404` | Not Found | Recurso no existe o no pertenece a la organización del usuario |
-| `500` | Internal Server Error | Error inesperado (BD, provider LLM, Redis, etc.) |
+La API sigue el patrón estándar HTTP con cuerpos uniformes. Detalles por código y por endpoint se listan en [api/endpoints/](api/endpoints/).
+
+### Catálogo completo
+
+| Código | Significado | Cuándo ocurre | Cuerpo típico |
+|---|---|---|---|
+| `201` | Created | Recurso creado (`POST` con éxito) | Recurso creado |
+| `202` | Accepted | Operación encolada en `BackgroundTasks` (ej. `POST /analysis`) | Sin body o `null` |
+| `204` | No Content | Borrado o logout exitosos | Sin body |
+| `400` | Bad Request | Datos inválidos, recurso duplicado, validación de negocio | `{"detail": "..."}` |
+| `401` | Unauthorized | Token JWT ausente, malformado, expirado o firma inválida. Incluye `WWW-Authenticate: Bearer` | `{"detail": "No se pudo validar las credenciales"}` |
+| `403` | Forbidden | Permisos insuficientes para el rol del usuario | `{"detail": "Usuario sin organización asignada"}` |
+| `404` | Not Found | Recurso inexistente **o** de otra organización (no se revela existencia cross-tenant) | `{"detail": "... no encontrado"}` |
+| `413` | Payload Too Large | Archivo de upload mayor que `MAX_FILE_SIZE` | `{"detail": "El archivo excede el tamaño máximo de 50MB"}` |
+| `415` | Unsupported Media Type | `Content-Type` declarado fuera de `ALLOWED_MIME_TYPES` o magic bytes no coinciden | `{"detail": "Tipo de archivo no permitido"}` |
+| `422` | Unprocessable Entity | Fallo de validación pydantic (campos requeridos, tipos, formatos) | `{"detail": [{"loc": ["body", "..."], "msg": "..."}]}` |
+| `429` | Too Many Requests | Rate limit superado (ver [Rate limits](#rate-limits)) | `{"detail": "Rate limit exceeded"}` + cabeceras `X-RateLimit-*` y `Retry-After: 60` |
+| `500` | Internal Server Error | Fallo inesperado (BD, provider LLM, Redis, etc.) | `{"detail": "..."}` |
+| `503` | Service Unavailable | Dependencia externa caída (LLM, embeddings, storage) | `{"detail": "..."}` |
 
 ### Estructura uniforme
 
 ```json
 { "detail": "Mensaje en español" }
 ```
+
+Excepto `422`, donde `detail` es un array de objetos por campo:
+
+```json
+{
+  "detail": [
+    {
+      "type": "string_too_short",
+      "loc": ["body", "password"],
+      "msg": "String should have at least 8 characters"
+    }
+  ]
+}
+```
+
+### Por endpoint
+
+Las tablas detalladas con códigos y ejemplos de `detail` por endpoint están en cada documento bajo [`api/endpoints/`](api/endpoints/).
+
+### Cabeceras relevantes por error
+
+| Código | Cabeceras |
+|---|---|
+| `401` | `WWW-Authenticate: Bearer` |
+| `429` | `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After: 60` |
+| `413` | (FastAPI estándar) |
+| `415` | (FastAPI estándar) |
 
 ---
 
