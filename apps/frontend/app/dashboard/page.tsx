@@ -165,7 +165,10 @@ export default function DashboardPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+            <div role="status" aria-live="polite">
+              <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" aria-hidden="true" />
+              <span className="sr-only">Cargando panel...</span>
+            </div>
           </div>
         ) : matters.length === 0 ? (
           <div className="px-6 py-16 text-center">
@@ -191,6 +194,7 @@ export default function DashboardPage() {
               <Link
                 key={matter.id}
                 href={`/matters/${matter.id}`}
+                aria-label={`Abrir caso ${matter.title} - ${matterTypeLabels[matter.matter_type] || matter.matter_type}`}
                 className="flex items-center justify-between px-6 py-4 hover:bg-muted/50 transition-colors group"
               >
                 <div className="flex-1 min-w-0">

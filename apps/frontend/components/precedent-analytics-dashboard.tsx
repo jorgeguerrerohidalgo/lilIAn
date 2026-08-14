@@ -198,9 +198,10 @@ export function PrecedentAnalyticsDashboard() {
       </fieldset>
 
       {loading && (
-        <div className="text-center py-12">
-          <div className="animate-spin h-8 w-8 border-3 border-slate-200 border-t-slate-700 rounded-full mx-auto" />
+        <div className="text-center py-12" role="status" aria-live="polite">
+          <div className="animate-spin h-8 w-8 border-3 border-slate-200 border-t-slate-700 rounded-full mx-auto" aria-hidden="true" />
           <p className="text-gray-500 mt-2">Cargando analytics...</p>
+          <span className="sr-only">Cargando analytics...</span>
         </div>
       )}
 
@@ -244,7 +245,11 @@ export function PrecedentAnalyticsDashboard() {
           {/* Volume by Year */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
             <h3 className="font-semibold mb-4">Volumen por Año</h3>
-            <div className="flex items-end gap-2 h-48">
+            <div
+              className="flex items-end gap-2 h-48"
+              role="img"
+              aria-label={`Gráfico de barras: Volumen por año. Total ${analytics.volume_by_year.reduce((acc, y) => acc + y.count, 0)} precedentes`}
+            >
               {analytics.volume_by_year.map((item) => (
                 <div key={item.year} className="flex-1 flex flex-col items-center">
                   <div
@@ -253,6 +258,7 @@ export function PrecedentAnalyticsDashboard() {
                       height: `${(item.count / maxYearCount) * 100}%`,
                       minHeight: item.count > 0 ? "4px" : "0",
                     }}
+                    aria-hidden="true"
                   />
                   <span className="text-xs text-gray-500 mt-1">{item.year}</span>
                   <span className="text-xs font-medium">{item.count}</span>
@@ -274,6 +280,11 @@ export function PrecedentAnalyticsDashboard() {
                     </div>
                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                       <div
+                        role="progressbar"
+                        aria-valuenow={item.count}
+                        aria-valuemin={0}
+                        aria-valuemax={maxCourtCount}
+                        aria-label={`${item.court}: ${item.count} precedentes`}
                         className="h-full bg-slate-700 rounded-full"
                         style={{ width: `${(item.count / maxCourtCount) * 100}%` }}
                       />
@@ -344,9 +355,9 @@ export function PrecedentAnalyticsDashboard() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr>
-                      <th className="text-left py-2 px-3 font-medium">Tribunal</th>
+                      <th scope="col" className="text-left py-2 px-3 font-medium">Tribunal</th>
                       {analytics.volume_by_legal_area.slice(0, 6).map((area) => (
-                        <th key={area.legal_area} className="py-2 px-3 font-medium text-center">
+                        <th key={area.legal_area} scope="col" className="py-2 px-3 font-medium text-center">
                           {area.legal_area}
                         </th>
                       ))}
@@ -363,9 +374,9 @@ export function PrecedentAnalyticsDashboard() {
                       );
                       return (
                         <tr key={court.court} className="border-t">
-                          <td className="py-2 px-3 truncate max-w-[200px]">
+                          <th scope="row" className="py-2 px-3 truncate max-w-[200px] text-left font-normal">
                             {court.court}
-                          </td>
+                          </th>
                           {analytics.volume_by_legal_area.slice(0, 6).map((area) => {
                             const cell = courtData.find(
                               (h) => h.legal_area === area.legal_area
@@ -373,13 +384,18 @@ export function PrecedentAnalyticsDashboard() {
                             const count = cell?.count || 0;
                             const intensity = count / maxCount;
                             return (
-                              <td key={area.legal_area} className="py-2 px-3 text-center">
+                              <td
+                                key={area.legal_area}
+                                className="py-2 px-3 text-center"
+                                aria-label={`${court.court}, ${area.legal_area}: ${count} casos`}
+                              >
                                 <span
                                   className="inline-block w-8 h-8 rounded flex items-center justify-center text-xs"
                                   style={{
                                     backgroundColor: `rgba(59, 130, 246, ${intensity * 0.8 + 0.1})`,
                                     color: intensity > 0.5 ? "white" : "gray-700",
                                   }}
+                                  aria-hidden="true"
                                 >
                                   {count}
                                 </span>

@@ -91,7 +91,7 @@ export function DeadlineDashboard() {
   return (
     <div className="space-y-6" aria-live="polite">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section aria-label="Resumen de alertas procesales" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-900 text-white rounded-xl p-5">
           <p className="text-3xl font-semibold">{summary.total}</p>
           <p className="text-slate-400 text-sm mt-1">Total alertas</p>
@@ -106,7 +106,7 @@ export function DeadlineDashboard() {
             <p className={`${stat.color} text-sm mt-1 opacity-75`}>{stat.label}</p>
           </div>
         ))}
-      </div>
+      </section>
 
       {/* By Matter */}
       {summary.by_matter.length > 0 && (
@@ -117,6 +117,7 @@ export function DeadlineDashboard() {
               <Link
                 key={item.matter_id}
                 href={`/matters/${item.matter_id}?tab=alerts`}
+                aria-label={`Ver ${item.count} alertas del caso ${item.matter_title}`}
                 className="flex items-center justify-between p-2.5 hover:bg-slate-50 rounded-lg transition-colors"
               >
                 <span className="text-slate-700">{item.matter_title}</span>
@@ -140,6 +141,7 @@ export function DeadlineDashboard() {
               <Link
                 key={alert.id}
                 href={`/matters/${alert.matter_id}?tab=alerts`}
+                aria-label={`Alerta: ${alert.title} - caso ${alert.matter_title}, ${alert.days_remaining} días restantes`}
                 className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 <div>

@@ -614,7 +614,30 @@ export default function MatterDetailPage() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
-        <nav aria-label="Secciones del caso" className="flex gap-6" role="tablist">
+        <nav
+          aria-label="Secciones del caso"
+          className="flex gap-6"
+          role="tablist"
+          onKeyDown={(e) => {
+            const tabs: TabType[] = ["details", "documents", "analysis", "chat"];
+            const currentIndex = tabs.indexOf(activeTab);
+            let nextTab: TabType | null = null;
+            if (e.key === "ArrowRight") {
+              nextTab = tabs[(currentIndex + 1) % tabs.length];
+            } else if (e.key === "ArrowLeft") {
+              nextTab = tabs[(currentIndex - 1 + tabs.length) % tabs.length];
+            } else if (e.key === "Home") {
+              nextTab = "details";
+            } else if (e.key === "End") {
+              nextTab = "chat";
+            }
+            if (nextTab) {
+              e.preventDefault();
+              setActiveTab(nextTab);
+              document.getElementById(`tab-${nextTab}`)?.focus();
+            }
+          }}
+        >
           {(["details", "documents", "analysis", "chat"] as TabType[]).map((tab) => (
             <button
               key={tab}
@@ -695,6 +718,7 @@ export default function MatterDetailPage() {
                 ref={fileInputRef}
                 type="file"
                 id="file-upload"
+                aria-describedby="file-upload-help"
                 className="hidden"
                 accept=".pdf,.docx,.doc,.txt,image/*"
                 onChange={handleFileUpload}
@@ -710,14 +734,14 @@ export default function MatterDetailPage() {
                 <span className="text-gray-600">
                   {uploading ? "Subiendo..." : "Arrastra un archivo o haz clic para seleccionar"}
                 </span>
-                <span className="text-sm text-gray-400 mt-1">PDF, DOCX, DOC, TXT, Imágenes (máx. 50MB)</span>
+                <span id="file-upload-help" className="text-sm text-gray-400 mt-1">PDF, DOCX, DOC, TXT, Imágenes (máx. 50MB)</span>
               </label>
             </div>
             {uploadError && (
-              <div className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{uploadError}</div>
+              <div role="alert" aria-live="assertive" className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{uploadError}</div>
             )}
             {uploadSuccess && (
-              <div className="mt-3 p-3 bg-green-50 text-green-600 rounded-lg text-sm">{uploadSuccess}</div>
+              <div role="status" aria-live="polite" className="mt-3 p-3 bg-green-50 text-green-600 rounded-lg text-sm">{uploadSuccess}</div>
             )}
           </div>
 
@@ -850,7 +874,7 @@ export default function MatterDetailPage() {
                   </div>
                 ))}
                 {(deleteError || docProcessError || docAnalyzeError) && (
-                  <div className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+                  <div role="alert" aria-live="assertive" className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
                     {deleteError || docProcessError || docAnalyzeError}
                   </div>
                 )}
@@ -1215,7 +1239,7 @@ export default function MatterDetailPage() {
                 {sessions.length === 0 ? (
                   <p className="p-4 text-sm text-gray-500 text-center">No hay sesiones de chat.</p>
                 ) : (
-                  <div className="p-2">
+                  <nav aria-label="Sesiones de chat" className="p-2">
                     {sessions.map((session) => (
                       <button
                         key={session.id}
@@ -1223,6 +1247,7 @@ export default function MatterDetailPage() {
                           setActiveSession(session);
                           fetchMessages(session.id);
                         }}
+                        aria-current={activeSession?.id === session.id ? "page" : undefined}
                         className={`w-full text-left p-3 rounded-lg mb-1 ${
                           activeSession?.id === session.id
                             ? "bg-primary-50 text-primary-700"
@@ -1237,7 +1262,7 @@ export default function MatterDetailPage() {
                         </p>
                       </button>
                     ))}
-                  </div>
+                  </nav>
                 )}
               </div>
             </div>
@@ -1250,10 +1275,11 @@ export default function MatterDetailPage() {
                   <div className="px-4 py-3 border-b bg-gray-50">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm text-gray-600">Área legal:</span>
-                      <div className="flex gap-2 flex-wrap">
+                      <div role="group" aria-label="Seleccionar área legal" className="flex gap-2 flex-wrap">
                         <button
                           type="button"
                           onClick={() => setSelectedLegalArea(null)}
+                          aria-pressed={selectedLegalArea === null}
                           className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
                             selectedLegalArea === null
                               ? "bg-primary-600 text-white border-primary-600"
@@ -1268,6 +1294,7 @@ export default function MatterDetailPage() {
                               key={area}
                               type="button"
                               onClick={() => setSelectedLegalArea(area)}
+                              aria-pressed={selectedLegalArea === area}
                               className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
                                 selectedLegalArea === area
                                   ? `${legalAreaColors[area]} border-current`
@@ -1329,19 +1356,22 @@ export default function MatterDetailPage() {
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         placeholder="Escribe tu mensaje..."
+                        aria-label="Mensaje para el chat"
                         className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         disabled={sendingMessage}
                       />
                       <button
                         type="submit"
                         disabled={sendingMessage || !chatInput.trim()}
+                        aria-busy={sendingMessage}
+                        aria-label={sendingMessage ? "Enviando..." : "Enviar mensaje"}
                         className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                       >
                         {sendingMessage ? "..." : "Enviar"}
                       </button>
                     </div>
                     {chatError && (
-                      <p className="mt-2 text-sm text-red-600">{chatError}</p>
+                      <p role="alert" aria-live="assertive" className="mt-2 text-sm text-red-600">{chatError}</p>
                     )}
                   </form>
                 </>

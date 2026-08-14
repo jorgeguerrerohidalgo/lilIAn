@@ -134,7 +134,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
   return (
     <div className="space-y-4" aria-live="polite">
       {/* Filters */}
-      <div className="flex gap-2">
+      <div role="group" aria-label="Filtrar alertas por estado" className="flex gap-2">
         <button
           onClick={() => setFilter("all")}
           aria-pressed={filter === "all"}
@@ -178,6 +178,8 @@ export function DeadlineAlertsList({ matterId }: Props) {
             return (
               <div
                 key={alert.id}
+                role="article"
+                aria-labelledby={`alert-title-${alert.id}`}
                 className={`${config.bg} border ${config.border} rounded-lg p-4`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -195,7 +197,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
                         </span>
                       )}
                     </div>
-                    <h4 className="font-medium text-ink">{alert.title}</h4>
+                    <h4 id={`alert-title-${alert.id}`} className="font-medium text-ink">{alert.title}</h4>
                     {alert.description && (
                       <p className="text-sm text-ink2 mt-1">{alert.description}</p>
                     )}
@@ -233,6 +235,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
                         <button
                           onClick={() => updateAlert(alert.id, "acknowledged")}
                           disabled={updating === alert.id}
+                          aria-label={`Marcar alerta "${alert.title}" como vista`}
                           className="px-2 py-1 text-xs bg-blue-pale text-blue rounded hover:bg-blue/10 disabled:opacity-50 transition-colors"
                         >
                           {updating === alert.id ? "..." : "Visto"}
@@ -240,6 +243,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
                         <button
                           onClick={() => updateAlert(alert.id, "resolved")}
                           disabled={updating === alert.id}
+                          aria-label={`Resolver alerta "${alert.title}"`}
                           className="px-2 py-1 text-xs bg-green-pale text-green rounded hover:bg-green/10 disabled:opacity-50 transition-colors"
                         >
                           Resolver
@@ -247,6 +251,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
                         <button
                           onClick={() => updateAlert(alert.id, "dismissed")}
                           disabled={updating === alert.id}
+                          aria-label={`Descartar alerta "${alert.title}"`}
                           className="px-2 py-1 text-xs bg-soft text-ink/60 rounded hover:bg-border disabled:opacity-50 transition-colors"
                         >
                           Descartar
@@ -257,6 +262,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
                       <button
                         onClick={() => updateAlert(alert.id, "resolved")}
                         disabled={updating === alert.id}
+                        aria-label={`Resolver alerta "${alert.title}"`}
                         className="px-2 py-1 text-xs bg-green-pale text-green rounded hover:bg-green/10 disabled:opacity-50 transition-colors"
                       >
                         Resolver
