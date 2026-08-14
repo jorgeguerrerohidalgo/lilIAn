@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from app.services import analysis
 from app.services.analysis import (
     _validate_llm_output,
     analyze_contract,
     generate_analysis_for_matter,
 )
+import app.services.analysis as _analysis_mod
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ def test_validate_llm_output_too_long():
     result = _validate_llm_output(payload)
 
     # Field is truncated to bound
-    assert len(result["resumen_ejecutivo"]) == analysis._MAX_STRING_LEN
+    assert len(result["resumen_ejecutivo"]) == _analysis_mod._MAX_STRING_LEN
     # And the response is marked for review because shape cap was hit
     assert result["requires_human_review"] is True
 
