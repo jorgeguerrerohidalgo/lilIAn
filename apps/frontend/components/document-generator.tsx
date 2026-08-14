@@ -218,8 +218,9 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         {/* Templates Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {loading ? (
-            <div className="col-span-full text-center py-8">
-              <div className="w-8 h-8 border-3 border-soft border-t-ink rounded-full animate-spin mx-auto" />
+            <div className="col-span-full text-center py-8" role="status" aria-live="polite">
+              <div className="w-8 h-8 border-3 border-soft border-t-ink rounded-full animate-spin mx-auto" aria-hidden="true" />
+              <span className="sr-only">Cargando plantillas de documentos...</span>
             </div>
           ) : (
             filteredTemplates.map((template) => (
