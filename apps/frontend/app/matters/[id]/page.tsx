@@ -5,7 +5,7 @@ import { DocumentStatus } from "@/components/document-status";
 import { DocumentAnalysisView } from "@/components/document-analysis-view";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { MATTER_DOCUMENT_POLL } from "@/lib/hooks/use-poll";
+import { usePoll, MATTER_DOCUMENT_POLL } from "@/lib/hooks/use-poll";
 import { getApiUrl } from "@/lib/api";
 import {
   matterTypeLabels,
@@ -21,13 +21,9 @@ import {
 
 const API_URL = getApiUrl();
 
-// S3-07: named constants for the polling magic numbers used in the four
-// poll loops below. The handlers can still inline them but the values
-// live in one place. See lib/hooks/use-poll.ts for the ``usePoll`` hook
-// available for future migrations that need guaranteed unmount cleanup
-// (S3-08 — the current setInterval loops clear themselves correctly
-// when the polling completes; the unmount leak only matters if the
-// user navigates away mid-poll).
+// S3-07: named constants for the polling magic numbers used by the four
+// poll loops below. S3-08 migrated those loops from inline ``setInterval``
+// to the ``usePoll`` hook so unmount cleanup is guaranteed.
 const POLL_INTERVAL_MS = MATTER_DOCUMENT_POLL.intervalMs; // 5_000
 const POLL_MAX_ATTEMPTS = MATTER_DOCUMENT_POLL.maxAttempts; // 60
 
@@ -161,6 +157,17 @@ export default function MatterDetailPage() {
   const [chatError, setChatError] = useState("");
   const [creatingSession, setCreatingSession] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // S3-08: active-poll state. Each poll now runs inside a tiny child
+  // component via the ``usePoll`` hook (see DocumentProcessPoll,
+  // DocumentAnalyzePoll, DocumentViewAnalysisPoll, MatterAnalysisPoll
+  // below), so we need a state slot that the parent passes into the
+  // child. Setting the slot to ``null`` on completion/unmount cleanly
+  // disables the child poll.
+  const [processPoll, setProcessPoll] = useState<{ docId: number } | null>(null);
+  const [analyzePoll, setAnalyzePoll] = useState<{ docId: number } | null>(null);
+  const [viewAnalysisPoll, setViewAnalysisPoll] = useState<{ docId: number } | null>(null);
+  const [requestAnalysisPoll, setRequestAnalysisPoll] = useState<{ prevAnalysisId: number | null } | null>(null);
 
   // Legal area state for chat
   const defaultLegalArea = matter ? (matterTypeToLegalArea[matter.matter_type] || "other") : "other";
@@ -328,29 +335,9 @@ export default function MatterDetailPage() {
     });
 
     if (res.ok) {
-      // polling para verificar cuando termina el procesamiento
-      let attempts = 0;
-      const maxAttempts = POLL_MAX_ATTEMPTS; // S3-07: was the magic 60
-      const pollInterval = setInterval(async () => {
-        attempts++;
-        const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (checkRes.ok) {
-          const data = await checkRes.json();
-          if (data.status === "processed" || data.extracted_text) {
-            clearInterval(pollInterval);
-            fetchDocuments(); // Actualizar la lista de documentos
-            setProcessingDocId(null);
-          }
-        }
-        if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-          setDocProcessError("El procesamiento está tardando más de lo esperado.");
-          fetchDocuments();
-          setProcessingDocId(null);
-        }
-      }, POLL_INTERVAL_MS); // S3-07: was the magic 5000
+      // S3-08: hand off polling to the DocumentProcessPoll child, which
+      // uses the ``usePoll`` hook for guaranteed unmount cleanup.
+      setProcessPoll({ docId });
     } else {
       const data = await res.json();
       setDocProcessError(data.detail || "Error al procesar documento");
@@ -371,30 +358,8 @@ export default function MatterDetailPage() {
     if (res.ok) {
       // Mostrar mensaje de que está analizando
       setDocAnalyzeError(""); // Limpiar errores
-      // polling para verificar cuando termina el análisis
-      let attempts = 0;
-      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutos
-      const pollInterval = setInterval(async () => {
-        attempts++;
-        const checkRes = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (checkRes.ok) {
-          const data = await checkRes.json();
-          if (data.has_analysis) {
-            clearInterval(pollInterval);
-            fetchDocuments(); // Actualizar la lista de documentos
-            setAnalyzingDocId(null);
-            // Abrir el modal de análisis automáticamente
-            handleViewAnalysis(docId);
-          }
-        }
-        if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-          setDocAnalyzeError("El análisis está tardando más de lo esperado. Puedes verificar manualmente más tarde.");
-          setAnalyzingDocId(null);
-        }
-      }, POLL_INTERVAL_MS);
+      // S3-08: hand off polling to the DocumentAnalyzePoll child.
+      setAnalyzePoll({ docId });
     } else {
       const data = await res.json();
       setDocAnalyzeError(data.detail || "Error al analizar documento");
@@ -428,18 +393,8 @@ export default function MatterDetailPage() {
 
     // Si no tiene análisis, hacer polling por si el análisis está en proceso
     if (!hasAnalysis) {
-      let attempts = 0;
-      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutos
-      const pollInterval = setInterval(async () => {
-        attempts++;
-        const result = await fetchAnalysis();
-        if (result || attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-          if (!result) {
-            setDocAnalyzeError("El análisis está tardando más de lo esperado.");
-          }
-        }
-      }, POLL_INTERVAL_MS);
+      // S3-08: hand off polling to the DocumentViewAnalysisPoll child.
+      setViewAnalysisPoll({ docId });
     }
   };
 
@@ -462,31 +417,10 @@ export default function MatterDetailPage() {
       setAnalysisSuccess("El análisis puede tardar entre 1 y 5 minutos...");
       setAnalyzing(true);
       // Get the current latest analysis ID to compare later
-      const prevAnalysisId = analysisRef.current?.id;
+      const prevAnalysisId = analysisRef.current?.id ?? null;
 
-      // Poll for analysis result
-      let attempts = 0;
-      const maxAttempts = POLL_MAX_ATTEMPTS; // 5 minutes max (60 * 5s = 300s)
-      const pollInterval = setInterval(async () => {
-        attempts++;
-        await fetchAnalysis();
-        // Check if we got a NEW analysis (different ID from what we had)
-        if (analysisRef.current && analysisRef.current.id !== prevAnalysisId) {
-          clearInterval(pollInterval);
-          setAnalyzing(false);
-          setAnalysisSuccess("✓ Análisis completado");
-          setAnalysisError("");
-          // Clear success message after 5 seconds
-          setTimeout(() => setAnalysisSuccess(""), 5000);
-        } else if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-          setAnalyzing(false);
-          if (!analysisRef.current) {
-            setAnalysisError("El análisis está tardando más de lo esperado. Intenta de nuevo más tarde.");
-          }
-          setAnalysisSuccess("");
-        }
-      }, POLL_INTERVAL_MS);
+      // S3-08: hand off polling to the MatterAnalysisPoll child.
+      setRequestAnalysisPoll({ prevAnalysisId });
     } else {
       const data = await res.json();
       setAnalysisError(data.detail || "Error al solicitar análisis");
@@ -1396,6 +1330,234 @@ export default function MatterDetailPage() {
           la revisión profesional de un abogado habilitado en Chile.
         </p>
       </div>
+
+      {/* S3-08: each active poll lives in a tiny child component so it can
+          call the ``usePoll`` hook (a hook must be invoked from a function
+          component, not from an event handler). Setting the parent state
+          to a new object starts the poll; setting it back to null on
+          completion/unmount stops it. */}
+      {processPoll && (
+        <DocumentProcessPoll
+          docId={processPoll.docId}
+          onDone={() => {
+            fetchDocuments();
+            setProcessingDocId(null);
+            setProcessPoll(null);
+          }}
+          onTimeout={() => {
+            setDocProcessError("El procesamiento está tardando más de lo esperado.");
+            fetchDocuments();
+            setProcessingDocId(null);
+            setProcessPoll(null);
+          }}
+        />
+      )}
+      {analyzePoll && (
+        <DocumentAnalyzePoll
+          docId={analyzePoll.docId}
+          onDone={() => {
+            fetchDocuments();
+            setAnalyzingDocId(null);
+            handleViewAnalysis(analyzePoll.docId);
+            setAnalyzePoll(null);
+          }}
+          onTimeout={() => {
+            setDocAnalyzeError("El análisis está tardando más de lo esperado. Puedes verificar manualmente más tarde.");
+            setAnalyzingDocId(null);
+            setAnalyzePoll(null);
+          }}
+        />
+      )}
+      {viewAnalysisPoll && (
+        <DocumentViewAnalysisPoll
+          docId={viewAnalysisPoll.docId}
+          onResult={(data) => setSelectedDocForAnalysis(data)}
+          onTimeout={() => {
+            setDocAnalyzeError("El análisis está tardando más de lo esperado.");
+            setViewAnalysisPoll(null);
+          }}
+          onDone={() => setViewAnalysisPoll(null)}
+        />
+      )}
+      {requestAnalysisPoll && (
+        <MatterAnalysisPoll
+          prevAnalysisId={requestAnalysisPoll.prevAnalysisId}
+          analysisRef={analysisRef}
+          fetchAnalysis={fetchAnalysis}
+          onComplete={() => {
+            setAnalyzing(false);
+            setAnalysisSuccess("✓ Análisis completado");
+            setAnalysisError("");
+            setRequestAnalysisPoll(null);
+            // Clear success message after 5 seconds
+            setTimeout(() => setAnalysisSuccess(""), 5000);
+          }}
+          onTimeout={() => {
+            setAnalyzing(false);
+            if (!analysisRef.current) {
+              setAnalysisError("El análisis está tardando más de lo esperado. Intenta de nuevo más tarde.");
+            }
+            setAnalysisSuccess("");
+            setRequestAnalysisPoll(null);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+/* -------------------------------------------------------------------------
+ * S3-08 — poll-driver child components
+ *
+ * Each child wraps a single ``usePoll`` invocation so that the parent
+ * MatterDetailPage can drive polling declaratively via state. The child
+ * renders nothing; it exists solely to give ``usePoll`` a stable
+ * component context and to bridge the parent's setters through
+ * ``onDone``/``onTimeout`` callbacks. Removing the child from the tree
+ * (by setting the parent state to ``null``) automatically cleans up the
+ * interval via ``usePoll``'s unmount cleanup.
+ * --------------------------------------------------------------------- */
+
+interface DocumentProcessPollProps {
+  docId: number;
+  onDone: () => void;
+  onTimeout: () => void;
+}
+
+function DocumentProcessPoll({ docId, onDone, onTimeout }: DocumentProcessPollProps) {
+  const docIdRef = useRef(docId);
+  docIdRef.current = docId;
+
+  usePoll({
+    intervalMs: POLL_INTERVAL_MS,
+    maxAttempts: POLL_MAX_ATTEMPTS,
+    task: async () => {
+      const token = localStorage.getItem("token") || "";
+      const res = await fetch(`${API_URL}/api/v1/documents/${docIdRef.current}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          done: data.status === "processed" || Boolean(data.extracted_text),
+          value: data,
+        };
+      }
+      return { done: false };
+    },
+    onResult: (result) => {
+      if (result.done) onDone();
+    },
+    onTimeout,
+    enabled: true,
+  });
+
+  return null;
+}
+
+interface DocumentAnalyzePollProps {
+  docId: number;
+  onDone: () => void;
+  onTimeout: () => void;
+}
+
+function DocumentAnalyzePoll({ docId, onDone, onTimeout }: DocumentAnalyzePollProps) {
+  const docIdRef = useRef(docId);
+  docIdRef.current = docId;
+
+  usePoll({
+    intervalMs: POLL_INTERVAL_MS,
+    maxAttempts: POLL_MAX_ATTEMPTS,
+    task: async () => {
+      const token = localStorage.getItem("token") || "";
+      const res = await fetch(`${API_URL}/api/v1/documents/${docIdRef.current}/analysis`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { done: Boolean(data.has_analysis), value: data };
+      }
+      return { done: false };
+    },
+    onResult: (result) => {
+      if (result.done) onDone();
+    },
+    onTimeout,
+    enabled: true,
+  });
+
+  return null;
+}
+
+interface DocumentViewAnalysisPollProps {
+  docId: number;
+  onResult: (data: any) => void;
+  onDone: () => void;
+  onTimeout: () => void;
+}
+
+function DocumentViewAnalysisPoll({ docId, onResult, onDone, onTimeout }: DocumentViewAnalysisPollProps) {
+  const docIdRef = useRef(docId);
+  docIdRef.current = docId;
+
+  usePoll({
+    intervalMs: POLL_INTERVAL_MS,
+    maxAttempts: POLL_MAX_ATTEMPTS,
+    task: async () => {
+      const token = localStorage.getItem("token") || "";
+      const res = await fetch(`${API_URL}/api/v1/documents/${docIdRef.current}/analysis`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { done: Boolean(data.has_analysis), value: data };
+      }
+      return { done: false };
+    },
+    onResult: (result) => {
+      if (result.value) onResult(result.value);
+      if (result.done) onDone();
+    },
+    onTimeout,
+    enabled: true,
+  });
+
+  return null;
+}
+
+interface MatterAnalysisPollProps {
+  prevAnalysisId: number | null;
+  analysisRef: React.MutableRefObject<AnalysisReport | null>;
+  fetchAnalysis: () => Promise<void>;
+  onComplete: () => void;
+  onTimeout: () => void;
+}
+
+function MatterAnalysisPoll({
+  prevAnalysisId,
+  analysisRef,
+  fetchAnalysis,
+  onComplete,
+  onTimeout,
+}: MatterAnalysisPollProps) {
+  const prevIdRef = useRef(prevAnalysisId);
+  prevIdRef.current = prevAnalysisId;
+
+  usePoll({
+    intervalMs: POLL_INTERVAL_MS,
+    maxAttempts: POLL_MAX_ATTEMPTS,
+    task: async () => {
+      await fetchAnalysis();
+      const current = analysisRef.current;
+      const isNew = current !== null && current.id !== prevIdRef.current;
+      return { done: isNew, value: current ?? undefined };
+    },
+    onResult: (result) => {
+      if (result.done) onComplete();
+    },
+    onTimeout,
+    enabled: true,
+  });
+
+  return null;
 }
