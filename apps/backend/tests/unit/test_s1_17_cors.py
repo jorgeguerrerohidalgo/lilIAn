@@ -11,7 +11,6 @@ through, per the CORS spec.
 from __future__ import annotations
 
 import importlib
-import os
 import warnings
 
 
