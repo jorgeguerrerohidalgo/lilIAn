@@ -225,6 +225,8 @@ export default function NewMatterPage() {
             <button
               type="submit"
               disabled={loading}
+              aria-busy={loading}
+              aria-live="polite"
               className="px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium text-sm hover:bg-slate-800 disabled:opacity-50 transition-colors"
             >
               {loading ? "Creando..." : "Crear caso"}
