@@ -101,11 +101,20 @@
   box-sizing: border-box;
 }
 
+/* S5 accessibility: prevent iOS auto-zoom and font inflation on orientation change.
+   Without this rule, browsers may scale text on landscape/portrait switches. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   font-family: 'Barlow', system-ui, sans-serif;
   background-color: var(--soft);
   color: var(--ink);
-  font-size: 14px;
+  /* S5 accessibility: 16px body baseline prevents iOS Safari auto-zoom on
+     form input focus and improves readability for low-vision users. */
+  font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

@@ -1,3 +1,13 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: {
+    default: "Autenticación — lilIAn",
+    template: "%s — lilIAn",
+  },
+  description: "Inicia sesión o regístrate en lilIAn para acceder al revisor legal inteligente de documentos.",
+};
+
 export default function AuthLayout({
   children,
 }: {

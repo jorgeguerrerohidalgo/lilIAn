@@ -161,7 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-3 overflow-auto">
+        <nav aria-label="Navegación principal" className="flex-1 p-3 overflow-auto">
           <div className="nav-label">Navegación</div>
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -222,7 +222,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6">
+        <main id="main-content" className="flex-1 p-6">
           {children}
         </main>
       </div>

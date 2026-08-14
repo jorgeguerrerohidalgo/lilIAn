@@ -56,7 +56,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-soft flex items-center justify-center p-4">
+    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8">
         <div className="text-center mb-8">
           {/* Logo */}
@@ -89,6 +89,7 @@ export default function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="tu@email.com"
+            autoComplete="email"
             required
           />
 
@@ -99,6 +100,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
+            autoComplete="current-password"
             required
           />
 
@@ -114,6 +116,6 @@ export default function LoginPage() {
           </Link>
         </p>
       </Card>
-    </div>
+    </main>
   );
 }

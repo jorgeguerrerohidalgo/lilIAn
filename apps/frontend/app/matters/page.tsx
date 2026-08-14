@@ -128,9 +128,9 @@ export default function MattersPage() {
             <div className="w-16 h-16 bg-soft rounded-2xl flex items-center justify-center mx-auto mb-4 text-ink/30">
               <BriefcaseIcon className="w-8 h-8" />
             </div>
-            <h3 className="text-lg font-medium text-ink mb-2">
+            <h2 className="text-lg font-medium text-ink mb-2">
               No tienes casos aún
-            </h3>
+            </h2>
             <p className="text-ink/60 mb-6 max-w-sm mx-auto">
               Comienza creando tu primer caso legal para gestionar documentos y análisis
             </p>

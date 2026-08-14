@@ -1,10 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
 
+export const metadata: Metadata = {
+  title: "lilIAn — Revisor legal inteligente con IA",
+  description:
+    "Plataforma legaltech chilena asistida por IA: analiza contratos, detecta riesgos y prepárate para decisiones legales con apoyo inteligente.",
+};
+
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-soft to-cream">
+    <main id="main-content" className="min-h-screen bg-gradient-to-b from-soft to-cream">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <header className="flex items-center justify-between mb-16">
           <Link href="/" className="flex items-center gap-4">

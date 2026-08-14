@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import DashboardLayout from "@/components/layout/dashboard-layout";
 
 export const metadata: Metadata = {
-  title: "Precedentes — lilIAn",
-  description: "Analítica de precedentes judiciales: áreas legales, tribunales y tendencias.",
+  title: "Clientes — lilIAn",
+  description: "Administra la cartera de clientes, sus datos de contacto y casos asociados.",
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
