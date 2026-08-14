@@ -333,11 +333,16 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
               <button
                 onClick={handleGenerate}
                 disabled={generating}
+                aria-busy={generating}
+                aria-live="polite"
                 className="px-5 py-2.5 bg-ink text-white rounded-lg font-medium text-sm hover:bg-ink/90 disabled:opacity-50 flex items-center gap-2 transition-colors"
               >
                 {generating ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div
+                      className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                      aria-hidden="true"
+                    />
                     Generando...
                   </>
                 ) : (
@@ -346,6 +351,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
               </button>
               <button
                 onClick={() => setSelectedTemplate(null)}
+                type="button"
                 className="px-4 py-2.5 border border-border text-ink2 rounded-lg font-medium text-sm hover:bg-cream transition-colors"
               >
                 Cancelar
@@ -365,17 +371,29 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
       {/* Preview Modal */}
       {showModal && generatedDoc && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="doc-preview-title"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        >
           <div className="bg-cream rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-border">
             <div className="flex items-center justify-between p-6 border-b border-border">
-              <h2 className="text-lg font-semibold text-ink">
+              <h2 id="doc-preview-title" className="text-lg font-semibold text-ink">
                 {generatedDoc.document_name}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
+                aria-label="Cerrar vista previa del documento"
                 className="p-2 hover:bg-soft rounded-lg transition-colors"
               >
-                <svg className="h-5 w-5 text-ink/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="h-5 w-5 text-ink/60"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
