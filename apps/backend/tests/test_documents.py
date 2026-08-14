@@ -14,7 +14,6 @@ import json
 import pytest
 
 from app.core.security import create_access_token, get_password_hash
-from app.models.client import Client
 from app.models.document import Document
 from app.models.matter import Matter, MatterStatus, MatterUrgency
 from app.models.organization import Organization, OrganizationType
