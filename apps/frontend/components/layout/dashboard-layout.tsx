@@ -169,9 +169,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
+                aria-label={
+                  item.count !== undefined
+                    ? `${item.label}, ${item.count} ${item.count === 1 ? "elemento" : "elementos"}`
+                    : item.label
+                }
                 className={`nav-btn ${isActive ? 'nav-btn-active' : ''}`}
               >
-                <span className="text-ink/50">{item.icon}</span>
+                <span aria-hidden="true" className="text-ink/50">{item.icon}</span>
                 {item.label}
                 {item.count !== undefined && <CountBadge count={item.count} />}
               </Link>
