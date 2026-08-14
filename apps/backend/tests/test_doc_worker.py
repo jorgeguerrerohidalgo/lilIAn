@@ -53,7 +53,7 @@ def doc_worker():
 
         class _FakeRedis:
             @staticmethod
-            def from_url(url):
+            def from_url(url, **kwargs):
                 return None
 
         stub.Redis = _FakeRedis  # type: ignore[attr-defined]
