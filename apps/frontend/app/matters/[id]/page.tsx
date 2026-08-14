@@ -614,12 +614,18 @@ export default function MatterDetailPage() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
-        <nav className="flex gap-6">
+        <nav aria-label="Secciones del caso" className="flex gap-6" role="tablist">
           {(["details", "documents", "analysis", "chat"] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+              role="tab"
+              type="button"
+              aria-selected={activeTab === tab}
+              aria-controls={`tabpanel-${tab}`}
+              id={`tab-${tab}`}
+              tabIndex={activeTab === tab ? 0 : -1}
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 ${
                 activeTab === tab
                   ? "border-primary-600 text-primary-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -636,7 +642,12 @@ export default function MatterDetailPage() {
 
       {/* Tab Content */}
       {activeTab === "details" && (
-        <div className="bg-white rounded-xl shadow-sm border p-6">
+        <div
+          id="tabpanel-details"
+          role="tabpanel"
+          aria-labelledby="tab-details"
+          className="bg-white rounded-xl shadow-sm border p-6"
+        >
           <h2 className="text-lg font-semibold mb-4">Detalles del caso</h2>
           <dl className="space-y-3">
             <div className="flex">
@@ -654,7 +665,9 @@ export default function MatterDetailPage() {
             <div className="flex">
               <dt className="w-40 text-gray-500">Creado:</dt>
               <dd className="text-gray-900">
-                {new Date(matter.created_at).toLocaleDateString("es-CL")}
+                <time dateTime={matter.created_at}>
+                  {new Date(matter.created_at).toLocaleDateString("es-CL")}
+                </time>
               </dd>
             </div>
           </dl>
@@ -668,7 +681,12 @@ export default function MatterDetailPage() {
       )}
 
       {activeTab === "documents" && (
-        <div className="space-y-6">
+        <div
+          id="tabpanel-documents"
+          role="tabpanel"
+          aria-labelledby="tab-documents"
+          className="space-y-6"
+        >
           {/* Upload Section */}
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <h2 className="text-lg font-semibold mb-4">Subir documento</h2>
@@ -737,11 +755,12 @@ export default function MatterDetailPage() {
                         <button
                           onClick={() => handleProcessDocument(doc.id)}
                           disabled={processingDocId === doc.id || doc.status === "queued" || doc.status === "processing"}
-                          className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50"
-                          title="Extraer texto del documento"
+                          aria-label={`Procesar documento ${doc.original_filename}`}
+                          aria-busy={processingDocId === doc.id || doc.status === "queued" || doc.status === "processing"}
+                          className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
                         >
                           {(processingDocId === doc.id || doc.status === "queued" || doc.status === "processing") ? (
-                            <span className="flex items-center gap-1">
+                            <span role="status" aria-live="polite" className="flex items-center gap-1">
                               <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -757,11 +776,12 @@ export default function MatterDetailPage() {
                         <button
                           onClick={() => handleAnalyzeDocument(doc.id)}
                           disabled={analyzingDocId === doc.id}
-                          className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors disabled:opacity-50"
-                          title="Analizar documento con IA"
+                          aria-label={`Analizar documento ${doc.original_filename} con IA`}
+                          aria-busy={analyzingDocId === doc.id}
+                          className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-purple-500 disabled:opacity-50"
                         >
                           {analyzingDocId === doc.id ? (
-                            <span className="flex items-center gap-1">
+                            <span role="status" aria-live="polite" className="flex items-center gap-1">
                               <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -777,11 +797,12 @@ export default function MatterDetailPage() {
                         <button
                           onClick={() => handleAnalyzeDocument(doc.id)}
                           disabled={analyzingDocId === doc.id}
-                          className="px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors disabled:opacity-50"
-                          title="Reanalizar documento con IA"
+                          aria-label={`Reanalizar documento ${doc.original_filename} con IA`}
+                          aria-busy={analyzingDocId === doc.id}
+                          className="px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-orange-500 disabled:opacity-50"
                         >
                           {analyzingDocId === doc.id ? (
-                            <span className="flex items-center gap-1">
+                            <span role="status" aria-live="polite" className="flex items-center gap-1">
                               <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -796,8 +817,8 @@ export default function MatterDetailPage() {
                       {doc.extracted_text && (
                         <button
                           onClick={() => handleViewAnalysis(doc.id)}
-                          className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
-                          title="Ver análisis del documento"
+                          aria-label={`Ver análisis del documento ${doc.original_filename}`}
+                          className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-green-500"
                         >
                           Ver análisis
                         </button>
@@ -807,14 +828,18 @@ export default function MatterDetailPage() {
                       <button
                         onClick={() => handleDeleteDocument(doc.id)}
                         disabled={deletingDocId === doc.id}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                        title="Eliminar documento"
+                        aria-label={`Eliminar documento ${doc.original_filename}`}
+                        aria-busy={deletingDocId === doc.id}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"
                       >
                         {deletingDocId === doc.id ? (
-                          <svg aria-hidden="true" className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
+                          <span role="status" aria-live="polite" className="inline-flex items-center">
+                            <svg aria-hidden="true" className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span className="sr-only">Eliminando documento...</span>
+                          </span>
                         ) : (
                           <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -835,16 +860,50 @@ export default function MatterDetailPage() {
 
           {/* Modal de Análisis de Documento */}
           {showAnalysisModal && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowAnalysisModal(false);
+                  setSelectedDocForAnalysis(null);
+                }
+              }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="analysis-modal-title"
+                tabIndex={-1}
+                ref={(el) => {
+                  if (el && showAnalysisModal) {
+                    // S5 accessibility: move focus into the dialog when it opens.
+                    window.setTimeout(() => {
+                      const focusable = el.querySelector<HTMLElement>(
+                        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                      );
+                      focusable?.focus();
+                    }, 0);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // S5 accessibility: Escape closes the dialog.
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setShowAnalysisModal(false);
+                    setSelectedDocForAnalysis(null);
+                  }
+                }}
+                className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              >
                 <div className="flex items-center justify-between p-4 border-b">
-                  <h2 className="text-lg font-semibold">Análisis de Documento</h2>
+                  <h2 id="analysis-modal-title" className="text-lg font-semibold">Análisis de Documento</h2>
                   <button
                     onClick={() => {
                       setShowAnalysisModal(false);
                       setSelectedDocForAnalysis(null);
                     }}
-                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    aria-label="Cerrar modal de análisis"
+                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg transition-colors"
                   >
                     <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -853,7 +912,7 @@ export default function MatterDetailPage() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
                   {loadingAnalysis ? (
-                    <div className="flex flex-col items-center justify-center py-12">
+                    <div role="status" aria-live="polite" className="flex flex-col items-center justify-center py-12">
                       <svg aria-hidden="true" className="animate-spin h-10 w-10 text-primary-600 mb-4" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -876,7 +935,7 @@ export default function MatterDetailPage() {
                             handleProcessDocument(docId);
                           }
                         }}
-                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         Procesar documento
                       </button>
@@ -899,7 +958,12 @@ export default function MatterDetailPage() {
       )}
 
       {activeTab === "analysis" && (
-        <div className="space-y-6">
+        <div
+          id="tabpanel-analysis"
+          role="tabpanel"
+          aria-labelledby="tab-analysis"
+          className="space-y-6"
+        >
           {/* Request Analysis */}
           <div className="bg-white rounded-xl shadow-sm border p-6">
             <h2 className="text-lg font-semibold mb-4">Análisis de Inteligencia Artificial</h2>
@@ -912,7 +976,7 @@ export default function MatterDetailPage() {
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
             >
               {analyzing ? (
-              <span className="flex items-center gap-2">
+              <span role="status" aria-live="polite" className="flex items-center gap-2">
                 <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -925,7 +989,7 @@ export default function MatterDetailPage() {
               <div className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{analysisError}</div>
             )}
             {analysisSuccess && (
-              <div className="mt-3 p-4 bg-blue-50 rounded-lg">
+              <div className="mt-3 p-4 bg-blue-50 rounded-lg" role="status" aria-live="polite">
                 <div className="flex items-center gap-3">
                   <svg aria-hidden="true" className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -946,7 +1010,9 @@ export default function MatterDetailPage() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold">Informe de Análisis</h2>
                 <span className="text-sm text-gray-500">
-                  {new Date(analysis.created_at).toLocaleDateString("es-CL")}
+                  <time dateTime={analysis.created_at}>
+                    {new Date(analysis.created_at).toLocaleDateString("es-CL")}
+                  </time>
                 </span>
               </div>
 
@@ -1127,7 +1193,12 @@ export default function MatterDetailPage() {
       )}
 
       {activeTab === "chat" && (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div
+          id="tabpanel-chat"
+          role="tabpanel"
+          aria-labelledby="tab-chat"
+          className="bg-white rounded-xl shadow-sm border overflow-hidden"
+        >
           <div className="flex h-[500px]">
             {/* Sessions Sidebar */}
             <div className="w-64 border-r flex flex-col">
@@ -1160,7 +1231,9 @@ export default function MatterDetailPage() {
                       >
                         <p className="text-sm font-medium truncate">{session.title || `Chat ${session.id}`}</p>
                         <p className="text-xs text-gray-500">
-                          {new Date(session.updated_at).toLocaleDateString("es-CL")}
+                          <time dateTime={session.updated_at}>
+                            {new Date(session.updated_at).toLocaleDateString("es-CL")}
+                          </time>
                         </p>
                       </button>
                     ))}
@@ -1236,10 +1309,12 @@ export default function MatterDetailPage() {
                             <p className={`text-xs mt-1 ${
                               msg.role === "user" ? "text-primary-200" : "text-gray-400"
                             }`}>
-                              {new Date(msg.created_at).toLocaleTimeString("es-CL", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
+                              <time dateTime={msg.created_at}>
+                                {new Date(msg.created_at).toLocaleTimeString("es-CL", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </time>
                             </p>
                           </div>
                         </div>

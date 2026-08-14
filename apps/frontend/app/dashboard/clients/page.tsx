@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getApiUrl } from "@/lib/api";
 
 
@@ -185,6 +186,7 @@ export default function ClientsPage() {
 
           {formError && (
             <div
+              id="client-form-error"
               role="alert"
               aria-live="assertive"
               className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm"
@@ -212,8 +214,11 @@ export default function ClientsPage() {
                   id="client-name"
                   type="text"
                   required
+                  aria-required="true"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Juan Pérez"
                 />
@@ -228,6 +233,8 @@ export default function ClientsPage() {
                   type="text"
                   value={formData.company_name}
                   onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Empresa ABC SpA"
                 />
@@ -242,6 +249,8 @@ export default function ClientsPage() {
                   type="text"
                   value={formData.rut}
                   onChange={(e) => setFormData({ ...formData, rut: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="12.345.678-9"
                 />
@@ -256,6 +265,8 @@ export default function ClientsPage() {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="juan@email.com"
                 />
@@ -270,6 +281,8 @@ export default function ClientsPage() {
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="+56 9 1234 5678"
                 />
@@ -284,18 +297,23 @@ export default function ClientsPage() {
                   type="text"
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Av. Principal 123, Santiago"
                 />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="client-notes" className="block text-sm font-medium text-gray-700 mb-1">
                   Notas
                 </label>
                 <textarea
+                  id="client-notes"
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  aria-describedby={formError ? "client-form-error" : undefined}
+                  aria-invalid={formError ? true : undefined}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Notas adicionales sobre el cliente..."
@@ -314,7 +332,9 @@ export default function ClientsPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                aria-busy={submitting}
+                aria-label={submitting ? "Guardando cliente" : "Guardar cliente"}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-50"
               >
                 {submitting ? "Guardando..." : "Guardar Cliente"}
               </button>
@@ -345,6 +365,7 @@ export default function ClientsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nombre, empresa o RUT..."
+              aria-label="Buscar clientes por nombre, empresa o RUT"
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
@@ -385,22 +406,22 @@ export default function ClientsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full" aria-label="Lista de clientes">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-gray-500">
                       Nombre
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-gray-500">
                       Empresa
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-gray-500">
                       RUT
                     </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-left text-sm font-medium text-gray-500">
                       Contacto
                     </th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">
+                    <th scope="col" className="px-4 py-3 text-right text-sm font-medium text-gray-500">
                       Acciones
                     </th>
                   </tr>
@@ -409,11 +430,13 @@ export default function ClientsPage() {
                   {clients.map((client) => (
                     <tr
                       key={client.id}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+                      className="hover:bg-gray-50"
                     >
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
+                        <Link
+                          href={`/dashboard/clients/${client.id}`}
+                          className="flex items-center gap-3 focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
+                        >
                           <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold">
                             {client.name.charAt(0).toUpperCase()}
                           </div>
@@ -423,7 +446,7 @@ export default function ClientsPage() {
                               <p className="text-sm text-gray-500">{client.email}</p>
                             )}
                           </div>
-                        </div>
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-gray-700">
                         {client.company_name || "-"}
@@ -436,11 +459,11 @@ export default function ClientsPage() {
                         {client.email && <p className="text-sm text-gray-500">{client.email}</p>}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-2">
                           <button
                             onClick={() => handleEdit(client)}
-                            className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"
-                            title="Editar"
+                            aria-label={`Editar cliente ${client.name}`}
+                            className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg"
                           >
                             <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path
@@ -453,8 +476,8 @@ export default function ClientsPage() {
                           </button>
                           <button
                             onClick={() => handleDelete(client.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                            title="Eliminar"
+                            aria-label={`Eliminar cliente ${client.name}`}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500 rounded-lg"
                           >
                             <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path

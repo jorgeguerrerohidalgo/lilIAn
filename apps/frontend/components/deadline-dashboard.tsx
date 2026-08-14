@@ -65,7 +65,10 @@ export function DeadlineDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-3 border-slate-200 border-t-slate-700 rounded-full animate-spin" />
+        <div role="status" aria-live="polite" className="flex items-center justify-center">
+          <div className="w-8 h-8 border-3 border-slate-200 border-t-slate-700 rounded-full animate-spin" aria-hidden="true" />
+          <span className="sr-only">Cargando panel de vencimientos...</span>
+        </div>
       </div>
     );
   }
@@ -86,7 +89,7 @@ export function DeadlineDashboard() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-live="polite">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-900 text-white rounded-xl p-5">
@@ -150,7 +153,9 @@ export function DeadlineDashboard() {
                     {alert.is_overdue ? "Vencido" : alert.days_remaining !== null ? `${alert.days_remaining}d` : "—"}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {new Date(alert.due_date).toLocaleDateString("es-CL")}
+                    <time dateTime={alert.due_date}>
+                      {new Date(alert.due_date).toLocaleDateString("es-CL")}
+                    </time>
                   </p>
                 </div>
               </Link>

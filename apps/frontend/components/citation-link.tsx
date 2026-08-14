@@ -143,7 +143,7 @@ export function CitationLink({ citation, onNavigate }: CitationLinkProps) {
           margin-bottom: 8px;
           padding: 12px;
           background: white;
-          border: 1px solid #e5e7eb;
+          border: 1px solid var(--border);
           border-radius: 8px;
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
           z-index: 50;
@@ -157,34 +157,34 @@ export function CitationLink({ citation, onNavigate }: CitationLinkProps) {
           align-items: center;
           margin-bottom: 8px;
           padding-bottom: 8px;
-          border-bottom: 1px solid #e5e7eb;
+          border-bottom: 1px solid var(--border);
         }
 
         .tooltip-type {
           font-size: 11px;
           font-weight: 600;
           text-transform: uppercase;
-          color: #6b7280;
+          color: var(--ink55);
         }
 
         .tooltip-relevance {
           font-size: 11px;
-          color: #10b981;
+          color: var(--green);
           font-weight: 500;
         }
 
         .tooltip-detail {
           font-size: 13px;
-          color: #374151;
+          color: var(--ink2);
           margin-bottom: 4px;
         }
 
         .tooltip-hint {
           margin-top: 8px;
           padding-top: 8px;
-          border-top: 1px solid #e5e7eb;
+          border-top: 1px solid var(--border);
           font-size: 11px;
-          color: #9ca3af;
+          color: var(--ink38);
           text-align: center;
         }
       `}</style>
@@ -226,7 +226,7 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
   }
 
   return (
-    <div className="citation-list">
+    <div className="citation-list" aria-live="polite">
       <h4 className="citation-list-title">{title}</h4>
       <div className="citation-list-items">
         {citations.map((citation) => (
@@ -267,14 +267,14 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
         .citation-list {
           margin-top: 24px;
           padding: 16px;
-          background: #f9fafb;
+          background: var(--soft);
           border-radius: 8px;
         }
 
         .citation-list-title {
           font-size: 14px;
           font-weight: 600;
-          color: #374151;
+          color: var(--ink2);
           margin: 0 0 16px 0;
         }
 
@@ -287,7 +287,7 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
         .citation-item {
           padding: 12px;
           background: white;
-          border: 1px solid #e5e7eb;
+          border: 1px solid var(--border);
           border-radius: 6px;
         }
 
@@ -301,7 +301,7 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
         .citation-item-id {
           font-size: 11px;
           font-weight: 600;
-          color: #6b7280;
+          color: var(--ink55);
           background: #f3f4f6;
           padding: 2px 6px;
           border-radius: 4px;
@@ -309,20 +309,20 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
 
         .citation-item-type {
           font-size: 11px;
-          color: #9ca3af;
+          color: var(--ink38);
           text-transform: capitalize;
         }
 
         .citation-item-score {
           margin-left: auto;
           font-size: 11px;
-          color: #10b981;
+          color: var(--green);
           font-weight: 500;
         }
 
         .citation-item-text {
           font-size: 13px;
-          color: #374151;
+          color: var(--ink2);
           font-style: italic;
           margin: 0 0 8px 0;
           padding-left: 12px;
@@ -333,7 +333,7 @@ export function CitationList({ citations, title = "Fuentes", onNavigate }: Citat
           display: flex;
           gap: 12px;
           font-size: 11px;
-          color: #9ca3af;
+          color: var(--ink38);
         }
 
         .citation-item-link {

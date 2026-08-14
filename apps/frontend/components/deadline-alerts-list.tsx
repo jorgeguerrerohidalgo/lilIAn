@@ -132,11 +132,12 @@ export function DeadlineAlertsList({ matterId }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" aria-live="polite">
       {/* Filters */}
       <div className="flex gap-2">
         <button
           onClick={() => setFilter("all")}
+          aria-pressed={filter === "all"}
           className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
             filter === "all" ? "bg-ink text-white" : "bg-soft text-ink2 hover:bg-border"
           }`}
@@ -145,6 +146,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
         </button>
         <button
           onClick={() => setFilter("pending")}
+          aria-pressed={filter === "pending"}
           className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
             filter === "pending" ? "bg-ink text-white" : "bg-soft text-ink2 hover:bg-border"
           }`}
@@ -153,6 +155,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
         </button>
         <button
           onClick={() => setFilter("overdue")}
+          aria-pressed={filter === "overdue"}
           className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
             filter === "overdue" ? "bg-coral text-white" : "bg-coral-pale text-coral-dark hover:bg-coral/10"
           }`}
@@ -198,9 +201,12 @@ export function DeadlineAlertsList({ matterId }: Props) {
                     )}
                     <div className="flex items-center gap-4 mt-2 text-sm">
                       <span className="text-ink/60">
-                        Vence: <strong className={alert.is_overdue ? "text-coral" : "text-ink2"}>
-                          {formatDate(alert.due_date)}
-                        </strong>
+                        Vence:{" "}
+                        <time dateTime={alert.due_date}>
+                          <strong className={alert.is_overdue ? "text-coral" : "text-ink2"}>
+                            {formatDate(alert.due_date)}
+                          </strong>
+                        </time>
                       </span>
                       {alert.days_remaining !== null && (
                         <span className={alert.days_remaining < 0 ? "text-coral" : "text-ink/60"}>

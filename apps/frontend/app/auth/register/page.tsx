@@ -63,7 +63,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-soft flex items-center justify-center p-4">
+    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8">
         <div className="text-center mb-8">
           {/* Logo */}
@@ -83,7 +83,12 @@ export default function RegisterPage() {
         </div>
 
         {error && (
-          <div className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm">
+          <div
+            id="register-error"
+            role="alert"
+            aria-live="assertive"
+            className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm"
+          >
             {error}
           </div>
         )}
@@ -96,7 +101,10 @@ export default function RegisterPage() {
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             placeholder="Tu nombre completo"
+            autoComplete="name"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Input
@@ -106,7 +114,10 @@ export default function RegisterPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="tu@email.com"
+            autoComplete="email"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Input
@@ -116,7 +127,10 @@ export default function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
+            autoComplete="new-password"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Input
@@ -126,7 +140,10 @@ export default function RegisterPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="••••••••"
+            autoComplete="new-password"
             required
+            aria-describedby={error ? "register-error" : undefined}
+            aria-invalid={error ? true : undefined}
           />
 
           <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
@@ -141,6 +158,6 @@ export default function RegisterPage() {
           </Link>
         </p>
       </Card>
-    </div>
+    </main>
   );
 }
