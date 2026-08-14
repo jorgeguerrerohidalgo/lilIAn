@@ -1,14 +1,24 @@
-# S6-02: .dockerignore for the lilIAn monorepo.
+# S6-02 / S7-B6: .dockerignore for the lilIAn monorepo.
 # This trims the Docker build context dramatically (saves minutes per
 # build) and prevents secrets / build artefacts from leaking into the
 # image.
+#
+# Keep this in sync with `.gitignore` for secrets, caches, and build
+# artefacts. Anything that should not be in a published image belongs
+# here.
+
+# VCS, IDE, local tooling
 .git
 .gitignore
+.gitattributes
 .github
 .vercel
 .claude
 .agents
 .claude-flow
+.code-review-graph
+.vscode
+.idea
 
 # Local secrets — MUST never enter the image.
 **/.env
@@ -28,25 +38,34 @@
 **/.venv
 **/env
 **/.env
+**/.Python
+**/*.egg
+**/*.egg-info
+**/.eggs
 
 # Node / Next.js
 **/node_modules
 **/.next
 **/out
+**/.turbo
+**/.parcel-cache
 **/npm-debug.log*
 **/yarn-debug.log*
 **/yarn-error.log*
 **/.pnp.*
 
-# Tests
+# Tests and coverage
 **/tests
 !**/apps/backend/tests
 **/coverage
+**/htmlcov
 **/.nyc_output
 **/playwright-report
 **/test-results
+**/.tox
+**/.nox
 
-# Docs / media / scripts
+# Docs / media / scripts / Dockerfiles
 docs
 images
 **/*.md
@@ -54,16 +73,29 @@ images
 scripts
 **/Dockerfile
 **/Dockerfile.*
+**/docker-compose.yml
+**/docker-compose.*.yml
 
 # Build / CI artefacts
 **/.vite
 **/dist
 **/build
-**/__pycache__
-**/.mypy_cache
 **/.cache
+**/.tsbuildinfo
 
-# OS noise
+# App-specific uploads
+**/laws/*.pdf
+**/storage
+**/uploads
+**/test_uploads
+**/tmp
+**/temp
+
+# Logs and OS noise
+**/*.log
+**/logs
 .DS_Store
 Thumbs.db
-*.log
+desktop.ini
+**/.DS_Store
+**/Thumbs.db
