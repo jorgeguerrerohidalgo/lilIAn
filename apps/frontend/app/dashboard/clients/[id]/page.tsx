@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
 import { getApiUrl } from "@/lib/api";
 
 
@@ -144,14 +145,15 @@ export default function ClientDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push("/dashboard/clients")}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+          <Link
+            href="/dashboard/clients"
+            aria-label="Volver a la lista de clientes"
+            className="p-2 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg"
           >
             <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-          </button>
+          </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
             {client.company_name && (
@@ -159,15 +161,15 @@ export default function ClientDetailPage() {
             )}
           </div>
         </div>
-        <button
-          onClick={() => router.push(`/matters/new?client_id=${client.id}`)}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
+        <Link
+          href={`/matters/new?client_id=${client.id}`}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-500 flex items-center gap-2"
         >
           <svg aria-hidden="true" className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Nuevo Caso
-        </button>
+        </Link>
       </div>
 
       {/* Client Info Card */}
@@ -229,20 +231,20 @@ export default function ClientDetailPage() {
               />
             </svg>
             <p className="text-gray-500 mb-4">Este cliente aún no tiene casos</p>
-            <button
-              onClick={() => router.push(`/matters/new?client_id=${client.id}`)}
-              className="text-primary-600 hover:text-primary-700"
+            <Link
+              href={`/matters/new?client_id=${client.id}`}
+              className="text-primary-600 hover:text-primary-700 focus-visible:ring-2 focus-visible:ring-primary-500 rounded"
             >
               Crear el primer caso
-            </button>
+            </Link>
           </div>
         ) : (
-          <div className="divide-y">
+          <div className="divide-y" role="list" aria-label={`Casos del cliente ${client.name}`}>
             {matters.map((matter) => (
-              <div
+              <Link
                 key={matter.id}
-                className="p-4 hover:bg-gray-50 cursor-pointer"
-                onClick={() => router.push(`/matters/${matter.id}`)}
+                href={`/matters/${matter.id}`}
+                className="block p-4 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:bg-gray-50"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -264,7 +266,7 @@ export default function ClientDetailPage() {
                     </span>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
