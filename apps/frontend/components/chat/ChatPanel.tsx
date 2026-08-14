@@ -37,6 +37,21 @@ const CloseIcon = () => (
   </svg>
 );
 
+/**
+ * Panel lateral de chat con el asistente legal lilIAn.
+ *
+ * Implementa el patrón dialog accesible (WCAG 2.4.3 Focus Order):
+ * - ``role="dialog"`` + ``aria-modal="true"`` + ``aria-labelledby``.
+ * - Escape cierra el panel.
+ * - Focus atrapado dentro del diálogo y restaurado al trigger al cerrar.
+ * - Backdrop clickable para cerrar y ``aria-hidden`` cuando está cerrado.
+ *
+ * @param props - {@link ChatPanelProps}.
+ * @param props.isOpen - Si el panel está visible.
+ * @param props.onClose - Callback al cerrar (Escape, backdrop o botón X).
+ * @param props.contextInfo - Contexto opcional del caso/documento
+ *   actual para mostrar en el banner superior.
+ */
 export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {

@@ -45,6 +45,23 @@ export interface UsePollOptions<T> {
   enabled?: boolean;
 }
 
+/**
+ * Hook declarativo para polling con cleanup garantizado (S3-08).
+ *
+ * La implementación previa creaba ``setInterval`` dentro de handlers y
+ * rastreaba el handle en una variable local, lo que dejaba intervals
+ * vivos cuando el componente se desmontaba antes de completarse.
+ * Esta versión:
+ *
+ *   - Siempre limpia el interval en unmount, incluso si nadie lo hace.
+ *   - Acepta un predicado ``done`` tipado para que el caller pare
+ *     bajo cualquier condición sin manejar el handle.
+ *   - Devuelve ``stop()`` para cancelación temprana.
+ *
+ * @typeParam T - Tipo del ``value`` retornado por la tarea de polling.
+ * @param options - Configuración (intervalo, máximo de intentos, tarea).
+ * @returns Función ``stop()`` que cancela el polling manualmente.
+ */
 export function usePoll<T>(options: UsePollOptions<T>): () => void {
   const { intervalMs, maxAttempts, task, onResult, onTimeout, enabled = true } = options;
   const handleRef = useRef<ReturnType<typeof setInterval> | null>(null);

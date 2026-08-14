@@ -48,6 +48,24 @@ def register(
     user_data: UserCreate,
     db: Session = Depends(get_db),
 ):
+    """Registra un nuevo usuario y crea su organización personal.
+
+    Verifica que el email no esté ya registrado, hashea la contraseña,
+    crea el usuario, le asocia una ``Organization`` tipo ``individual``
+    y un ``OrganizationMember`` con rol ``OWNER``.
+
+    Args:
+        request: Request de FastAPI (requerido por ``limiter.limit``).
+        user_data: Payload validado (``UserCreate``) con ``email``,
+            ``password`` y ``full_name``.
+        db: Sesión de SQLAlchemy inyectada por dependencia.
+
+    Returns:
+        ``UserResponse`` con los datos públicos del usuario creado.
+
+    Raises:
+        HTTPException: 400 si el email ya está registrado.
+    """
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(
@@ -91,6 +109,26 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    """Autentica al usuario y emite un token JWT de acceso.
+
+    Verifica credenciales contra ``User.password_hash`` (bcrypt),
+    actualiza ``last_login_at``, genera el JWT con ``create_access_token``
+    y lo deposita en la cookie ``lilian_auth_token`` para uso por el
+    frontend.
+
+    Args:
+        request: Request de FastAPI (requerido por ``limiter.limit``).
+        response: Response de FastAPI donde se setea la cookie de auth.
+        form_data: Form OAuth2 con ``username`` (email) y ``password``.
+        db: Sesión de SQLAlchemy inyectada por dependencia.
+
+    Returns:
+        ``Token`` con ``access_token`` y ``token_type="bearer"``.
+
+    Raises:
+        HTTPException: 401 con header ``WWW-Authenticate: Bearer`` si
+            las credenciales son inválidas.
+    """
     user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.password_hash):

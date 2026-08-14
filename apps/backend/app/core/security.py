@@ -24,12 +24,38 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a plain password using bcrypt directly (passlib<1.8 incompat con bcrypt>=4.2)."""
+    """Hashea una contraseña en texto plano con bcrypt.
+
+    Usa bcrypt directamente (``passlib<1.8`` incompat con
+    ``bcrypt>=4.2``). Aplica ``_truncate_password`` antes de hashear
+    para mitigar CVE-2024-32661.
+
+    Args:
+        password: Contraseña en texto plano.
+
+    Returns:
+        Hash bcrypt como string utf-8 (compatible con ``verify_password``).
+    """
     salt = bcrypt.gensalt(rounds=12)
     return bcrypt.hashpw(_truncate_password(password).encode("utf-8"), salt).decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    """Genera un JWT firmado con claims estándar.
+
+    Añade automáticamente ``exp``, ``iat``, ``iss`` y ``aud`` a los
+    claims provistos en ``data``. Si no se pasa ``expires_delta`` se
+    usa ``settings.ACCESS_TOKEN_EXPIRE_MINUTES``.
+
+    Args:
+        data: Claims adicionales a incluir en el payload (típicamente
+            ``{"sub": user_id, "email": ...}``).
+        expires_delta: Delta opcional para controlar la expiración del
+            token.
+
+    Returns:
+        JWT firmado como string compacto (``header.payload.signature``).
+    """
     to_encode = data.copy()
     now = datetime.now(UTC)
     if expires_delta:
@@ -49,6 +75,19 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 
 def decode_access_token(token: str) -> dict | None:
+    """Decodifica y valida un JWT de acceso.
+
+    Verifica firma, ``aud``, ``iss``, algoritmo y que existan los
+    claims ``exp``, ``iat``, ``iss``, ``aud``. Devuelve ``None`` ante
+    cualquier ``JWTError``.
+
+    Args:
+        token: JWT a decodificar.
+
+    Returns:
+        Payload decodificado como ``dict`` o ``None`` si el token es
+        inválido, expirado o le falta algún claim obligatorio.
+    """
     try:
         payload = jwt.decode(
             token,

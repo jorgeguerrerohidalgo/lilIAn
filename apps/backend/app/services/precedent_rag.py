@@ -34,7 +34,32 @@ def search_precedents_by_embedding(
     top_k: int = 5,
     similarity_threshold: float = 0.7
 ) -> list[dict]:
-    """Search precedents by semantic similarity within an organization."""
+    """Busca precedentes judiciales por similitud semántica.
+
+    Aplica los filtros opcionales (``court``, ``year``, ``legal_area``,
+    ``matter_type``), calcula cosine-similarity entre el embedding de
+    la consulta y el embedding almacenado en ``precedent_metadata`` y
+    devuelve los ``top_k`` precedentes que superen
+    ``similarity_threshold``.
+
+    Args:
+        query_embedding: Vector de embedding de la consulta.
+        organization_id: ID de la organización (multi-tenant).
+        court: Filtro parcial por tribunal (case-insensitive).
+        year: Filtro por año del fallo.
+        legal_area: Filtro exacto por área legal.
+        matter_type: Filtro parcial por tipo de materia.
+        top_k: Número máximo de precedentes a devolver.
+        similarity_threshold: Similitud mínima (0-1) para incluir un
+            precedente.
+
+    Returns:
+        Lista de dicts con metadatos del precedente (``id``, ``court``,
+        ``tribunal``, ``year``, ``roll_number``, ``full_citation``,
+        ``legal_area``, ``matter_type``, ``summary``, ``reasoning``,
+        ``decision``, ``disposition``, ``voces``) y ``similarity``
+        redondeado a 4 decimales, ordenados por similitud descendente.
+    """
     db = SessionLocal()
     try:
         query = db.query(Precedent).filter(Precedent.organization_id == organization_id)
@@ -144,7 +169,27 @@ def get_precedent_context(
     legal_area: str | None = None,
     top_k: int = 3
 ) -> str:
-    """Returns formatted precedent context for RAG integration within an organization."""
+    """Devuelve contexto formateado de precedentes para integración RAG.
+
+    Construye el string que se inyecta en el ``system_prompt`` del LLM
+    durante un análisis. Intenta primero búsqueda por embedding; si
+    falla el provider o no hay resultados, hace fallback a keyword
+    search. Cuando ninguna ruta devuelve resultados, retorna cadena
+    vacía.
+
+    Args:
+        query: Consulta en lenguaje natural sobre el tema jurídico.
+        organization_id: ID de la organización (multi-tenant).
+        court: Filtro parcial por tribunal.
+        year: Filtro por año del fallo.
+        legal_area: Filtro por área legal.
+        top_k: Número de precedentes a incluir en el contexto.
+
+    Returns:
+        Cadena con bloques ``[Precedente N]`` separados por ``---``
+        lista para pegarse al prompt, o ``""`` si no hay precedentes
+        relevantes.
+    """
     try:
         provider = get_embedding_provider()
         query_embedding = provider.generate_embedding(query)
