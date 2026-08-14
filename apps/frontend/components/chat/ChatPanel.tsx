@@ -93,17 +93,22 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* S5 accessibility: backdrop with click-to-close + aria-hidden when closed. */}
       <div
         className={clsx(
           'fixed inset-0 bg-ink/20 backdrop-blur-sm z-40 transition-opacity duration-300',
           isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
         onClick={onClose}
+        aria-hidden={!isOpen}
       />
 
-      {/* Panel */}
+      {/* S5 accessibility: panel is a dialog with role + aria-modal + labelled by header h3. */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="chat-panel-title"
+        aria-hidden={!isOpen}
         className={clsx(
           'fixed top-0 right-0 h-full w-[380px] max-w-full flex flex-col',
           'bg-cream border-l border-border z-50 shadow-xl',
@@ -118,7 +123,9 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
               <BotIcon />
             </div>
             <div>
-              <h3 className="font-heading font-bold text-ink">Asistente LILIAN</h3>
+              <h3 id="chat-panel-title" className="font-heading font-bold text-ink">
+                Asistente LILIAN
+              </h3>
               <p className="text-xs text-ink/50">siempre disponible</p>
             </div>
           </div>
