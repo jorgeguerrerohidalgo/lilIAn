@@ -78,7 +78,7 @@ def mounted_review_app(db):
     from app.api.endpoints import review as review_router
     from app.core.database import get_db
 
-    from tests.conftest import _override_get_db
+    from tests.conftest import _override_get_db  # noqa: PLC0415
 
     app = FastAPI()
     app.include_router(review_router.router, prefix="/api/v1")
