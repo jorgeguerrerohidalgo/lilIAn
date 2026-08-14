@@ -1,0 +1,59 @@
+# lilIAn CODEOWNERS
+# Each line is a file pattern followed by one or more owners.
+# Order matters: later patterns override earlier ones.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything not matched below.
+# Replace these placeholders with the actual GitHub usernames / team
+# handles for the project.
+* @lilian/maintainers
+
+# Backend (FastAPI / Python)
+/apps/backend/ @lilian/backend-team
+/apps/backend/app/api/ @lilian/backend-team
+/apps/backend/app/services/ @lilian/backend-team
+/apps/backend/app/models/ @lilian/backend-team
+/apps/backend/migrations/ @lilian/backend-team
+/apps/backend/requirements.txt @lilian/backend-team
+/apps/backend/pyproject.toml @lilian/backend-team
+
+# Document processor worker (Python)
+workers/document_processor/ @lilian/backend-team
+workers/document_processor/requirements.txt @lilian/backend-team
+
+# Frontend (Next.js / TypeScript)
+/apps/frontend/ @lilian/frontend-team
+/apps/frontend/app/ @lilian/frontend-team
+/apps/frontend/components/ @lilian/frontend-team
+/apps/frontend/lib/ @lilian/frontend-team
+/apps/frontend/middleware.ts @lilian/frontend-team
+/apps/frontend/package.json @lilian/frontend-team
+/apps/frontend/next.config.js @lilian/frontend-team
+
+# Shared infrastructure
+/infra/ @lilian/platform-team
+/docker-compose.yml @lilian/platform-team
+/Dockerfile @lilian/platform-team
+/render.yaml @lilian/platform-team
+/railway.json @lilian/platform-team
+
+# CI / CD pipelines
+/.github/workflows/ @lilian/platform-team
+
+# Documentation
+/docs/ @lilian/docs-team
+/README.md @lilian/docs-team
+/CHANGELOG.md @lilian/docs-team
+/CONTRIBUTING.md @lilian/docs-team
+/CODE_OF_CONDUCT.md @lilian/docs-team
+/SECURITY.md @lilian/security-team
+
+# Security-sensitive files
+# SECURITY.md is owned by the security team; the previous catch-all
+# `/SECURITY.md` rule takes precedence here.
+/SECURITY.md @lilian/security-team
+
+# Tests
+/apps/backend/tests/ @lilian/backend-team
+/apps/frontend/e2e/ @lilian/frontend-team
+/workers/document_processor/tests/ @lilian/backend-team
