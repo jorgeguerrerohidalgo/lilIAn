@@ -64,7 +64,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
   const fetchTemplates = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/v1/doc-templates/templates`, {
+      const res = await fetch(`/api/v1/doc-templates/templates`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -96,7 +96,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(
-        `${API_URL}/api/v1/doc-templates/suggest-variables?template_id=${selectedTemplate.id}`,
+        `/api/v1/doc-templates/suggest-variables?template_id=${selectedTemplate.id}`,
         {
           method: "POST",
           headers: {
@@ -130,7 +130,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
     setGenerating(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/v1/doc-templates/generate`, {
+      const res = await fetch(`/api/v1/doc-templates/generate`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

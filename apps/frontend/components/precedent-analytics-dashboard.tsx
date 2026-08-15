@@ -54,7 +54,7 @@ export function PrecedentAnalyticsDashboard() {
   const fetchFilters = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/v1/precedents/analytics/filters`, {
+      const res = await fetch(`/api/v1/precedents/analytics/filters`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -81,7 +81,7 @@ export function PrecedentAnalyticsDashboard() {
       params.append("include_text_analysis", includeTextAnalysis.toString());
 
       const res = await fetch(
-        `${API_URL}/api/v1/precedents/analytics?${params.toString()}`,
+        `/api/v1/precedents/analytics?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 

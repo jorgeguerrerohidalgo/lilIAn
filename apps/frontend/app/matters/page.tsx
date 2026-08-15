@@ -74,7 +74,7 @@ export default function MattersPage() {
       return;
     }
 
-    fetch(`${API_URL}/api/v1/matters`, {
+    fetch(`/api/v1/matters`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -82,7 +82,7 @@ export default function MattersPage() {
         setMatters(data);
         const clientIds = [...new Set<number>(data.filter((m: Matter) => m.client_id).map((m: Matter) => m.client_id as number))];
         const clientPromises = clientIds.map((clientId: number) =>
-          fetch(`${API_URL}/api/v1/clients/${clientId}`, {
+          fetch(`/api/v1/clients/${clientId}`, {
             headers: { Authorization: `Bearer ${token}` },
           }).then((res) => res.json())
         );

@@ -91,7 +91,7 @@ export default function DashboardPage() {
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    fetch(`${API_URL}/api/v1/matters`, {
+    fetch(`/api/v1/matters`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

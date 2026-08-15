@@ -69,7 +69,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("access_token");
       logger.info("Fetching alerts for matter:", matterId, "API_URL:", API_URL);
-      const res = await fetch(`${API_URL}/api/v1/alerts/matters/${matterId}`, {
+      const res = await fetch(`/api/v1/alerts/matters/${matterId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       logger.info("Alerts response:", res.status, res.ok);
@@ -89,7 +89,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
     setUpdating(alertId);
     try {
       const token = localStorage.getItem("token") || localStorage.getItem("access_token");
-      const res = await fetch(`${API_URL}/api/v1/alerts/${alertId}`, {
+      const res = await fetch(`/api/v1/alerts/${alertId}`, {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
