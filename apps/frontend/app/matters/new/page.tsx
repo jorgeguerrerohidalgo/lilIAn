@@ -32,7 +32,14 @@ export default function NewMatterPage() {
   const clientIdFromUrl = searchParams.get("client_id");
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<{
+    title?: string;
+    matter_type?: string;
+    description?: string;
+    urgency?: string;
+    client_id?: string;
+    form?: string;
+  }>({});
   const [clientName, setClientName] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
@@ -61,7 +68,7 @@ export default function NewMatterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setErrors({});
     setLoading(true);
 
     const token = localStorage.getItem("token");
@@ -88,7 +95,7 @@ export default function NewMatterPage() {
       const data = await res.json();
       router.push(`/matters/${data.id}`);
     } catch (err: any) {
-      setError(err.message || "Error al crear el caso");
+      setErrors({ form: err.message || "Error al crear el caso" });
     } finally {
       setLoading(false);
     }
@@ -106,14 +113,14 @@ export default function NewMatterPage() {
         </p>
       </div>
 
-      {error && (
+      {errors.form && (
         <div
           id="matter-form-error"
           role="alert"
           aria-live="assertive"
           className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-200"
         >
-          {error}
+          {errors.form}
         </div>
       )}
 
@@ -136,11 +143,12 @@ export default function NewMatterPage() {
               id="title"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              aria-describedby={error ? "matter-form-error" : undefined}
-              aria-invalid={error ? true : undefined}
+              aria-describedby={errors.form ? "matter-form-error" : undefined}
+              aria-invalid={errors.title ? true : undefined}
               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all"
               placeholder="Ej: Revisión contrato de prestación de servicios"
               required
+              aria-required="true"
             />
           </div>
 
@@ -152,10 +160,11 @@ export default function NewMatterPage() {
               id="matter_type"
               value={form.matter_type}
               onChange={(e) => setForm({ ...form, matter_type: e.target.value })}
-              aria-describedby={error ? "matter-form-error" : undefined}
-              aria-invalid={error ? true : undefined}
+              aria-describedby={errors.form ? "matter-form-error" : undefined}
+              aria-invalid={errors.matter_type ? true : undefined}
               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all bg-white"
               required
+              aria-required="true"
             >
               {matterTypes.map((type) => (
                 <option key={type.value} value={type.value}>
@@ -173,8 +182,8 @@ export default function NewMatterPage() {
               id="description"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              aria-describedby={error ? "matter-form-error" : undefined}
-              aria-invalid={error ? true : undefined}
+              aria-describedby={errors.form ? "matter-form-error" : undefined}
+              aria-invalid={errors.description ? true : undefined}
               rows={3}
               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all resize-none"
               placeholder="Describe brevemente tu situación legal..."
@@ -189,10 +198,11 @@ export default function NewMatterPage() {
               id="urgency"
               value={form.urgency}
               onChange={(e) => setForm({ ...form, urgency: e.target.value })}
-              aria-describedby={error ? "matter-form-error" : undefined}
-              aria-invalid={error ? true : undefined}
+              aria-describedby={errors.form ? "matter-form-error" : undefined}
+              aria-invalid={errors.urgency ? true : undefined}
               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all bg-white"
               required
+              aria-required="true"
             >
               {urgencyOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -211,8 +221,8 @@ export default function NewMatterPage() {
               id="counterparty_name"
               value={form.counterparty_name}
               onChange={(e) => setForm({ ...form, counterparty_name: e.target.value })}
-              aria-describedby={error ? "matter-form-error" : undefined}
-              aria-invalid={error ? true : undefined}
+              aria-describedby={errors.form ? "matter-form-error" : undefined}
+              aria-invalid={errors.client_id ? true : undefined}
               className="w-full px-3.5 py-2.5 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all"
               placeholder="Nombre de la otra parte involucrada"
             />

@@ -17,20 +17,26 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<{
+    fullName?: string;
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+    form?: string;
+  }>({});
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setErrors({});
 
     if (password !== confirmPassword) {
-      setError("Las contraseñas no coinciden");
+      setErrors({ confirmPassword: "Las contraseñas no coinciden" });
       return;
     }
 
     if (password.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres");
+      setErrors({ password: "La contraseña debe tener al menos 6 caracteres" });
       return;
     }
 
@@ -56,7 +62,7 @@ export default function RegisterPage() {
 
       router.push("/auth/login?registered=true");
     } catch (err: any) {
-      setError(err.message || "Error al registrar");
+      setErrors({ form: err.message || "Error al registrar" });
     } finally {
       setLoading(false);
     }
@@ -82,14 +88,14 @@ export default function RegisterPage() {
           <p className="text-ink/60 mt-2">Regístrate en LILIAN</p>
         </div>
 
-        {error && (
+        {errors.form && (
           <div
-            id="register-error"
+            id="register-form-error"
             role="alert"
             aria-live="assertive"
             className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm"
           >
-            {error}
+            {errors.form}
           </div>
         )}
 
@@ -103,8 +109,9 @@ export default function RegisterPage() {
             placeholder="Tu nombre completo"
             autoComplete="name"
             required
-            aria-describedby={error ? "register-error" : undefined}
-            aria-invalid={error ? true : undefined}
+            aria-required="true"
+            aria-describedby={errors.form ? "register-form-error" : undefined}
+            aria-invalid={errors.fullName ? true : undefined}
           />
 
           <Input
@@ -116,8 +123,9 @@ export default function RegisterPage() {
             placeholder="tu@email.com"
             autoComplete="email"
             required
-            aria-describedby={error ? "register-error" : undefined}
-            aria-invalid={error ? true : undefined}
+            aria-required="true"
+            aria-describedby={errors.form ? "register-form-error" : undefined}
+            aria-invalid={errors.email ? true : undefined}
           />
 
           <Input
@@ -129,8 +137,9 @@ export default function RegisterPage() {
             placeholder="••••••••"
             autoComplete="new-password"
             required
-            aria-describedby={error ? "register-error" : undefined}
-            aria-invalid={error ? true : undefined}
+            aria-required="true"
+            aria-describedby={errors.form ? "register-form-error" : undefined}
+            aria-invalid={errors.password ? true : undefined}
           />
 
           <Input
@@ -142,8 +151,9 @@ export default function RegisterPage() {
             placeholder="••••••••"
             autoComplete="new-password"
             required
-            aria-describedby={error ? "register-error" : undefined}
-            aria-invalid={error ? true : undefined}
+            aria-required="true"
+            aria-describedby={errors.form ? "register-form-error" : undefined}
+            aria-invalid={errors.confirmPassword ? true : undefined}
           />
 
           <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">

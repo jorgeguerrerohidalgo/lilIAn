@@ -48,6 +48,16 @@ export default function ClientsPage() {
     address: "",
     notes: "",
   });
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    company_name?: string;
+    rut?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    notes?: string;
+    form?: string;
+  }>({});
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -83,6 +93,7 @@ export default function ClientsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFieldErrors({});
     setFormError("");
     setFormSuccess("");
     setSubmitting(true);
@@ -218,7 +229,7 @@ export default function ClientsPage() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   aria-describedby={formError ? "client-form-error" : undefined}
-                  aria-invalid={formError ? true : undefined}
+                  aria-invalid={fieldErrors.name ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Juan Pérez"
                 />
@@ -234,7 +245,7 @@ export default function ClientsPage() {
                   value={formData.company_name}
                   onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
                   aria-describedby={formError ? "client-form-error" : undefined}
-                  aria-invalid={formError ? true : undefined}
+                  aria-invalid={fieldErrors.company_name ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Empresa ABC SpA"
                 />
@@ -250,7 +261,7 @@ export default function ClientsPage() {
                   value={formData.rut}
                   onChange={(e) => setFormData({ ...formData, rut: e.target.value })}
                   aria-describedby={formError ? "client-form-error" : undefined}
-                  aria-invalid={formError ? true : undefined}
+                  aria-invalid={fieldErrors.rut ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="12.345.678-9"
                 />
@@ -266,7 +277,7 @@ export default function ClientsPage() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   aria-describedby={formError ? "client-form-error" : undefined}
-                  aria-invalid={formError ? true : undefined}
+                  aria-invalid={fieldErrors.email ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="juan@email.com"
                 />
@@ -282,7 +293,7 @@ export default function ClientsPage() {
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   aria-describedby={formError ? "client-form-error" : undefined}
-                  aria-invalid={formError ? true : undefined}
+                  aria-invalid={fieldErrors.phone ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="+56 9 1234 5678"
                 />
@@ -298,7 +309,7 @@ export default function ClientsPage() {
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   aria-describedby={formError ? "client-form-error" : undefined}
-                  aria-invalid={formError ? true : undefined}
+                  aria-invalid={fieldErrors.address ? true : undefined}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Av. Principal 123, Santiago"
                 />
@@ -313,7 +324,7 @@ export default function ClientsPage() {
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   aria-describedby={formError ? "client-form-error" : undefined}
-                  aria-invalid={formError ? true : undefined}
+                  aria-invalid={fieldErrors.notes ? true : undefined}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   placeholder="Notas adicionales sobre el cliente..."

@@ -14,12 +14,12 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setErrors({});
     setLoading(true);
 
     try {
@@ -49,7 +49,8 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al iniciar sesión";
-      setError(message);
+      // Invalid credentials / server errors go to the form-level bucket
+      setErrors({ form: message });
     } finally {
       setLoading(false);
     }
@@ -75,14 +76,14 @@ export default function LoginPage() {
           <p className="text-ink/60 mt-2">Accede a tu cuenta de LILIAN</p>
         </div>
 
-        {error && (
+        {errors.form && (
           <div
-            id="login-error"
+            id="login-form-error"
             role="alert"
             aria-live="assertive"
             className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm"
           >
-            {error}
+            {errors.form}
           </div>
         )}
 
@@ -96,8 +97,9 @@ export default function LoginPage() {
             placeholder="tu@email.com"
             autoComplete="email"
             required
-            aria-describedby={error ? "login-error" : undefined}
-            aria-invalid={error ? true : undefined}
+            aria-required="true"
+            aria-describedby={errors.form ? "login-form-error" : undefined}
+            aria-invalid={errors.email ? true : undefined}
           />
 
           <Input
@@ -109,8 +111,9 @@ export default function LoginPage() {
             placeholder="••••••••"
             autoComplete="current-password"
             required
-            aria-describedby={error ? "login-error" : undefined}
-            aria-invalid={error ? true : undefined}
+            aria-required="true"
+            aria-describedby={errors.form ? "login-form-error" : undefined}
+            aria-invalid={errors.password ? true : undefined}
           />
 
           <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
