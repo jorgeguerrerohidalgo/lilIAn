@@ -1,17 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui";
 import { Input } from "@/components/ui";
 import { Card } from "@/components/ui";
 import { getApiUrl } from "@/lib/api";
+import { safeRedirect } from "@/lib/validators";
 
 const API_URL = getApiUrl();
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // S5-fix: honor the `?next=` query param that the auth middleware
+  // attaches when redirecting unauthenticated users. Falls back to
+  // /dashboard. safeRedirect() rejects open-redirect attempts.
+  const nextPath = safeRedirect(searchParams.get("next"), "/dashboard");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
@@ -46,7 +52,7 @@ export default function LoginPage() {
       // the response for backward compatibility but DO NOT persist it to
       // localStorage anymore — that was an XSS vector.
       await res.json();
-      router.push("/dashboard");
+      router.push(nextPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al iniciar sesión";
       // Invalid credentials / server errors go to the form-level bucket
@@ -129,5 +135,20 @@ export default function LoginPage() {
         </p>
       </Card>
     </main>
+  );
+}
+
+// useSearchParams() must be inside a Suspense boundary in App Router.
+// We wrap the form in <Suspense> at the page-export level so the hook
+// works during static generation and during dynamic client navigation.
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
+        <div className="text-ink/60">Cargando…</div>
+      </main>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

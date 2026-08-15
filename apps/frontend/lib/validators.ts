@@ -7,6 +7,27 @@
  */
 import { z } from "zod";
 
+/**
+ * Return ``next`` if it is a safe relative path on this app; otherwise
+ * the provided default. Defends against open-redirect (a malicious
+ * ``?next=https://evil.com/`` would otherwise bounce a freshly
+ * authenticated user to an attacker-controlled page).
+ */
+export function safeRedirect(
+  next: string | null | undefined,
+  fallback = "/dashboard",
+): string {
+  if (!next) return fallback;
+  // Must start with a single slash and not be a protocol-relative URL
+  // (`//evil.com`) which the browser still treats as cross-origin.
+  if (!next.startsWith("/") || next.startsWith("//")) return fallback;
+  // Reject anything that contains characters we never use in app routes
+  // and which are common XSS/URL-injection vectors.
+  if (/[\r\n\t]/.test(next)) return fallback;
+  return next;
+}
+
+
 export const emailSchema = z
   .string()
   .min(1, "Email requerido")
