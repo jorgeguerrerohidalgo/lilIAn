@@ -33,9 +33,11 @@ Reglas que se rompen con facilidad:
 - No reenvíes los `Set-Cookie` del backend al navegador — pertenecen a otro origen y se ignoran.
 - `getApiUrl()` (`lib/api.ts`) devuelve cadena vacía en el navegador (mismo origen) y solo usa `NEXT_PUBLIC_API_URL` en servidor.
 
-### Trampa activa: `NEXT_PUBLIC_API_URL` solo existe en Production
+### `NEXT_PUBLIC_API_URL` solo existe en Production (intencional)
 
-`getApiUrl()` cae a `http://localhost:8000` cuando la variable falta. Está definida **únicamente en el entorno Production de Vercel**, así que en Preview y Development el BFF proxea a localhost y la auth falla con 502 o 401. Si pruebas auth en un deploy de preview, esta es la causa antes de sospechar del código.
+`getApiUrl()` cae a `http://localhost:8000` cuando la variable falta, y está definida **únicamente en el entorno Production de Vercel**. Como consecuencia, la auth no funciona en deploys de Preview.
+
+Esto es deliberado: el proyecto está en fase piloto y despliega directo a producción, sin usar Preview. **No lo "arregles" añadiendo la variable a otros entornos** salvo que el flujo de despliegue cambie.
 
 ## Comandos
 
