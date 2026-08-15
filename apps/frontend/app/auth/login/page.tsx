@@ -6,10 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui";
 import { Input } from "@/components/ui";
 import { Card } from "@/components/ui";
-import { getApiUrl } from "@/lib/api";
 import { safeRedirect } from "@/lib/validators";
-
-const API_URL = getApiUrl();
 
 function LoginForm() {
   const router = useRouter();
@@ -33,29 +30,28 @@ function LoginForm() {
       formData.append("username", email);
       formData.append("password", password);
 
-      const loginUrl = API_URL ? `${API_URL}/api/v1/auth/login` : "/api/v1/auth/login";
-      const res = await fetch(loginUrl, {
+      // S5-fix: call the same-origin BFF route /api/auth/login instead
+      // of the backend directly. The BFF proxies to the backend AND
+      // re-issues the HttpOnly cookie on the frontend's domain, so
+      // Next.js middleware can see the user is authenticated.
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: formData,
-        credentials: "include", // S0-04: persist HttpOnly auth cookie
+        credentials: "include",
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || "Error al iniciar sesión");
       }
 
-      // S0-04: auth token now lives in an HttpOnly cookie. We still parse
-      // the response for backward compatibility but DO NOT persist it to
-      // localStorage anymore — that was an XSS vector.
       await res.json();
       router.push(nextPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al iniciar sesión";
-      // Invalid credentials / server errors go to the form-level bucket
       setErrors({ form: message });
     } finally {
       setLoading(false);
