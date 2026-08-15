@@ -1,3 +1,5 @@
+import re
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -67,11 +69,10 @@ if not allowed_origins:
 # with random hashes continue to match.
 expanded_exact: list[str] = []
 regex_patterns: list[str] = []
-import re as _re
 for origin in allowed_origins:
     if origin.startswith("*."):
         # Treat as a regex: any origin whose host ends with `.<domain>`.
-        domain = _re.escape(origin[2:])
+        domain = re.escape(origin[2:])
         regex_patterns.append(rf"^https?://([a-z0-9-]+\.)*{domain}(:\d+)?$")
     else:
         expanded_exact.append(origin)
