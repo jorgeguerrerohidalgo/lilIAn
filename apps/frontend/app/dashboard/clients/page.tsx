@@ -77,8 +77,8 @@ export default function ClientsPage() {
     setLoading(true);
     const token = getToken();
     const url = search
-      ? `${API_URL}/api/v1/clients?search=${encodeURIComponent(search)}`
-      : `${API_URL}/api/v1/clients`;
+      ? `/api/v1/clients?search=${encodeURIComponent(search)}`
+      : `/api/v1/clients`;
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -101,8 +101,8 @@ export default function ClientsPage() {
     const token = getToken();
     const method = editingClient ? "PUT" : "POST";
     const url = editingClient
-      ? `${API_URL}/api/v1/clients/${editingClient.id}`
-      : `${API_URL}/api/v1/clients`;
+      ? `/api/v1/clients/${editingClient.id}`
+      : `/api/v1/clients`;
 
     try {
       const res = await fetch(url, {
@@ -150,7 +150,7 @@ export default function ClientsPage() {
     if (!confirm("¿Estás seguro de que deseas eliminar este cliente?")) return;
 
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/clients/${clientId}`, {
+    const res = await fetch(`/api/v1/clients/${clientId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });

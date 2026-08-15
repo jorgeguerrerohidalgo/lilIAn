@@ -86,7 +86,7 @@ export default function ClientDetailPage() {
 
   const fetchClient = async () => {
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/clients/${clientId}`, {
+    const res = await fetch(`/api/v1/clients/${clientId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -101,7 +101,7 @@ export default function ClientDetailPage() {
   const fetchMatters = async () => {
     setLoading(true);
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/matters?client_id=${clientId}`, {
+    const res = await fetch(`/api/v1/matters?client_id=${clientId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 

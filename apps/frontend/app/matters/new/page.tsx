@@ -54,7 +54,7 @@ export default function NewMatterPage() {
     if (clientIdFromUrl) {
       const token = localStorage.getItem("token");
       if (token) {
-        fetch(`${API_URL}/api/v1/clients/${clientIdFromUrl}`, {
+        fetch(`/api/v1/clients/${clientIdFromUrl}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
           .then((res) => res.ok ? res.json() : null)
@@ -78,7 +78,7 @@ export default function NewMatterPage() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/api/v1/matters`, {
+      const res = await fetch(`/api/v1/matters`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

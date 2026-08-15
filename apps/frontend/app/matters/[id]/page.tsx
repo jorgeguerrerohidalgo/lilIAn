@@ -180,7 +180,7 @@ export default function MatterDetailPage() {
       return;
     }
 
-    fetch(`${API_URL}/api/v1/matters/${params.id}`, {
+    fetch(`/api/v1/matters/${params.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => {
@@ -213,7 +213,7 @@ export default function MatterDetailPage() {
 
   const fetchDocuments = async () => {
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/documents/matters/${params.id}/documents`, {
+    const res = await fetch(`/api/v1/documents/matters/${params.id}/documents`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
@@ -224,7 +224,7 @@ export default function MatterDetailPage() {
 
   const fetchAnalysis = async () => {
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/analysis/matters/${params.id}`, {
+    const res = await fetch(`/api/v1/analysis/matters/${params.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
@@ -237,7 +237,7 @@ export default function MatterDetailPage() {
 
   const fetchAnalysisDetail = async (reportId: number) => {
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/analysis/reports/${reportId}`, {
+    const res = await fetch(`/api/v1/analysis/reports/${reportId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
@@ -249,7 +249,7 @@ export default function MatterDetailPage() {
 
   const fetchSessions = async () => {
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/chat/sessions?matter_id=${params.id}`, {
+    const res = await fetch(`/api/v1/chat/sessions?matter_id=${params.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
@@ -260,7 +260,7 @@ export default function MatterDetailPage() {
 
   const fetchMessages = async (sessionId: number) => {
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/chat/sessions/${sessionId}/messages`, {
+    const res = await fetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.ok) {
@@ -281,7 +281,7 @@ export default function MatterDetailPage() {
     formData.append("file", file);
 
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/documents/matters/${params.id}/documents`, {
+    const res = await fetch(`/api/v1/documents/matters/${params.id}/documents`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
@@ -306,7 +306,7 @@ export default function MatterDetailPage() {
 
     try {
       const token = getToken();
-      const res = await fetch(`${API_URL}/api/v1/documents/${docId}`, {
+      const res = await fetch(`/api/v1/documents/${docId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -329,7 +329,7 @@ export default function MatterDetailPage() {
     setDocProcessError("");
 
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/documents/${docId}/process`, {
+    const res = await fetch(`/api/v1/documents/${docId}/process`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -350,7 +350,7 @@ export default function MatterDetailPage() {
     setDocAnalyzeError("");
 
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/documents/${docId}/analyze`, {
+    const res = await fetch(`/api/v1/documents/${docId}/analyze`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -376,7 +376,7 @@ export default function MatterDetailPage() {
 
     // Función para obtener el análisis
     const fetchAnalysis = async () => {
-      const res = await fetch(`${API_URL}/api/v1/documents/${docId}/analysis`, {
+      const res = await fetch(`/api/v1/documents/${docId}/analysis`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -404,7 +404,7 @@ export default function MatterDetailPage() {
     setAnalysisSuccess("");
 
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/analysis`, {
+    const res = await fetch(`/api/v1/analysis`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -433,7 +433,7 @@ export default function MatterDetailPage() {
     setChatError("");
 
     const token = getToken();
-    const res = await fetch(`${API_URL}/api/v1/chat/sessions`, {
+    const res = await fetch(`/api/v1/chat/sessions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -482,7 +482,7 @@ export default function MatterDetailPage() {
       payload.legal_area_override = selectedLegalArea;
     }
 
-    const res = await fetch(`${API_URL}/api/v1/chat/message`, {
+    const res = await fetch(`/api/v1/chat/message`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -1435,7 +1435,7 @@ function DocumentProcessPoll({ docId, onDone, onTimeout }: DocumentProcessPollPr
     maxAttempts: POLL_MAX_ATTEMPTS,
     task: async () => {
       const token = localStorage.getItem("token") || "";
-      const res = await fetch(`${API_URL}/api/v1/documents/${docIdRef.current}`, {
+      const res = await fetch(`/api/v1/documents/${docIdRef.current}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -1472,7 +1472,7 @@ function DocumentAnalyzePoll({ docId, onDone, onTimeout }: DocumentAnalyzePollPr
     maxAttempts: POLL_MAX_ATTEMPTS,
     task: async () => {
       const token = localStorage.getItem("token") || "";
-      const res = await fetch(`${API_URL}/api/v1/documents/${docIdRef.current}/analysis`, {
+      const res = await fetch(`/api/v1/documents/${docIdRef.current}/analysis`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -1507,7 +1507,7 @@ function DocumentViewAnalysisPoll({ docId, onResult, onDone, onTimeout }: Docume
     maxAttempts: POLL_MAX_ATTEMPTS,
     task: async () => {
       const token = localStorage.getItem("token") || "";
-      const res = await fetch(`${API_URL}/api/v1/documents/${docIdRef.current}/analysis`, {
+      const res = await fetch(`/api/v1/documents/${docIdRef.current}/analysis`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
