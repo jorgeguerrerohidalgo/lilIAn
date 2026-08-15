@@ -92,10 +92,16 @@ async function proxy(
   const url = `${apiUrl}${upstreamPath}${search}`;
 
   // Read the incoming auth cookie and forward it to the backend.
-  const cookieHeader = request.cookies.get(AUTH_COOKIE)?.value;
+  // The backend uses ``OAuth2PasswordBearer`` which only reads the
+  // ``Authorization: Bearer <jwt>`` header — it does not look at
+  // cookies. So we extract the JWT from the cookie and re-emit it
+  // as a Bearer token. We also forward the original Cookie header
+  // (defensive — endpoints that read the cookie themselves still work).
+  const cookieValue = request.cookies.get(AUTH_COOKIE)?.value;
   const headers: Record<string, string> = {};
-  if (cookieHeader) {
-    headers["Cookie"] = `${AUTH_COOKIE}=${cookieHeader}`;
+  if (cookieValue) {
+    headers["Authorization"] = `Bearer ${cookieValue}`;
+    headers["Cookie"] = `${AUTH_COOKIE}=${cookieValue}`;
   }
   // Pass the inbound content type so the backend can deserialize the
   // body. Some endpoints (file upload) may set their own content-type
