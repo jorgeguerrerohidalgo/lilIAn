@@ -653,6 +653,8 @@ export default function MatterDetailPage() {
                 type="file"
                 id="file-upload"
                 aria-describedby="file-upload-help"
+                aria-required="true"
+                required
                 className="hidden"
                 accept=".pdf,.docx,.doc,.txt,image/*"
                 onChange={handleFileUpload}

@@ -187,7 +187,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
         </p>
 
         {/* Category Filter */}
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div role="group" aria-label="Filtrar plantillas por categoría" className="flex flex-wrap gap-2 mb-6">
           <button
             onClick={() => setSelectedCategory(null)}
             aria-pressed={!selectedCategory}
@@ -308,6 +308,8 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                     <textarea
                       id={`var-${variable.key}`}
                       aria-label={variable.label}
+                      aria-required={variable.required ? "true" : undefined}
+                      required={variable.required}
                       value={variables[variable.key] || ""}
                       onChange={(e) =>
                         setVariables((prev) => ({
@@ -324,6 +326,8 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
                       type="text"
                       id={`var-${variable.key}`}
                       aria-label={variable.label}
+                      aria-required={variable.required ? "true" : undefined}
+                      required={variable.required}
                       value={variables[variable.key] || ""}
                       onChange={(e) =>
                         setVariables((prev) => ({
