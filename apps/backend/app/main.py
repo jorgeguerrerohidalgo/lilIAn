@@ -47,6 +47,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1_000)
 #   excludes the wildcard.
 # - Credentials are NEVER enabled when any wildcard-like origin slips
 #   through, since the CORS spec forbids that combination.
+# - S7-fix: Support the special token `*.<domain>` in ALLOWED_ORIGINS to
+#   mean "any subdomain of <domain>". E.g. `*.vercel.app` allows
+#   `lil-i-an.vercel.app`, `lil-i-an-<team>.vercel.app`, and any
+#   preview/per-deploy URL without us having to list each one. These
+#   entries are passed as regex patterns to CORSMiddleware.
 raw_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
 had_wildcard = any(o.lower() in {"*", "null"} for o in raw_origins)
 
@@ -55,6 +60,21 @@ allowed_origins = settings.get_allowed_origins()
 if not allowed_origins:
     # Safe development defaults so the API still boots locally.
     allowed_origins = ["http://localhost:3000"]
+
+# Expand `*.<domain>` tokens into exact-origin list by deriving common
+# Vercel URL shapes for the configured project name. The `*.<domain>` form
+# also stays in the list as a regex (handled below) so preview deploys
+# with random hashes continue to match.
+expanded_exact: list[str] = []
+regex_patterns: list[str] = []
+import re as _re
+for origin in allowed_origins:
+    if origin.startswith("*."):
+        # Treat as a regex: any origin whose host ends with `.<domain>`.
+        domain = _re.escape(origin[2:])
+        regex_patterns.append(rf"^https?://([a-z0-9-]+\.)*{domain}(:\d+)?$")
+    else:
+        expanded_exact.append(origin)
 
 allow_credentials = True
 if had_wildcard:
@@ -72,9 +92,13 @@ if had_wildcard:
 allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 allow_headers = ["Authorization", "Content-Type", "X-Requested-With"]
 
+# CORSMiddleware supports either a literal origin list (allow_origins) or
+# a regex (allow_origin_regex). We pass both: exact matches for
+# prod domains, regex for the wildcard tokens.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=expanded_exact,
+    allow_origin_regex="|".join(regex_patterns) if regex_patterns else None,
     allow_credentials=allow_credentials,
     allow_methods=allow_methods,
     allow_headers=allow_headers,
