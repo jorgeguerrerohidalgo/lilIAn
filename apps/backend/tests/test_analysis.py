@@ -9,13 +9,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import app.services.analysis as _analysis_mod
 from app.services.analysis import (
     _validate_llm_output,
     analyze_contract,
     generate_analysis_for_matter,
 )
-import app.services.analysis as _analysis_mod
-
 
 # ---------------------------------------------------------------------------
 # _validate_llm_output
@@ -111,8 +110,8 @@ def test_analyze_contract_extracts_clauses():
         "confidence": "high",
     }
 
-    with patch.object(analysis, "get_laws_context_for_rag", return_value=""), \
-         patch.object(analysis, "get_precedents_context_for_rag", return_value=""), \
+    with patch.object(_analysis_mod, "get_laws_context_for_rag", return_value=""), \
+         patch.object(_analysis_mod, "get_precedents_context_for_rag", return_value=""), \
          patch("app.services.llm.get_llm_provider", return_value=fake_provider):
         result = analyze_contract(documents_text, "lease", organization_id=1)
 
@@ -169,9 +168,9 @@ def test_generate_analysis_for_matter_happy(db):
     fake_validator.validation_summary = None
 
     with patch("app.services.llm.get_llm_provider", return_value=fake_provider), \
-         patch.object(analysis, "get_laws_context_for_rag", return_value=""), \
-         patch.object(analysis, "get_precedents_context_for_rag", return_value=""), \
-         patch.object(analysis, "get_chunks_text_for_analysis",
+         patch.object(_analysis_mod, "get_laws_context_for_rag", return_value=""), \
+         patch.object(_analysis_mod, "get_precedents_context_for_rag", return_value=""), \
+         patch.object(_analysis_mod, "get_chunks_text_for_analysis",
                return_value="Some chunk text " * 50), \
          patch("app.services.document_validator.validate_matter_documents",
                return_value=fake_validator), \

@@ -21,7 +21,6 @@ from app.models.document_chunk import DocumentChunk
 from app.models.matter import Matter, MatterStatus, MatterType, MatterUrgency
 from app.models.organization import Organization, OrganizationType
 
-
 # ---------------------------------------------------------------------------
 # Fixture: load doc_worker module with stand-ins for rq/redis.
 # ---------------------------------------------------------------------------

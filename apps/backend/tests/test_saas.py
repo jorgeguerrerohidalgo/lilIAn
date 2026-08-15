@@ -28,7 +28,6 @@ from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.subscription import Plan, Subscription, UsageEvent
 from app.models.user import User
 
-
 # ---------------------------------------------------------------------------
 # Local test DB (separate from the conftest engine so we can mount state)
 # ---------------------------------------------------------------------------
