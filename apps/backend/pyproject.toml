@@ -49,6 +49,7 @@ addopts = [
 markers = [
   "unit: pure unit tests (no DB, no network).",
   "integration: integration tests that hit the SQLite test engine.",
+  "e2e: end-to-end tests that exercise the full HTTP stack.",
   "slow: tests that take >5s and should be skipped by default in CI.",
 ]
 
@@ -70,4 +71,4 @@ exclude_lines = [
 ]
 show_missing = true
 skip_covered = false
-fail_under = 60  # Sprint 6 baseline; Sprint 8/9 will push to 80.
+fail_under = 70  # S6-B5: bumped from 60 as new endpoint tests land. Sprint 8/9 push to 80.
