@@ -3,21 +3,29 @@
 import { useState, useRef, useEffect } from "react";
 import { clsx } from 'clsx';
 
-interface Message {
+interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
 }
 
+interface ChatContextInfo {
+  matterId?: number;
+  matterTitle?: string;
+  documentName?: string;
+}
+
 interface ChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  contextInfo?: {
-    matterTitle?: string;
-    documentName?: string;
-  };
+  contextInfo?: ChatContextInfo;
 }
+
+const SESSION_STORAGE_KEY = 'lilian.chat.sessionId';
+const CHAT_MESSAGE_MAX_LEN = 4_000;
+const SESSION_BOOTSTRAP_TIMEOUT_MS = 15_000;
+const MESSAGE_REQUEST_TIMEOUT_MS = 60_000;
 
 const BotIcon = () => (
   <svg aria-hidden="true" className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -37,37 +45,61 @@ const CloseIcon = () => (
   </svg>
 );
 
+const AlertIcon = () => (
+  <svg aria-hidden="true" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+  </svg>
+);
+
+async function fetchJsonWithTimeout(
+  input: RequestInfo,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Panel lateral de chat con el asistente legal lilIAn.
  *
- * Implementa el patrón dialog accesible (WCAG 2.4.3 Focus Order):
- * - ``role="dialog"`` + ``aria-modal="true"`` + ``aria-labelledby``.
- * - Escape cierra el panel.
- * - Focus atrapado dentro del diálogo y restaurado al trigger al cerrar.
- * - Backdrop clickable para cerrar y ``aria-hidden`` cuando está cerrado.
+ * Conecta con el backend en /api/v1/chat:
+ *   - Al abrir, si no hay sesión persistida, crea una para el `matterId`
+ *     recibido por prop o el primer caso del usuario.
+ *   - Cada mensaje del usuario hace POST /chat/message y muestra la
+ *     respuesta del LLM en streaming-friendly (texto completo, dado
+ *     que el endpoint actual no expone SSE todavía — fase 2 lo agrega).
+ *   - El sessionId se guarda en sessionStorage para sobrevivir
+ *     refresh pero NO cruzar pestañas/pestañas de usuario.
+ *
+ * Accesibilidad WCAG:
+ *   - role="dialog" + aria-modal + aria-labelledby
+ *   - Escape cierra el panel
+ *   - Focus atrapado dentro del diálogo, restaurado al trigger al cerrar
  *
  * @param props - {@link ChatPanelProps}.
- * @param props.isOpen - Si el panel está visible.
- * @param props.onClose - Callback al cerrar (Escape, backdrop o botón X).
- * @param props.contextInfo - Contexto opcional del caso/documento
- *   actual para mostrar en el banner superior.
  */
 export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: '1',
+      id: 'welcome',
       role: 'assistant',
-      content: '¡Hola! Soy el asistente legal de LILIAN. Puedo ayudarte a analizar documentos, responder preguntas sobre casos y proporcionar información sobre precedentes relevantes.',
+      content: '¡Hola! Soy el asistente legal de LILIAN. ¿En qué caso o materia legal puedo ayudarte?',
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  // S5 accessibility: remember the element that opened the panel so we can
-  // restore focus to it when the panel closes (WCAG 2.4.3 Focus Order).
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const scrollToBottom = () => {
@@ -78,7 +110,6 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
     scrollToBottom();
   }, [messages]);
 
-  // S5 accessibility: Escape key closes the panel and restores focus.
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -91,13 +122,9 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // S5 accessibility: trap focus inside the dialog while it is open, move
-  // initial focus to the close button on open, and restore focus to the
-  // trigger on close (WCAG 2.4.3 Focus Order).
   useEffect(() => {
     if (isOpen) {
       previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-      // Defer to next tick so the panel is in the DOM.
       const id = window.setTimeout(() => {
         closeButtonRef.current?.focus();
       }, 0);
@@ -108,30 +135,153 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
     }
   }, [isOpen]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  // Bootstrap: cuando se abre el panel por primera vez, restaurar o crear
+  // una sesión de chat. Solo se ejecuta si no hay sessionId en estado.
+  useEffect(() => {
+    if (!isOpen || sessionId !== null) return;
+    let cancelled = false;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
+    async function bootstrap() {
+      setError(null);
+      try {
+        const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
+        if (stored) {
+          const parsed = Number.parseInt(stored, 10);
+          if (Number.isFinite(parsed)) {
+            if (!cancelled) setSessionId(parsed);
+            await loadHistory(parsed);
+            return;
+          }
+        }
+        const matterId = await resolveMatterId(contextInfo?.matterId);
+        if (cancelled) return;
+        if (matterId === null) {
+          setError('Necesitas crear un caso antes de usar el chat.');
+          return;
+        }
+        const session = await createSession(matterId);
+        if (cancelled) return;
+        sessionStorage.setItem(SESSION_STORAGE_KEY, String(session.id));
+        setSessionId(session.id);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'No se pudo iniciar el chat');
+        }
+      }
+    }
+
+    bootstrap();
+    return () => { cancelled = true; };
+    // contextInfo.matterId changes when the user navigates between matters;
+    // re-bootstrap so the session always reflects the current matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, contextInfo?.matterId]);
+
+  const resolveMatterId = async (preferred: number | undefined): Promise<number | null> => {
+    if (preferred !== undefined) return preferred;
+    const res = await fetchJsonWithTimeout('/api/v1/matters', {}, SESSION_BOOTSTRAP_TIMEOUT_MS);
+    if (!res.ok) {
+      throw new Error(`No se pudieron cargar los casos (HTTP ${res.status})`);
+    }
+    const matters = await res.json();
+    if (!Array.isArray(matters) || matters.length === 0) return null;
+    const first = matters[0];
+    return typeof first?.id === 'number' ? first.id : null;
+  };
+
+  const createSession = async (matterId: number) => {
+    const res = await fetchJsonWithTimeout(
+      '/api/v1/chat/sessions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matter_id: matterId, title: 'Chat desde dashboard' }),
+      },
+      SESSION_BOOTSTRAP_TIMEOUT_MS,
+    );
+    if (!res.ok) {
+      throw new Error(`No se pudo crear la sesión de chat (HTTP ${res.status})`);
+    }
+    return res.json() as Promise<{ id: number; matter_id: number; title: string | null }>;
+  };
+
+  const loadHistory = async (sid: number) => {
+    const res = await fetchJsonWithTimeout(
+      `/api/v1/chat/sessions/${sid}/messages`,
+      {},
+      SESSION_BOOTSTRAP_TIMEOUT_MS,
+    );
+    if (!res.ok) {
+      // Si la sesión guardada ya no existe (borrada en backend), limpiamos
+      // y dejamos que el siguiente intento cree una nueva.
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      setSessionId(null);
+      return;
+    }
+    const history = await res.json();
+    if (Array.isArray(history) && history.length > 0) {
+      const restored: ChatMessage[] = history.map((m: { id: number; role: string; content: string; created_at: string }) => ({
+        id: String(m.id),
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+        timestamp: new Date(m.created_at),
+      }));
+      setMessages(restored);
+    }
+  };
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || isLoading || sessionId === null) return;
+    if (text.length > CHAT_MESSAGE_MAX_LEN) {
+      setError(`El mensaje supera el límite de ${CHAT_MESSAGE_MAX_LEN} caracteres.`);
+      return;
+    }
+
+    const userMessage: ChatMessage = {
+      id: `local-${Date.now()}`,
       role: 'user',
-      content: input.trim(),
+      content: text,
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setError(null);
 
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+    try {
+      const res = await fetchJsonWithTimeout(
+        '/api/v1/chat/message',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId, message: text }),
+        },
+        MESSAGE_REQUEST_TIMEOUT_MS,
+      );
+      if (res.status === 401) {
+        setError('Tu sesión expiró. Vuelve a iniciar sesión.');
+        setMessages((prev) => prev.slice(0, -1));
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`El asistente no pudo responder (HTTP ${res.status})`);
+      }
+      const data = await res.json() as { content: string; message_id: number };
+      const assistantMessage: ChatMessage = {
+        id: `srv-${data.message_id}`,
         role: 'assistant',
-        content: `He analizado tu pregunta sobre "${input.trim()}". Basado en el contexto del caso${contextInfo?.matterTitle ? ` "${contextInfo.matterTitle}"` : ''}, te puedo indicar que necesito más información para darte una respuesta precisa.`,
+        content: data.content || '(Sin respuesta)',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      // Quitamos el mensaje del usuario para evitar conversación fantasma.
+      setMessages((prev) => prev.slice(0, -1));
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -143,7 +293,6 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
   return (
     <>
-      {/* S5 accessibility: backdrop with click-to-close + aria-hidden when closed. */}
       <div
         className={clsx(
           'fixed inset-0 bg-ink/20 backdrop-blur-sm z-40 transition-opacity duration-300',
@@ -153,7 +302,6 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
         aria-hidden={!isOpen}
       />
 
-      {/* S5 accessibility: panel is a dialog with role + aria-modal + labelled by header h3. */}
       <div
         ref={panelRef}
         role="dialog"
@@ -199,6 +347,24 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
           </div>
         )}
 
+        {/* Error banner */}
+        {error && (
+          <div
+            role="alert"
+            className="px-5 py-3 bg-red-50 border-b border-red-200 flex items-start gap-2"
+          >
+            <span className="text-red-700 mt-0.5"><AlertIcon /></span>
+            <p className="text-sm text-red-800 flex-1">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              aria-label="Cerrar mensaje de error"
+              className="text-red-500 hover:text-red-700 text-xs"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {messages.map((message) => (
@@ -219,7 +385,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
                     : 'bg-coral text-white rounded-tr-sm'
                 )}
               >
-                <p className="text-sm leading-relaxed">{message.content}</p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                 <p className={clsx(
                   'text-[10px] mt-1',
                   message.role === 'assistant' ? 'text-ink/40' : 'text-white/60'
@@ -257,13 +423,14 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Escribe tu pregunta..."
+              placeholder={sessionId === null && error === null ? "Conectando..." : "Escribe tu pregunta..."}
               aria-label="Escribe tu pregunta al asistente"
-              className="flex-1 px-4 py-3 rounded-xl bg-cream border border-border text-sm text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral transition-all"
+              disabled={sessionId === null}
+              className="flex-1 px-4 py-3 rounded-xl bg-cream border border-border text-sm text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral transition-all disabled:opacity-50"
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || sessionId === null}
               aria-label="Enviar mensaje"
               aria-busy={isLoading}
               className="w-11 h-11 rounded-xl bg-coral text-white flex items-center justify-center hover:bg-coral-dark focus-visible:ring-2 focus-visible:ring-coral transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

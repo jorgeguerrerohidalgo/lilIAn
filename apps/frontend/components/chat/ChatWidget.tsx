@@ -6,6 +6,7 @@ import { ChatPanel } from "./ChatPanel";
 
 interface ChatWidgetProps {
   contextInfo?: {
+    matterId?: number;
     matterTitle?: string;
     documentName?: string;
   };
