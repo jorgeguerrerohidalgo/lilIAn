@@ -4,6 +4,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.endpoints import (
     admin,
+    agents,
     analysis,
     auth,
     chat,
@@ -97,6 +98,7 @@ app.include_router(legal_areas.router, prefix="/api/v1")
 app.include_router(deadline_alerts.router, prefix="/api/v1")
 app.include_router(document_generator.router, prefix="/api/v1")
 app.include_router(precedents.router, prefix="/api/v1")
+app.include_router(agents.router, prefix="/api/v1")
 app.include_router(metrics.router)
 
 

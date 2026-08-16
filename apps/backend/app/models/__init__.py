@@ -1,3 +1,4 @@
+from app.models.agent import AgentRun, AgentStep
 from app.models.analysis_report import AnalysisReport
 from app.models.audit_log import AuditLog
 from app.models.chat import ChatMessage, ChatSession
@@ -44,4 +45,6 @@ __all__ = [
     "UserFact",
     "CaseContextSnapshot",
     "FeedbackSignal",
+    "AgentRun",
+    "AgentStep",
 ]
