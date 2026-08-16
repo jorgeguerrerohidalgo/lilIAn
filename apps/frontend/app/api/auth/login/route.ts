@@ -60,7 +60,13 @@ export async function POST(request: NextRequest) {
   // Set-Cookie header so the cookie lives on the frontend's domain.
   const backendBody = await backendRes.text();
   const upstreamSetCookie = backendRes.headers.get("set-cookie");
-  const isHttps = request.nextUrl.protocol === "https:";
+  // Vercel always terminates TLS, so cookies there must be `Secure`.
+  // Detect via `VERCEL=1` (set automatically by Vercel) in addition to
+  // the request scheme — covers edge cases where Next.js sees `http:`
+  // behind a proxy. Local dev over HTTP stays non-Secure so Chrome does
+  // not silently drop the cookie.
+  const isHttps =
+    request.nextUrl.protocol === "https:" || process.env.VERCEL === "1";
 
   const headers = new Headers();
   // Copy content-type so the client gets a JSON body.
@@ -68,14 +74,13 @@ export async function POST(request: NextRequest) {
   if (ct) headers.set("content-type", ct);
 
   if (backendRes.ok && upstreamSetCookie) {
-    // The backend cookie is `lilian_auth_token=<jwt>; HttpOnly; ...; Path=/`.
-    // We don't actually need to re-parse it; we just need to forward the
-    // JWT and the cookie attributes that the browser cares about, on
-    // the frontend's domain. Easiest: take the part before the first
-    // `;`, swap the name, and append our own attributes.
-    const firstSegment = upstreamSetCookie.split(";")[0];
-    const eq = firstSegment.indexOf("=");
-    const value = eq >= 0 ? firstSegment.slice(eq + 1) : "";
+    // Pull the JWT value with a regex instead of naively splitting on `;`
+    // and slicing the first segment. The naive approach broke whenever the
+    // upstream Set-Cookie started with extra attributes in the first
+    // segment, producing a corrupted Authorization header downstream and
+    // a /api/v1/auth/me 401 that bounced users back to /auth/login.
+    const match = upstreamSetCookie.match(/lilian_auth_token=([^;]+)/);
+    const value = match ? match[1] : "";
 
     const cookieAttrs = [
       `${AUTH_COOKIE}=${value}`,

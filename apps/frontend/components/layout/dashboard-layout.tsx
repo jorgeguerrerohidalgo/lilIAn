@@ -5,10 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ChatWidget } from "@/components/chat";
-import { getApiUrl } from "@/lib/api";
-
-
-const API_URL = getApiUrl();
+import { clearLegacyTokens } from "@/lib/auth-cookie";
 
 interface User {
   id: number;
@@ -104,31 +101,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/auth/login");
-      return;
+    // La cookie `lilian_auth_token` es HttpOnly, así que no se puede leer
+    // desde aquí: el BFF la convierte en `Authorization: Bearer` y este
+    // fetch es la única forma de saber si la sesión sigue viva.
+    //
+    // Importante: el navegador a veces no adjunta la cookie recién emitida
+    // en la primera petición inmediata (race Set-Cookie → siguiente fetch).
+    // Si caemos en ese caso y deslogueamos al usuario en seco, entra en
+    // un loop landing↔login. Reintentamos UNA vez con un backoff corto
+    // antes de considerarlo un fallo real.
+    let cancelled = false;
+
+    async function checkAuth() {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (cancelled) return;
+        try {
+          const res = await fetch("/api/v1/auth/me");
+          if (res.ok) {
+            const data = await res.json();
+            if (!cancelled) {
+              setUser(data);
+              setLoading(false);
+            }
+            return;
+          }
+        } catch {
+          // network error: try again
+        }
+        if (attempt === 0) {
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+      // Ambos intentos fallaron → sesión realmente inválida
+      if (!cancelled) {
+        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+        clearLegacyTokens();
+        router.push("/auth/login");
+      }
     }
 
-    fetch(`/api/v1/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("No autorizado");
-        return res.json();
-      })
-      .then((data) => {
-        setUser(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        localStorage.removeItem("token");
-        router.push("/auth/login");
-      });
+    checkAuth();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    clearLegacyTokens();
     router.push("/");
   };
 
