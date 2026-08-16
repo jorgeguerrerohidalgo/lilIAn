@@ -244,45 +244,172 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
       content: text,
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, userMessage]);
+    // Placeholder del assistant que iremos rellenando con cada delta.
+    // Lo creamos ya para que el scroll-to-bottom y el streaming se vean fluidos.
+    const assistantMessageId = `srv-pending-${Date.now()}`;
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput('');
     setIsLoading(true);
     setError(null);
 
+    try {
+      const streamed = await tryStream(
+        sessionId,
+        text,
+        assistantMessageId,
+        setMessages,
+      );
+      if (!streamed) {
+        // Fallback al endpoint bloqueante si el navegador no soporta SSE
+        // o el backend devolvió 404 sobre el endpoint stream.
+        const ok = await sendBlockingAndReplace(
+          sessionId,
+          text,
+          assistantMessageId,
+          setMessages,
+        );
+        if (!ok) return; // error ya mostrado en setError
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Intenta consumir el endpoint SSE /chat/message/stream. Devuelve true
+   * si el stream se conectó (aunque termine en error del LLM). Devuelve
+   * false si el endpoint no existe o el navegador no soporta fetch streaming.
+   */
+  async function tryStream(
+    sid: number,
+    text: string,
+    assistantId: string,
+    setMsgs: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
+  ): Promise<boolean> {
+    let res: Response;
+    try {
+      res = await fetchJsonWithTimeout(
+        '/api/v1/chat/message/stream',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          body: JSON.stringify({ session_id: sid, message: text }),
+        },
+        MESSAGE_REQUEST_TIMEOUT_MS,
+      );
+    } catch {
+      return false;
+    }
+    if (res.status === 404 || res.status === 405) return false;
+    if (res.status === 401) {
+      setError('Tu sesión expiró. Vuelve a iniciar sesión.');
+      rollback(setMsgs);
+      return true;
+    }
+    if (!res.ok || !res.body) {
+      return false;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let gotAnyDelta = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // Procesamos todos los eventos SSE completos en el buffer.
+      let boundary: number;
+      while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        const lines = rawEvent.split('\n').filter((l) => l.startsWith('data: '));
+        if (lines.length === 0) continue;
+        const payload = lines.map((l) => l.slice(6)).join('\n');
+        let parsed: { type: string; content?: string; message_id?: number; message?: string };
+        try {
+          parsed = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        if (parsed.type === 'delta' && typeof parsed.content === 'string') {
+          gotAnyDelta = true;
+          appendDelta(setMsgs, assistantId, parsed.content);
+        } else if (parsed.type === 'done' && typeof parsed.message_id === 'number') {
+          finalizeAssistant(setMsgs, assistantId, parsed.message_id);
+        } else if (parsed.type === 'error') {
+          setError(parsed.message ?? 'Error desconocido');
+          return true;
+        }
+      }
+    }
+    return true;
+
+    function rollback(set: typeof setMsgs) {
+      set((prev) => prev.slice(0, -2));
+    }
+    function appendDelta(set: typeof setMsgs, id: string, chunk: string) {
+      set((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, content: m.content + chunk } : m)),
+      );
+    }
+    function finalizeAssistant(set: typeof setMsgs, id: string, serverId: number) {
+      set((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, id: `srv-${serverId}` } : m)),
+      );
+    }
+  }
+
+  /**
+   * Fallback al endpoint /chat/message que devuelve la respuesta completa.
+   * Usado cuando SSE no está disponible.
+   */
+  async function sendBlockingAndReplace(
+    sid: number,
+    text: string,
+    assistantId: string,
+    setMsgs: React.Dispatch<React.SetStateAction<ChatMessage[]>>,
+  ): Promise<boolean> {
     try {
       const res = await fetchJsonWithTimeout(
         '/api/v1/chat/message',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, message: text }),
+          body: JSON.stringify({ session_id: sid, message: text }),
         },
         MESSAGE_REQUEST_TIMEOUT_MS,
       );
       if (res.status === 401) {
         setError('Tu sesión expiró. Vuelve a iniciar sesión.');
-        setMessages((prev) => prev.slice(0, -1));
-        return;
+        setMsgs((prev) => prev.slice(0, -2));
+        return false;
       }
       if (!res.ok) {
         throw new Error(`El asistente no pudo responder (HTTP ${res.status})`);
       }
       const data = await res.json() as { content: string; message_id: number };
-      const assistantMessage: ChatMessage = {
-        id: `srv-${data.message_id}`,
-        role: 'assistant',
-        content: data.content || '(Sin respuesta)',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMsgs((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: data.content || '(Sin respuesta)', id: `srv-${data.message_id}` }
+            : m,
+        ),
+      );
+      return true;
     } catch (err) {
-      // Quitamos el mensaje del usuario para evitar conversación fantasma.
-      setMessages((prev) => prev.slice(0, -1));
+      setMsgs((prev) => prev.slice(0, -2));
       setError(err instanceof Error ? err.message : 'Error desconocido');
-    } finally {
-      setIsLoading(false);
+      return false;
     }
-  };
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

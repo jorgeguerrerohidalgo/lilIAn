@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
+from typing import AsyncIterator
 
 import httpx
 
@@ -19,41 +20,101 @@ class LLMProvider(ABC):
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         pass
 
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        """Yield text chunks from the model. Default implementation calls
+        `generate()` and yields the full response as a single chunk, so
+        providers without native streaming still work."""
+        text = self.generate(prompt=prompt, system_prompt=system_prompt, **kwargs)
+        if text:
+            yield text
+
 
 class AnthropicLLM(LLMProvider):
     def __init__(self, api_key: str | None = None, model: str = "claude-sonnet-4-20250514"):
         self.api_key = api_key or os.environ.get("LLM_API_KEY")
         self.model = model
 
-    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
-        if not self.api_key:
-            return "Error: LLM_API_KEY not configured"
+    def _build_messages(self, prompt: str, system_prompt: str | None) -> list[dict]:
         messages = []
         if system_prompt:
             messages.append({"role": "user", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+        return messages
 
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
+        if not self.api_key:
+            return "Error: LLM_API_KEY not configured"
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": self._build_messages(prompt, system_prompt),
             "max_tokens": kwargs.get("max_tokens", 4096),
-            "temperature": kwargs.get("temperature", 0.7)
+            "temperature": kwargs.get("temperature", 0.7),
         }
-
         with httpx.Client() as client:
             response = client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
                     "x-api-key": self.api_key,
                     "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
+                    "content-type": "application/json",
                 },
                 json=payload,
-                timeout=60.0
+                timeout=60.0,
             )
             response.raise_for_status()
             data = response.json()
             return data["content"][0]["text"]
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        if not self.api_key:
+            yield "Error: LLM_API_KEY not configured"
+            return
+        payload = {
+            "model": self.model,
+            "messages": self._build_messages(prompt, system_prompt),
+            "max_tokens": kwargs.get("max_tokens", 2048),
+            "temperature": kwargs.get("temperature", 0.5),
+            "stream": True,
+        }
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json=payload,
+                timeout=httpx.Timeout(60.0, read=120.0),
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    raw = line[len("data: "):]
+                    try:
+                        event = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    event_type = event.get("type")
+                    if event_type == "content_block_delta":
+                        delta = event.get("delta", {})
+                        text_chunk = delta.get("text")
+                        if text_chunk:
+                            yield text_chunk
+                    elif event_type in ("message_stop", "end"):
+                        return
 
     @with_retry(max_retries=5, initial_delay=3.0)
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
@@ -102,34 +163,79 @@ class OpenAILLM(LLMProvider):
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.model = model
 
-    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
-        if not self.api_key:
-            return "Error: OPENAI_API_KEY not configured"
+    def _build_messages(self, prompt: str, system_prompt: str | None) -> list[dict]:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+        return messages
 
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
+        if not self.api_key:
+            return "Error: OPENAI_API_KEY not configured"
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": self._build_messages(prompt, system_prompt),
             "max_tokens": kwargs.get("max_tokens", 4096),
-            "temperature": kwargs.get("temperature", 0.7)
+            "temperature": kwargs.get("temperature", 0.7),
         }
-
         with httpx.Client() as client:
             response = client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 json=payload,
-                timeout=60.0
+                timeout=60.0,
             )
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        if not self.api_key:
+            yield "Error: OPENAI_API_KEY not configured"
+            return
+        payload = {
+            "model": self.model,
+            "messages": self._build_messages(prompt, system_prompt),
+            "max_tokens": kwargs.get("max_tokens", 2048),
+            "temperature": kwargs.get("temperature", 0.5),
+            "stream": True,
+        }
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=httpx.Timeout(60.0, read=120.0),
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    raw = line[len("data: "):]
+                    if raw.strip() == "[DONE]":
+                        return
+                    try:
+                        event = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    for choice in event.get("choices", []):
+                        delta = choice.get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            yield content
 
     @with_retry(max_retries=5, initial_delay=1.0)
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
@@ -179,12 +285,15 @@ class MiniMaxLLM(LLMProvider):
         self.model = model
         self.base_url = "https://api.minimax.chat/v1/text"
 
-    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
+    def _build_messages(self, prompt: str, system_prompt: str | None) -> list[dict]:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+        return messages
 
+    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
+        messages = self._build_messages(prompt, system_prompt)
         payload = {
             "model": self.model,
             "messages": messages,
@@ -205,6 +314,17 @@ class MiniMaxLLM(LLMProvider):
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        # MiniMax streaming not implemented yet; fall back to blocking.
+        text = self.generate(prompt=prompt, system_prompt=system_prompt, **kwargs)
+        if text:
+            yield text
 
     @with_retry(max_retries=5, initial_delay=3.0)
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
@@ -245,6 +365,18 @@ class MiniMaxLLM(LLMProvider):
 class DummyLLM(LLMProvider):
     def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
         return "Este es un análisis de dummy. Configure un proveedor de LLM real."
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        # Yield in 60-char chunks so the SSE wire format is exercised end-to-end.
+        text = self.generate(prompt=prompt, system_prompt=system_prompt, **kwargs)
+        chunk_size = 60
+        for i in range(0, len(text), chunk_size):
+            yield text[i:i + chunk_size]
 
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         return {

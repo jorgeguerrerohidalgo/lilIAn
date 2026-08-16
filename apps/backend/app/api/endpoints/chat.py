@@ -1,10 +1,14 @@
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_organization
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.models.chat import ChatSession
 from app.models.legal_area import LegalArea
 from app.models.matter import Matter
@@ -203,6 +207,188 @@ def send_message(
         content=response_content,
         session_id=request.session_id,
         message_id=saved_message["id"],
+    )
+
+
+@router.post("/message/stream")
+async def send_message_stream(
+    request: SendMessageRequest,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+):
+    """Stream the assistant response as Server-Sent Events.
+
+    Wire format (text/event-stream):
+
+        data: {"type":"start","session_id":42}
+        data: {"type":"delta","content":"..."}   # repeated as tokens arrive
+        data: {"type":"done","message_id":123,"content":"<full text>"}
+
+    The user message is persisted synchronously before the stream starts.
+    The assistant message is persisted at the end via a fresh DB session
+    so the streaming generator does not hold a long-lived ORM session.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    def prep() -> tuple[int, str | None, LegalArea | None, int]:
+        sync_db = SessionLocal()
+        try:
+            session = _load_chat_session(
+                sync_db, request.session_id, membership.organization_id
+            )
+            matter = _load_matter_for_session(
+                sync_db, session, membership.organization_id
+            )
+            matter_type = _resolve_matter_type(matter)
+            legal_area_override = _parse_legal_area_override(
+                request.legal_area_override
+            )
+            chat_service.save_chat_message(
+                session_id=request.session_id,
+                role="user",
+                content=request.message,
+            )
+            try:
+                from app.services.audit import AuditLogger
+                AuditLogger(
+                    db=sync_db,
+                    user_id=current_user.id,
+                    organization_id=membership.organization_id,
+                ).log_chat_message(
+                    session_id=request.session_id,
+                    message_id=0,
+                    role="user",
+                    content_preview=request.message,
+                )
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("audit_log_chat_user_failed: %s", exc)
+            return (
+                session.matter_id,
+                matter_type,
+                legal_area_override,
+                membership.organization_id,
+            )
+        finally:
+            sync_db.close()
+
+    matter_id, matter_type, legal_area_override, organization_id = await run_in_threadpool(prep)
+
+    async def event_generator():
+        from app.services.llm import get_llm_provider
+
+        yield f"data: {json.dumps({'type': 'start', 'session_id': request.session_id})}\n\n"
+
+        def build_prompts() -> tuple[str, str | None, str]:
+            from app.models.legal_area import MATTER_TYPE_TO_LEGAL_AREA, LegalArea
+
+            if legal_area_override is not None:
+                legal_area = legal_area_override
+            elif matter_type:
+                legal_area = MATTER_TYPE_TO_LEGAL_AREA.get(
+                    matter_type.lower(), LegalArea.OTHER
+                )
+            else:
+                legal_area = None
+
+            context = chat_service.get_relevant_context(
+                matter_id, organization_id, request.message,
+                top_k=5, legal_area=legal_area,
+            )
+            base_system_prompt = chat_service.get_chat_system_prompt(
+                matter_type, context, request.message, legal_area=legal_area
+            )
+
+            memory_block = ""
+            try:
+                from app.services import memory as memory_service
+                mem_db = SessionLocal()
+                try:
+                    memory_block = memory_service.inject_into_prompt(
+                        mem_db,
+                        organization_id=organization_id,
+                        user_id=current_user.id,
+                        matter_id=matter_id,
+                    )
+                finally:
+                    mem_db.close()
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("memory.inject_into_prompt (stream) failed: %s", exc)
+
+            system_prompt = (
+                f"{memory_block}\n\n{base_system_prompt}" if memory_block else base_system_prompt
+            )
+
+            history = chat_service.get_chat_history(request.session_id, limit=5)
+            conversation = "\n".join(
+                f"{msg['role'].upper()}: {msg['content']}" for msg in history
+            )
+            full_prompt = (
+                f"Conversación anterior:\n{conversation}\n\n"
+                f"Nueva pregunta del usuario: {request.message}\n\n"
+                "Responde basándote únicamente en el contexto proporcionado arriba."
+            )
+            return full_prompt, system_prompt, legal_area.value if legal_area else ""
+
+        full_prompt, system_prompt, legal_area_value = await run_in_threadpool(build_prompts)
+
+        provider = get_llm_provider()
+        full_content_parts: list[str] = []
+        try:
+            async for chunk in provider.generate_stream(
+                prompt=full_prompt,
+                system_prompt=system_prompt,
+                max_tokens=2048,
+                temperature=0.5,
+            ):
+                if not chunk:
+                    continue
+                full_content_parts.append(chunk)
+                yield f"data: {json.dumps({'type': 'delta', 'content': chunk})}\n\n"
+        except Exception as exc:
+            logger.exception("streaming LLM failed")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+            return
+
+        full_content = "".join(full_content_parts)
+
+        def persist_assistant() -> int:
+            saved = chat_service.save_chat_message(
+                session_id=request.session_id,
+                role="assistant",
+                content=full_content,
+                metadata={"streamed": True, "legal_area": legal_area_value},
+            )
+            try:
+                from app.services.audit import AuditLogger
+                sync_db = SessionLocal()
+                try:
+                    AuditLogger(
+                        db=sync_db,
+                        user_id=current_user.id,
+                        organization_id=organization_id,
+                    ).log_chat_message(
+                        session_id=request.session_id,
+                        message_id=saved["id"],
+                        role="assistant",
+                        content_preview=full_content,
+                    )
+                finally:
+                    sync_db.close()
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("audit_log_chat_assistant_failed: %s", exc)
+            return int(saved["id"])
+
+        message_id = await run_in_threadpool(persist_assistant)
+        yield f"data: {json.dumps({'type': 'done', 'message_id': message_id, 'content': full_content})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable proxy buffering (nginx, Railway)
+        },
     )
 
 
