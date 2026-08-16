@@ -40,6 +40,27 @@ def generate_analysis(
     if not matter:
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
+    # Pre-flight checks surface common failures immediately so the user
+    # does not have to wait for the background task to discover them.
+    from app.models.document import Document
+    doc_count = (
+        db.query(Document)
+        .filter(
+            Document.matter_id == analysis_request.matter_id,
+            Document.organization_id == membership.organization_id,
+            Document.status.in_(["processed", "analyzed"]),
+        )
+        .count()
+    )
+    if doc_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No hay documentos procesados para analizar. Sube al menos "
+                "un PDF/DOCX, espera a que se procese y vuelve a intentar."
+            ),
+        )
+
     background_tasks.add_task(
         run_analysis_task,
         analysis_request.matter_id,
@@ -50,7 +71,8 @@ def generate_analysis(
     return {
         "message": "Análisis iniciado en segundo plano",
         "matter_id": analysis_request.matter_id,
-        "status": "processing"
+        "status": "processing",
+        "documents_to_analyze": doc_count,
     }
 
 

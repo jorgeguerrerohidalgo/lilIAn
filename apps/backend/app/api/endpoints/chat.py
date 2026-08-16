@@ -160,60 +160,80 @@ def send_message(
     db: Session = Depends(get_db)
 ):
     """Persist a user message, generate an LLM response, persist it,
-    and emit audit rows for both turns.
-
-    S4-19: previously a 92-line function that did its own DB lookups,
-    audit-log calls, and persistence in one body. Refactored to delegate
-    each step to a small helper so the top-level reads as a linear
-    pipeline. Audit logging is best-effort: a failure to write an audit
-    row never aborts the user-visible flow.
+    and emit audit rows for both turns. Any unhandled exception is
+    captured here so the chat always responds with a real message
+    instead of an opaque 500.
     """
     import logging
     logger = logging.getLogger(__name__)
 
-    session = _load_chat_session(db, request.session_id, membership.organization_id)
-    matter = _load_matter_for_session(db, session, membership.organization_id)
-    matter_type = _resolve_matter_type(matter)
-    legal_area_override = _parse_legal_area_override(request.legal_area_override)
+    try:
+        session = _load_chat_session(db, request.session_id, membership.organization_id)
+        matter = _load_matter_for_session(db, session, membership.organization_id)
+        matter_type = _resolve_matter_type(matter)
+        legal_area_override = _parse_legal_area_override(request.legal_area_override)
 
-    chat_service.save_chat_message(
-        session_id=request.session_id,
-        role="user",
-        content=request.message,
-    )
-    _audit_user_message(db, current_user, membership, request, logger)
+        chat_service.save_chat_message(
+            session_id=request.session_id,
+            role="user",
+            content=request.message,
+        )
+        _audit_user_message(db, current_user, membership, request, logger)
 
-    response_content, error = chat_service.generate_chat_response(
-        session_id=request.session_id,
-        matter_id=session.matter_id,
-        organization_id=membership.organization_id,
-        user_message=request.message,
-        matter_type=matter_type,
-        legal_area_override=legal_area_override,
-        user_id=current_user.id,
-    )
+        response_content, error = chat_service.generate_chat_response(
+            session_id=request.session_id,
+            matter_id=session.matter_id,
+            organization_id=membership.organization_id,
+            user_message=request.message,
+            matter_type=matter_type,
+            legal_area_override=legal_area_override,
+            user_id=current_user.id,
+        )
 
-    saved_message = chat_service.save_chat_message(
-        session_id=request.session_id,
-        role="assistant",
-        content=response_content,
-        metadata={"error": error} if error else None,
-    )
-    _audit_assistant_message(
-        db, current_user, membership, request.session_id, saved_message, response_content, logger
-    )
+        saved_message = chat_service.save_chat_message(
+            session_id=request.session_id,
+            role="assistant",
+            content=response_content,
+            metadata={"error": error} if error else None,
+        )
+        _audit_assistant_message(
+            db, current_user, membership, request.session_id, saved_message, response_content, logger
+        )
 
-    # Refresh rolling case snapshot if the session is long enough. Best-effort.
-    chat_service.maybe_update_case_snapshot(
-        session_id=request.session_id,
-        last_assistant_message_id=saved_message["id"],
-    )
+        # Refresh rolling case snapshot if the session is long enough. Best-effort.
+        chat_service.maybe_update_case_snapshot(
+            session_id=request.session_id,
+            last_assistant_message_id=saved_message["id"],
+        )
 
-    return MessageResponse(
-        content=response_content,
-        session_id=request.session_id,
-        message_id=saved_message["id"],
-    )
+        return MessageResponse(
+            content=response_content,
+            session_id=request.session_id,
+            message_id=saved_message["id"],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("send_message failed: %s", exc)
+        # Persist a fallback assistant message so the chat history stays coherent.
+        try:
+            fallback = chat_service.save_chat_message(
+                session_id=request.session_id,
+                role="assistant",
+                content=(
+                    f"Lo siento, ocurrió un error al procesar tu mensaje: {exc}. "
+                    "Intenta de nuevo en unos segundos."
+                ),
+                metadata={"error": str(exc), "fallback": True},
+            )
+            return MessageResponse(
+                content=fallback["content"],
+                session_id=request.session_id,
+                message_id=fallback["id"],
+            )
+        except Exception as inner:  # pragma: no cover - last resort
+            logger.exception("save_fallback_message failed: %s", inner)
+            raise HTTPException(status_code=500, detail=f"chat error: {exc}")
 
 
 @router.post("/message/stream")
