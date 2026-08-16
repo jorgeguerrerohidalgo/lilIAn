@@ -25,6 +25,7 @@ interface ChatMessage {
   timestamp: Date;
   agentKind?: AgentMode;
   structured?: unknown;
+  feedbackRating?: -1 | 1;
 }
 
 interface ChatContextInfo {
@@ -44,6 +45,112 @@ const CHAT_MESSAGE_MAX_LEN = 4_000;
 const SESSION_BOOTSTRAP_TIMEOUT_MS = 15_000;
 const MESSAGE_REQUEST_TIMEOUT_MS = 60_000;
 const AGENT_RUN_TIMEOUT_MS = 90_000;
+const FEEDBACK_TIMEOUT_MS = 10_000;
+
+interface FeedbackButtonsProps {
+  messageId: string;
+  onRated: (rating: -1 | 1, correction: string | null) => void;
+}
+
+function FeedbackButtons({ messageId, onRated }: FeedbackButtonsProps) {
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correction, setCorrection] = useState('');
+  const [pending, setPending] = useState(false);
+
+  const submit = async (rating: -1 | 1, withCorrection: boolean) => {
+    if (pending) return;
+    setPending(true);
+    try {
+      const serverId = parseServerMessageId(messageId);
+      if (serverId === null) return;
+      const body: Record<string, unknown> = {
+        chat_message_id: serverId,
+        rating,
+      };
+      if (withCorrection && correction.trim()) {
+        body.correction = correction.trim();
+        body.extracted_fact = correction.trim();
+        body.extracted_kind = 'preference';
+      }
+      const res = await fetchJsonWithTimeout(
+        '/api/v1/feedback',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        FEEDBACK_TIMEOUT_MS,
+      );
+      if (res.ok) {
+        onRated(rating, withCorrection ? correction.trim() : null);
+      }
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="inline-flex items-center gap-1">
+      <button
+        onClick={() => submit(1, false)}
+        disabled={pending}
+        aria-label="Marcar respuesta como útil"
+        className="text-ink/40 hover:text-emerald-600 transition-colors disabled:opacity-50"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.5c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0112.591 0c.498.634 1.225 1.08 2.031 1.08 1.512 0 2.714-1.21 2.714-2.715 0-.708-.259-1.358-.692-1.85l-1.422-1.422A9.04 9.04 0 0021 3c-1.273 0-2.54.232-3.726.692A9.933 9.933 0 0014.21 3c-.638 0-1.27.063-1.886.183M6.633 10.5C5.722 10.5 5 11.222 5 12.083v5.834c0 .861.722 1.583 1.633 1.583h12.734c.911 0 1.633-.722 1.633-1.583V12.083c0-.861-.722-1.583-1.633-1.583H6.633z" />
+        </svg>
+      </button>
+      <button
+        onClick={() => setShowCorrection((v) => !v)}
+        disabled={pending}
+        aria-label="Marcar respuesta como no útil"
+        className="text-ink/40 hover:text-red-500 transition-colors disabled:opacity-50"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7.498 15.25H4.372c-1.625 0-2.9-1.343-2.9-2.94V9.31c0-1.597 1.275-2.94 2.9-2.94h12.16c1.625 0 2.9 1.343 2.9 2.94v3c0 1.597-1.275 2.94-2.9 2.94h-1.876m-6-7.5L7.5 13.25m0 0L4.372 10.06M7.5 13.25l3.128-3.19" />
+        </svg>
+      </button>
+      {showCorrection && (
+        <div className="absolute mt-8 bg-white border border-border rounded-lg p-2 shadow-md z-10 w-72">
+          <textarea
+            value={correction}
+            onChange={(e) => setCorrection(e.target.value)}
+            placeholder="¿Qué estuvo mal? (opcional)"
+            className="w-full text-xs p-2 border border-border rounded resize-none h-16"
+            aria-label="Corrección"
+          />
+          <div className="flex gap-1 mt-1 justify-end">
+            <button
+              onClick={() => setShowCorrection(false)}
+              className="text-[10px] px-2 py-1 text-ink/60 hover:text-ink"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => submit(-1, true)}
+              disabled={pending}
+              className="text-[10px] px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+            >
+              Enviar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function parseServerMessageId(localId: string): number | null {
+  // Local ids look like `srv-123`, `agent-456`, or pending ones like
+  // `srv-pending-...`. We only post feedback for persisted messages.
+  const parts = localId.split('-');
+  if (parts.length < 2) return null;
+  if (parts[0] !== 'srv' && parts[0] !== 'agent') return null;
+  const idStr = parts[parts.length - 1];
+  const id = Number.parseInt(idStr, 10);
+  return Number.isFinite(id) ? id : null;
+}
 
 function formatAgentSummary(output: Record<string, unknown>, mode: AgentMode): string {
   if (!output || typeof output !== 'object') return '(sin respuesta)';
@@ -585,6 +692,12 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
     }
   };
 
+  const markFeedback = (messageId: string, rating: -1 | 1, _correction: string | null) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, feedbackRating: rating } : m)),
+    );
+  };
+
   return (
     <>
       <div
@@ -680,12 +793,22 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
                 )}
               >
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                <p className={clsx(
-                  'text-[10px] mt-1',
-                  message.role === 'assistant' ? 'text-ink/40' : 'text-white/60'
-                )}>
-                  {message.timestamp.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                </p>
+                <div className="flex items-center gap-3 mt-1">
+                  <p className={clsx(
+                    'text-[10px]',
+                    message.role === 'assistant' ? 'text-ink/40' : 'text-white/60'
+                  )}>
+                    {message.timestamp.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {message.role === 'assistant' && message.feedbackRating === undefined && (
+                    <FeedbackButtons messageId={message.id} onRated={(r, c) => markFeedback(message.id, r, c)} />
+                  )}
+                  {message.role === 'assistant' && message.feedbackRating !== undefined && (
+                    <p className="text-[10px] text-ink/40 italic">
+                      {message.feedbackRating === 1 ? 'Marcado como útil' : 'Gracias por tu feedback'}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           ))}

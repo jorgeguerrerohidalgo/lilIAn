@@ -13,6 +13,7 @@ from app.api.endpoints import (
     document_analysis,
     document_generator,
     documents,
+    feedback,
     lawyer,
     legal_areas,
     matters,
@@ -99,6 +100,7 @@ app.include_router(deadline_alerts.router, prefix="/api/v1")
 app.include_router(document_generator.router, prefix="/api/v1")
 app.include_router(precedents.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
+app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(metrics.router)
 
 
