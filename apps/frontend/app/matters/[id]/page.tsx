@@ -169,6 +169,15 @@ export default function MatterDetailPage() {
   const defaultLegalArea = matter ? (matterTypeToLegalArea[matter.matter_type] || "other") : "other";
   const [selectedLegalArea, setSelectedLegalArea] = useState<string | null>(null);
 
+  // Deadlines state
+  const [deadlines, setDeadlines] = useState<any[]>([]);
+  const [loadingDeadlines, setLoadingDeadlines] = useState(false);
+  const [refreshingDeadlines, setRefreshingDeadlines] = useState(false);
+  const [deadlinesError, setDeadlinesError] = useState("");
+
+  // Analysis progress state (per-stage so the user sees real progress)
+  const [analysisStage, setAnalysisStage] = useState<"idle" | "extracting" | "analyzing" | "generating" | "done">("idle");
+
   useEffect(() => {
     fetch(`/api/v1/matters/${params.id}`)
       .then((res) => {
@@ -190,8 +199,46 @@ export default function MatterDetailPage() {
       fetchDocuments();
       fetchAnalysis();
       fetchSessions();
+      fetchDeadlines();
     }
   }, [matter]);
+
+  const fetchDeadlines = async () => {
+    setLoadingDeadlines(true);
+    setDeadlinesError("");
+    try {
+      const res = await fetch(`/api/v1/alerts/matters/${params.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDeadlines(Array.isArray(data) ? data : []);
+      } else {
+        setDeadlinesError(`Error al cargar plazos (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      setDeadlinesError(err instanceof Error ? err.message : "Error de conexión");
+    } finally {
+      setLoadingDeadlines(false);
+    }
+  };
+
+  const handleRefreshDeadlines = async () => {
+    setRefreshingDeadlines(true);
+    setDeadlinesError("");
+    try {
+      const res = await fetch(`/api/v1/alerts/matter/${params.id}/refresh`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await fetchDeadlines();
+      } else {
+        setDeadlinesError(`Error al refrescar plazos (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      setDeadlinesError(err instanceof Error ? err.message : "Error de conexión");
+    } finally {
+      setRefreshingDeadlines(false);
+    }
+  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -362,6 +409,8 @@ export default function MatterDetailPage() {
     setAnalyzing(true);
     setAnalysisError("");
     setAnalysisSuccess("");
+    setAnalysisStage("extracting");
+    setAnalysis(null);
 
     const res = await fetch(`/api/v1/analysis`, {
       method: "POST",
@@ -372,16 +421,14 @@ export default function MatterDetailPage() {
     });
 
     if (res.ok) {
-      setAnalysisSuccess("El análisis puede tardar entre 1 y 5 minutos...");
-      setAnalyzing(true);
-      // Get the current latest analysis ID to compare later
+      setAnalysisSuccess("Análisis iniciado. Esto puede tardar 1-3 minutos dependiendo de la cantidad de documentos.");
+      setAnalysisStage("analyzing");
       const prevAnalysisId = analysisRef.current?.id ?? null;
-
-      // S3-08: hand off polling to the MatterAnalysisPoll child.
       setRequestAnalysisPoll({ prevAnalysisId });
     } else {
       const data = await res.json();
       setAnalysisError(data.detail || "Error al solicitar análisis");
+      setAnalysisStage("idle");
     }
     setAnalyzing(false);
   };
@@ -507,7 +554,7 @@ export default function MatterDetailPage() {
           className="flex gap-6"
           role="tablist"
           onKeyDown={(e) => {
-            const tabs: TabType[] = ["details", "documents", "analysis", "chat"];
+            const tabs: TabType[] = ["details", "documents", "analysis", "deadlines", "chat"];
             const currentIndex = tabs.indexOf(activeTab);
             let nextTab: TabType | null = null;
             if (e.key === "ArrowRight") {
@@ -526,7 +573,7 @@ export default function MatterDetailPage() {
             }
           }}
         >
-          {(["details", "documents", "analysis", "chat"] as TabType[]).map((tab) => (
+          {(["details", "documents", "analysis", "deadlines", "chat"] as TabType[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -545,6 +592,7 @@ export default function MatterDetailPage() {
               {tab === "details" && "Detalles"}
               {tab === "documents" && "Documentos"}
               {tab === "analysis" && "Análisis IA"}
+              {tab === "deadlines" && "Tiempos"}
               {tab === "chat" && "Chat"}
             </button>
           ))}
@@ -879,41 +927,131 @@ export default function MatterDetailPage() {
           className="space-y-6"
         >
           {/* Request Analysis */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-lg font-semibold mb-4">Análisis de Inteligencia Artificial</h2>
-            <p className="text-gray-600 mb-4">
-              Solicita un análisis automático de tu caso legal basado en los documentos subidos y la información del caso.
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Análisis de Inteligencia Artificial</h2>
+            <p className="text-gray-600 mb-6">
+              Solicita un análisis automático de tu caso legal basado en los documentos subidos.
             </p>
-            <button
-              onClick={handleRequestAnalysis}
-              disabled={analyzing}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {analyzing ? (
-              <span role="status" aria-live="polite" className="flex items-center gap-2">
-                <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Procesando...
+
+            {/* Action button — always visible, always actionable */}
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <button
+                onClick={handleRequestAnalysis}
+                disabled={analyzing || analysisStage === "analyzing" || analysisStage === "extracting" || analysisStage === "generating"}
+                className="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                type="button"
+              >
+                {analysis && analysisStage === "done" ? (
+                  <span className="flex items-center gap-2">
+                    <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Reanalizar caso
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Iniciar análisis con IA
+                  </span>
+                )}
+              </button>
+
+              <span className="text-xs text-gray-500">
+                Procesa tus documentos y genera un informe ejecutivo
               </span>
-            ) : "Solicitar nuevo análisis"}
-            </button>
-            {analysisError && (
-              <div className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{analysisError}</div>
+            </div>
+
+            {/* Progress stages — visible during the run */}
+            {(analysisStage === "extracting" || analysisStage === "analyzing" || analysisStage === "generating") && (
+              <div className="mt-4 p-4 bg-indigo-50 border border-indigo-200 rounded-lg" role="status" aria-live="polite">
+                <p className="text-sm font-semibold text-indigo-900 mb-3">Análisis en curso</p>
+                <ol className="space-y-2 text-sm text-indigo-800">
+                  <li className="flex items-center gap-2">
+                    {analysisStage === "extracting" ? (
+                      <svg aria-hidden="true" className="animate-spin h-4 w-4 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <svg aria-hidden="true" className="h-4 w-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                    <span className={analysisStage === "extracting" ? "font-medium" : ""}>
+                      Extrayendo texto de los documentos
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    {analysisStage === "analyzing" ? (
+                      <svg aria-hidden="true" className="animate-spin h-4 w-4 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : analysisStage === "generating" ? (
+                      <svg aria-hidden="true" className="h-4 w-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full border-2 border-indigo-300 flex-shrink-0" />
+                    )}
+                    <span className={analysisStage === "analyzing" ? "font-medium" : ""}>
+                      Analizando cláusulas, riesgos y obligaciones
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    {analysisStage === "generating" ? (
+                      <svg aria-hidden="true" className="animate-spin h-4 w-4 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full border-2 border-indigo-300 flex-shrink-0" />
+                    )}
+                    <span className={analysisStage === "generating" ? "font-medium" : ""}>
+                      Generando informe ejecutivo
+                    </span>
+                  </li>
+                </ol>
+                <p className="mt-3 text-xs text-indigo-700">
+                  Tiempo estimado: 30 segundos – 3 minutos según la cantidad de documentos.
+                </p>
+              </div>
             )}
-            {analysisSuccess && (
-              <div className="mt-3 p-4 bg-blue-50 rounded-lg" role="status" aria-live="polite">
-                <div className="flex items-center gap-3">
-                  <svg aria-hidden="true" className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <div>
-                    <p className="text-blue-800 font-medium">Análisis en progreso</p>
-                    <p className="text-blue-600 text-sm">{analysisSuccess}</p>
-                  </div>
+
+            {/* Success state */}
+            {analysisSuccess && analysisStage !== "analyzing" && analysisStage !== "extracting" && analysisStage !== "generating" && (
+              <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3" role="status" aria-live="polite">
+                <svg aria-hidden="true" className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-emerald-800">{analysisSuccess}</p>
+              </div>
+            )}
+
+            {/* Error state */}
+            {analysisError && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3" role="alert">
+                <svg aria-hidden="true" className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-red-800">No se pudo iniciar el análisis</p>
+                  <p className="text-sm text-red-700 mt-1">{analysisError}</p>
                 </div>
+              </div>
+            )}
+
+            {/* Helpful context */}
+            {documents.length === 0 && (
+              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+                <svg aria-hidden="true" className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-amber-800">
+                  No hay documentos subidos todavía. Sube al menos uno en la pestaña <strong>Documentos</strong> para que el análisis tenga contenido.
+                </p>
               </div>
             )}
           </div>
@@ -1106,6 +1244,135 @@ export default function MatterDetailPage() {
         </div>
       )}
 
+      {activeTab === "deadlines" && (
+        <div
+          id="tabpanel-deadlines"
+          role="tabpanel"
+          aria-labelledby="tab-deadlines"
+          className="space-y-6"
+        >
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Tiempos y Fechas Críticas</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Plazos de firma, vencimientos, multas, garantías y prescripciones detectadas en tus documentos.
+                </p>
+              </div>
+              <button
+                onClick={handleRefreshDeadlines}
+                disabled={refreshingDeadlines}
+                type="button"
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {refreshingDeadlines ? (
+                  <>
+                    <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Buscando plazos...
+                  </>
+                ) : (
+                  <>
+                    <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Buscar plazos en documentos
+                  </>
+                )}
+              </button>
+            </div>
+
+            {deadlinesError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg" role="alert">
+                <p className="text-sm font-medium text-red-800">{deadlinesError}</p>
+              </div>
+            )}
+
+            {loadingDeadlines ? (
+              <div className="flex flex-col items-center justify-center py-12" role="status" aria-live="polite">
+                <svg aria-hidden="true" className="animate-spin h-8 w-8 text-indigo-600 mb-3" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <p className="text-gray-600 text-sm">Cargando plazos...</p>
+              </div>
+            ) : deadlines.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-lg">
+                <svg aria-hidden="true" className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-700 mb-2">No hay plazos detectados todavía</h3>
+                <p className="text-sm text-gray-500 max-w-md mx-auto mb-4">
+                  {documents.length === 0
+                    ? "Sube documentos en la pestaña Documentos para poder buscar plazos."
+                    : "Haz click en \"Buscar plazos en documentos\" para que la IA analice fechas críticas, multas, garantías y prescripciones."}
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-3" aria-label="Lista de plazos detectados">
+                {deadlines.map((d: any) => {
+                  const daysLeft = typeof d.days_remaining === "number" ? d.days_remaining : null;
+                  const isOverdue = d.is_overdue || (daysLeft !== null && daysLeft < 0);
+                  const urgency = (d.urgency || "medium").toLowerCase();
+                  const styles: Record<string, { bg: string; border: string; badge: string; label: string }> = {
+                    critical: { bg: "bg-red-50", border: "border-red-300", badge: "bg-red-100 text-red-800", label: "CRÍTICO" },
+                    high: { bg: "bg-orange-50", border: "border-orange-300", badge: "bg-orange-100 text-orange-800", label: "URGENTE" },
+                    medium: { bg: "bg-amber-50", border: "border-amber-300", badge: "bg-amber-100 text-amber-800", label: "MEDIO" },
+                    low: { bg: "bg-blue-50", border: "border-blue-300", badge: "bg-blue-100 text-blue-800", label: "BAJO" },
+                  };
+                  const s = styles[urgency] || styles.medium;
+                  return (
+                    <li key={d.id} className={`p-4 rounded-lg border ${s.bg} ${s.border}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h4 className="font-semibold text-gray-900">{d.title || "Plazo detectado"}</h4>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded ${s.badge}`}>
+                              {s.label}
+                            </span>
+                            {d.event_type && (
+                              <span className="px-2 py-0.5 text-xs font-medium rounded bg-white text-gray-700 border border-gray-300">
+                                {d.event_type}
+                              </span>
+                            )}
+                          </div>
+                          {d.description && (
+                            <p className="text-sm text-gray-700 mb-2">{d.description}</p>
+                          )}
+                          <div className="flex items-center gap-4 text-xs text-gray-600 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <svg aria-hidden="true" className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              {d.due_date ? new Date(d.due_date).toLocaleDateString("es-CL") : "Sin fecha"}
+                            </span>
+                            {daysLeft !== null && (
+                              <span className={isOverdue ? "text-red-700 font-semibold" : "text-gray-600"}>
+                                {isOverdue ? `Vencido hace ${Math.abs(daysLeft)} días` : `En ${daysLeft} días`}
+                              </span>
+                            )}
+                            {d.legal_reference && (
+                              <span className="text-gray-500 italic">{d.legal_reference}</span>
+                            )}
+                          </div>
+                          {d.consequence && (
+                            <p className="mt-2 text-xs text-gray-700 bg-white/60 rounded px-2 py-1 inline-block">
+                              <strong>Consecuencia:</strong> {d.consequence}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeTab === "chat" && (
         <div
           id="tabpanel-chat"
@@ -1204,9 +1471,9 @@ export default function MatterDetailPage() {
                     )}
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
                     {messages.length === 0 ? (
-                      <div className="text-center text-gray-500 py-8">
+                      <div className="text-center text-gray-700 py-8">
                         <p>Envía un mensaje para comenzar la conversación.</p>
                       </div>
                     ) : (
@@ -1216,15 +1483,15 @@ export default function MatterDetailPage() {
                           className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                           <div
-                            className={`max-w-[70%] rounded-lg px-4 py-2 ${
+                            className={`max-w-[70%] rounded-lg px-4 py-2 shadow-sm ${
                               msg.role === "user"
-                                ? "bg-primary-600 text-white"
-                                : "bg-gray-100 text-gray-900"
+                                ? "bg-indigo-600 text-white"
+                                : "bg-white text-gray-900 border border-gray-200"
                             }`}
                           >
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                            <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                             <p className={`text-xs mt-1 ${
-                              msg.role === "user" ? "text-primary-200" : "text-gray-400"
+                              msg.role === "user" ? "text-indigo-100" : "text-gray-500"
                             }`}>
                               <time dateTime={msg.created_at}>
                                 {new Date(msg.created_at).toLocaleTimeString("es-CL", {
@@ -1239,7 +1506,7 @@ export default function MatterDetailPage() {
                     )}
                     <div ref={chatEndRef} />
                   </div>
-                  <form onSubmit={handleSendMessage} className="p-4 border-t">
+                  <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
                     <div className="flex gap-3">
                       <input
                         type="text"
@@ -1247,7 +1514,7 @@ export default function MatterDetailPage() {
                         onChange={(e) => setChatInput(e.target.value)}
                         placeholder="Escribe tu mensaje..."
                         aria-label="Mensaje para el chat"
-                        className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-900 bg-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400"
                         disabled={sendingMessage}
                       />
                       <button
@@ -1255,13 +1522,13 @@ export default function MatterDetailPage() {
                         disabled={sendingMessage || !chatInput.trim()}
                         aria-busy={sendingMessage}
                         aria-label={sendingMessage ? "Enviando..." : "Enviar mensaje"}
-                        className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                        className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
-                        {sendingMessage ? "..." : "Enviar"}
+                        {sendingMessage ? "Enviando..." : "Enviar"}
                       </button>
                     </div>
                     {chatError && (
-                      <p role="alert" aria-live="assertive" className="mt-2 text-sm text-red-600">{chatError}</p>
+                      <p role="alert" aria-live="assertive" className="mt-2 text-sm text-red-600 font-medium">{chatError}</p>
                     )}
                   </form>
                 </>
@@ -1342,6 +1609,7 @@ export default function MatterDetailPage() {
           fetchAnalysis={fetchAnalysis}
           onComplete={() => {
             setAnalyzing(false);
+            setAnalysisStage("done");
             setAnalysisSuccess("✓ Análisis completado");
             setAnalysisError("");
             setRequestAnalysisPoll(null);
@@ -1350,6 +1618,7 @@ export default function MatterDetailPage() {
           }}
           onTimeout={() => {
             setAnalyzing(false);
+            setAnalysisStage("idle");
             if (!analysisRef.current) {
               setAnalysisError("El análisis está tardando más de lo esperado. Intenta de nuevo más tarde.");
             }

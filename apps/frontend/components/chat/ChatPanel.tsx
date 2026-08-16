@@ -95,7 +95,7 @@ function FeedbackButtons({ messageId, onRated }: FeedbackButtonsProps) {
         onClick={() => submit(1, false)}
         disabled={pending}
         aria-label="Marcar respuesta como útil"
-        className="text-ink/40 hover:text-emerald-600 transition-colors disabled:opacity-50"
+        className="text-gray-500 hover:text-emerald-600 transition-colors disabled:opacity-50"
       >
         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.5c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0112.591 0c.498.634 1.225 1.08 2.031 1.08 1.512 0 2.714-1.21 2.714-2.715 0-.708-.259-1.358-.692-1.85l-1.422-1.422A9.04 9.04 0 0021 3c-1.273 0-2.54.232-3.726.692A9.933 9.933 0 0014.21 3c-.638 0-1.27.063-1.886.183M6.633 10.5C5.722 10.5 5 11.222 5 12.083v5.834c0 .861.722 1.583 1.633 1.583h12.734c.911 0 1.633-.722 1.633-1.583V12.083c0-.861-.722-1.583-1.633-1.583H6.633z" />
@@ -105,25 +105,25 @@ function FeedbackButtons({ messageId, onRated }: FeedbackButtonsProps) {
         onClick={() => setShowCorrection((v) => !v)}
         disabled={pending}
         aria-label="Marcar respuesta como no útil"
-        className="text-ink/40 hover:text-red-500 transition-colors disabled:opacity-50"
+        className="text-gray-500 hover:text-red-500 transition-colors disabled:opacity-50"
       >
         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M7.498 15.25H4.372c-1.625 0-2.9-1.343-2.9-2.94V9.31c0-1.597 1.275-2.94 2.9-2.94h12.16c1.625 0 2.9 1.343 2.9 2.94v3c0 1.597-1.275 2.94-2.9 2.94h-1.876m-6-7.5L7.5 13.25m0 0L4.372 10.06M7.5 13.25l3.128-3.19" />
         </svg>
       </button>
       {showCorrection && (
-        <div className="absolute mt-8 bg-white border border-border rounded-lg p-2 shadow-md z-10 w-72">
+        <div className="absolute mt-8 bg-white border border-gray-300 rounded-lg p-2 shadow-md z-10 w-72">
           <textarea
             value={correction}
             onChange={(e) => setCorrection(e.target.value)}
             placeholder="¿Qué estuvo mal? (opcional)"
-            className="w-full text-xs p-2 border border-border rounded resize-none h-16"
+            className="w-full text-xs p-2 border border-gray-300 text-gray-900 rounded resize-none h-16"
             aria-label="Corrección"
           />
           <div className="flex gap-1 mt-1 justify-end">
             <button
               onClick={() => setShowCorrection(false)}
-              className="text-[10px] px-2 py-1 text-ink/60 hover:text-ink"
+              className="text-[10px] px-2 py-1 text-gray-600 hover:text-gray-900"
             >
               Cancelar
             </button>
@@ -718,29 +718,29 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
         tabIndex={-1}
         className={clsx(
           'fixed top-0 right-0 h-full w-[380px] max-w-full flex flex-col',
-          'bg-cream border-l border-border z-50 shadow-xl',
+          'bg-white border-l border-gray-200 z-50 shadow-xl',
           'transition-transform duration-300 ease-out',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-soft2">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
               <BotIcon />
             </div>
             <div>
-              <h3 id="chat-panel-title" className="font-heading font-bold text-ink">
+              <h3 id="chat-panel-title" className="font-heading font-bold text-gray-900">
                 Asistente LILIAN
               </h3>
-              <p className="text-xs text-ink/50">siempre disponible</p>
+              <p className="text-xs text-gray-500">siempre disponible</p>
             </div>
           </div>
           <button
             ref={closeButtonRef}
             onClick={onClose}
             aria-label="Cerrar chat"
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-ink/50 hover:bg-soft hover:text-ink focus-visible:ring-2 focus-visible:ring-coral transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors"
           >
             <CloseIcon />
           </button>
@@ -748,9 +748,9 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
         {/* Context Banner */}
         {contextInfo?.matterTitle && (
-          <div className="px-5 py-3 bg-blue-pale border-b border-border">
-            <p className="text-xs text-blue font-semibold">Contexto actual</p>
-            <p className="text-sm text-ink truncate">{contextInfo.matterTitle}</p>
+          <div className="px-5 py-3 bg-blue-50 border-b border-gray-200">
+            <p className="text-xs text-blue-700 font-semibold">Contexto actual</p>
+            <p className="text-sm text-gray-900 truncate">{contextInfo.matterTitle}</p>
           </div>
         )}
 
@@ -773,30 +773,30 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gray-50">
           {messages.map((message) => (
             <div
               key={message.id}
               className={clsx('flex gap-3', message.role === 'user' && 'flex-row-reverse')}
             >
               {message.role === 'assistant' && (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center flex-shrink-0">
                   <BotIcon />
                 </div>
               )}
               <div
                 className={clsx(
-                  'max-w-[80%] rounded-2xl px-4 py-3',
+                  'max-w-[80%] rounded-2xl px-4 py-3 shadow-sm',
                   message.role === 'assistant'
-                    ? 'bg-soft text-ink rounded-tl-sm'
-                    : 'bg-coral text-white rounded-tr-sm'
+                    ? 'bg-white text-gray-900 border border-gray-200 rounded-tl-sm'
+                    : 'bg-indigo-600 text-white rounded-tr-sm'
                 )}
               >
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                 <div className="flex items-center gap-3 mt-1">
                   <p className={clsx(
                     'text-[10px]',
-                    message.role === 'assistant' ? 'text-ink/40' : 'text-white/60'
+                    message.role === 'assistant' ? 'text-gray-500' : 'text-indigo-100'
                   )}>
                     {message.timestamp.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -804,7 +804,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
                     <FeedbackButtons messageId={message.id} onRated={(r, c) => markFeedback(message.id, r, c)} />
                   )}
                   {message.role === 'assistant' && message.feedbackRating !== undefined && (
-                    <p className="text-[10px] text-ink/40 italic">
+                    <p className="text-[10px] text-gray-500 italic">
                       {message.feedbackRating === 1 ? 'Marcado como útil' : 'Gracias por tu feedback'}
                     </p>
                   )}
@@ -815,14 +815,14 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
           {isLoading && (
             <div className="flex gap-3" role="status" aria-live="polite">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center flex-shrink-0">
                 <BotIcon />
               </div>
-              <div className="bg-soft rounded-2xl rounded-tl-sm px-4 py-3">
+              <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
                 <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-ink/30 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-ink/30 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-ink/30 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
                 <span className="sr-only">El asistente está escribiendo...</span>
               </div>
@@ -833,10 +833,10 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
         </div>
 
         {/* Input */}
-        <div className="p-4 border-t border-border bg-soft2">
+        <div className="p-4 border-t border-gray-200 bg-white">
           {/* Mode selector */}
           <div className="mb-2 flex items-center gap-2">
-            <label htmlFor="lilian-mode" className="text-[11px] uppercase tracking-wider text-ink/50 font-semibold">
+            <label htmlFor="lilian-mode" className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
               Modo
             </label>
             <select
@@ -844,7 +844,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
               value={mode}
               onChange={(e) => setMode(e.target.value as AgentMode)}
               disabled={isLoading}
-              className="flex-1 px-3 py-1.5 rounded-lg bg-cream border border-border text-xs text-ink focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral disabled:opacity-50"
+              className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50"
               aria-label="Modo del asistente"
             >
               {AGENT_OPTIONS.map((opt) => (
@@ -854,7 +854,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
               ))}
             </select>
           </div>
-          <p className="text-[11px] text-ink/40 mb-2">
+          <p className="text-[11px] text-gray-500 mb-2">
             {AGENT_OPTIONS.find((o) => o.kind === mode)?.description}
           </p>
           <div className="flex gap-3">
@@ -866,14 +866,14 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
               placeholder={mode === 'qa' && sessionId === null && error === null ? "Conectando..." : "Escribe tu consulta..."}
               aria-label="Escribe tu pregunta al asistente"
               disabled={mode === 'qa' && sessionId === null}
-              className="flex-1 px-4 py-3 rounded-xl bg-cream border border-border text-sm text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral transition-all disabled:opacity-50"
+              className="flex-1 px-4 py-3 rounded-xl bg-white border border-gray-300 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:opacity-50"
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading || (mode === 'qa' && sessionId === null)}
               aria-label="Enviar mensaje"
               aria-busy={isLoading}
-              className="w-11 h-11 rounded-xl bg-coral text-white flex items-center justify-center hover:bg-coral-dark focus-visible:ring-2 focus-visible:ring-coral transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <SendIcon />
             </button>
