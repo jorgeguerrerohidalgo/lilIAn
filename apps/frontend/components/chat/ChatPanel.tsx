@@ -3,11 +3,28 @@
 import { useState, useRef, useEffect } from "react";
 import { clsx } from 'clsx';
 
+type AgentMode = 'qa' | 'case_researcher' | 'drafting_assistant' | 'compliance_checker';
+
+interface AgentOption {
+  kind: AgentMode;
+  label: string;
+  description: string;
+}
+
+const AGENT_OPTIONS: AgentOption[] = [
+  { kind: 'qa', label: 'Pregunta libre', description: 'Q&A conversacional sobre el caso.' },
+  { kind: 'case_researcher', label: 'Investigar caso', description: 'Brief estructurado: leyes, precedentes, riesgos, próximos pasos.' },
+  { kind: 'drafting_assistant', label: 'Redactar documento', description: 'Completa una plantilla legal con variables del caso.' },
+  { kind: 'compliance_checker', label: 'Revisar cumplimiento', description: 'Detecta cláusulas que violan legislación chilena.' },
+];
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  agentKind?: AgentMode;
+  structured?: unknown;
 }
 
 interface ChatContextInfo {
@@ -26,6 +43,70 @@ const SESSION_STORAGE_KEY = 'lilian.chat.sessionId';
 const CHAT_MESSAGE_MAX_LEN = 4_000;
 const SESSION_BOOTSTRAP_TIMEOUT_MS = 15_000;
 const MESSAGE_REQUEST_TIMEOUT_MS = 60_000;
+const AGENT_RUN_TIMEOUT_MS = 90_000;
+
+function formatAgentSummary(output: Record<string, unknown>, mode: AgentMode): string {
+  if (!output || typeof output !== 'object') return '(sin respuesta)';
+  if (mode === 'case_researcher') {
+    const lines: string[] = [];
+    const summary = typeof output.summary === 'string' ? output.summary : '';
+    if (summary) lines.push(summary);
+    const laws = Array.isArray(output.applicable_laws) ? output.applicable_laws : [];
+    if (laws.length > 0) {
+      lines.push('\nLeyes aplicables:');
+      for (const law of laws.slice(0, 6)) {
+        if (typeof law !== 'object' || law === null) continue;
+        const l = law as Record<string, unknown>;
+        lines.push(`• ${l.law_name ?? '?'} ${l.article ?? ''} — ${l.summary ?? ''}`.trim());
+      }
+    }
+    const risks = Array.isArray(output.identified_risks) ? output.identified_risks : [];
+    if (risks.length > 0) {
+      lines.push('\nRiesgos:');
+      for (const r of risks.slice(0, 5)) {
+        if (typeof r !== 'object' || r === null) continue;
+        const ri = r as Record<string, unknown>;
+        lines.push(`• [${ri.severity ?? '?'}] ${ri.title ?? ''} — ${ri.description ?? ''}`.trim());
+      }
+    }
+    const next = Array.isArray(output.next_steps) ? output.next_steps : [];
+    if (next.length > 0) {
+      lines.push('\nPróximos pasos:');
+      for (const step of next.slice(0, 5)) lines.push(`• ${String(step)}`);
+    }
+    const disclaimer = typeof output._disclaimer === 'string' ? output._disclaimer : '';
+    if (disclaimer) lines.push(`\n${disclaimer}`);
+    return lines.join('\n');
+  }
+  if (mode === 'drafting_assistant') {
+    const draft = typeof output.draft_content === 'string' ? output.draft_content : '';
+    if (draft) return draft;
+    return typeof output._raw === 'string' ? output._raw : '(sin borrador)';
+  }
+  if (mode === 'compliance_checker') {
+    const lines: string[] = [];
+    const compliant = output.compliant === true;
+    lines.push(compliant ? '✓ Documento cumple con la normativa.' : '✗ Se detectaron posibles incumplimientos.');
+    const violations = Array.isArray(output.violations) ? output.violations : [];
+    if (violations.length > 0) {
+      lines.push('\nViolaciones:');
+      for (const v of violations.slice(0, 8)) {
+        if (typeof v !== 'object' || v === null) continue;
+        const vi = v as Record<string, unknown>;
+        lines.push(`• [${vi.severity ?? '?'}] ${vi.law_name ?? '?'} ${vi.article ?? ''} — ${vi.description ?? ''}`.trim());
+      }
+    }
+    const obs = Array.isArray(output.observations) ? output.observations : [];
+    if (obs.length > 0) {
+      lines.push('\nObservaciones:');
+      for (const o of obs.slice(0, 5)) lines.push(`• ${String(o)}`);
+    }
+    const disclaimer = typeof output._disclaimer === 'string' ? output._disclaimer : '';
+    if (disclaimer) lines.push(`\n${disclaimer}`);
+    return lines.join('\n');
+  }
+  return JSON.stringify(output, null, 2);
+}
 
 const BotIcon = () => (
   <svg aria-hidden="true" className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -97,6 +178,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
+  const [mode, setMode] = useState<AgentMode>('qa');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -232,11 +314,18 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || isLoading || sessionId === null) return;
+    if (!text || isLoading) return;
     if (text.length > CHAT_MESSAGE_MAX_LEN) {
       setError(`El mensaje supera el límite de ${CHAT_MESSAGE_MAX_LEN} caracteres.`);
       return;
     }
+
+    if (mode !== 'qa') {
+      await sendAgent(text);
+      return;
+    }
+
+    if (sessionId === null) return;
 
     const userMessage: ChatMessage = {
       id: `local-${Date.now()}`,
@@ -276,6 +365,84 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
         );
         if (!ok) return; // error ya mostrado en setError
       }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Ejecuta un agente (case_researcher, drafting_assistant, compliance_checker)
+   * contra el backend. La respuesta reemplaza el placeholder del assistant y se
+   * renderiza como bloques estructurados (summary, applicable_laws, etc.).
+   */
+  const sendAgent = async (text: string) => {
+    const userMessage: ChatMessage = {
+      id: `local-${Date.now()}`,
+      role: 'user',
+      content: text,
+      timestamp: new Date(),
+    };
+    const placeholderId = `agent-pending-${Date.now()}`;
+    const placeholder: ChatMessage = {
+      id: placeholderId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      agentKind: mode,
+    };
+    setMessages((prev) => [...prev, userMessage, placeholder]);
+    setInput('');
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetchJsonWithTimeout(
+        '/api/v1/agents/run',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agent_kind: mode,
+            matter_id: contextInfo?.matterId,
+            input: { query: text },
+          }),
+        },
+        90_000,
+      );
+      if (res.status === 401) {
+        setError('Tu sesión expiró. Vuelve a iniciar sesión.');
+        setMessages((prev) => prev.slice(0, -2));
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`El agente no pudo ejecutarse (HTTP ${res.status})`);
+      }
+      const data = await res.json() as {
+        id: number;
+        status: string;
+        output: Record<string, unknown>;
+        error_message?: string;
+      };
+      if (data.status === 'failed') {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: data.error_message ?? 'El agente falló.', structured: data.output }
+              : m,
+          ),
+        );
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === placeholderId
+            ? { ...m, content: formatAgentSummary(data.output, mode), structured: data.output, id: `agent-${data.id}` }
+            : m,
+        ),
+      );
+    } catch (err) {
+      setMessages((prev) => prev.slice(0, -2));
+      setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setIsLoading(false);
     }
@@ -544,20 +711,43 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
         {/* Input */}
         <div className="p-4 border-t border-border bg-soft2">
+          {/* Mode selector */}
+          <div className="mb-2 flex items-center gap-2">
+            <label htmlFor="lilian-mode" className="text-[11px] uppercase tracking-wider text-ink/50 font-semibold">
+              Modo
+            </label>
+            <select
+              id="lilian-mode"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as AgentMode)}
+              disabled={isLoading}
+              className="flex-1 px-3 py-1.5 rounded-lg bg-cream border border-border text-xs text-ink focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral disabled:opacity-50"
+              aria-label="Modo del asistente"
+            >
+              {AGENT_OPTIONS.map((opt) => (
+                <option key={opt.kind} value={opt.kind}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-[11px] text-ink/40 mb-2">
+            {AGENT_OPTIONS.find((o) => o.kind === mode)?.description}
+          </p>
           <div className="flex gap-3">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={sessionId === null && error === null ? "Conectando..." : "Escribe tu pregunta..."}
+              placeholder={mode === 'qa' && sessionId === null && error === null ? "Conectando..." : "Escribe tu consulta..."}
               aria-label="Escribe tu pregunta al asistente"
-              disabled={sessionId === null}
+              disabled={mode === 'qa' && sessionId === null}
               className="flex-1 px-4 py-3 rounded-xl bg-cream border border-border text-sm text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-coral/30 focus:border-coral transition-all disabled:opacity-50"
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || isLoading || sessionId === null}
+              disabled={!input.trim() || isLoading || (mode === 'qa' && sessionId === null)}
               aria-label="Enviar mensaje"
               aria-busy={isLoading}
               className="w-11 h-11 rounded-xl bg-coral text-white flex items-center justify-center hover:bg-coral-dark focus-visible:ring-2 focus-visible:ring-coral transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
