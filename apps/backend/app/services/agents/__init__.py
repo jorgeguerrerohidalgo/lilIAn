@@ -9,6 +9,7 @@ from app.services.agents.base import AgentContext, AgentResult, run_agent
 from app.services.agents.case_researcher import case_researcher
 from app.services.agents.compliance_checker import compliance_checker
 from app.services.agents.drafting_assistant import drafting_assistant
+from app.services.agents.loop import react_loop
 
 
 _REGISTRY: dict[str, callable] = {
@@ -41,4 +42,5 @@ __all__ = [
     "case_researcher",
     "drafting_assistant",
     "compliance_checker",
+    "react_loop",
 ]

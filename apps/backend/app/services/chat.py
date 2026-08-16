@@ -439,3 +439,143 @@ def save_chat_message(
         return result
     finally:
         db.close()
+
+
+SNAPSHOT_MIN_MESSAGES = 4
+
+
+def maybe_update_case_snapshot(
+    session_id: int,
+    last_assistant_message_id: int,
+) -> None:
+    """Refresh the rolling case_context_snapshot for the matter that owns
+    this chat session. Runs as a fire-and-forget background task after
+    each assistant message — does not block the streaming response.
+
+    The snapshot generation is one extra LLM call. We only trigger it
+    once the session has at least SNAPSHOT_MIN_MESSAGES (two full turns)
+    so we are not spending tokens on a one-shot Q&A.
+
+    All errors are logged and swallowed; if the snapshot update fails
+    the chat must keep working.
+    """
+    from app.models.chat import ChatSession
+    from app.services import memory as memory_service
+    from app.services.llm import get_llm_provider
+
+    own_db = SessionLocal()
+    try:
+        session = (
+            own_db.query(ChatSession)
+            .filter(ChatSession.id == session_id)
+            .first()
+        )
+        if session is None:
+            return
+        matter_id = session.matter_id
+        organization_id = session.organization_id
+
+        msg_count = (
+            own_db.query(ChatMessage)
+            .filter(ChatMessage.chat_session_id == session_id)
+            .count()
+        )
+        if msg_count < SNAPSHOT_MIN_MESSAGES:
+            return
+
+        history = (
+            own_db.query(ChatMessage)
+            .filter(ChatMessage.chat_session_id == session_id)
+            .order_by(ChatMessage.created_at.asc())
+            .all()
+        )
+        transcript_lines = [
+            f"{m.role.upper()}: {m.content}" for m in history[-20:]
+        ]
+        transcript = "\n".join(transcript_lines)
+
+        prompt = (
+            "Resume esta conversación legal en UNA sola frase ejecutiva (máx 30 palabras) "
+            "y lista hasta 3 preguntas que el usuario aún no ha resuelto. "
+            "Responde en JSON con el formato:\n"
+            '{"summary": "...", "open_questions": ["...", "..."]}\n\n'
+            f"TRANSCRIPCIÓN:\n{transcript[:6000]}"
+        )
+
+        provider = get_llm_provider()
+        raw = provider.generate(
+            prompt=prompt,
+            system_prompt=(
+                "Eres un asistente que produce resúmenes breves y precisos "
+                "de conversaciones legales chilenas. Responde SOLO con JSON válido."
+            ),
+            max_tokens=400,
+            temperature=0.2,
+        )
+        parsed = _safe_json_loads(raw)
+        if not parsed:
+            logger.warning("snapshot: LLM did not return parseable JSON")
+            return
+        summary = parsed.get("summary") or ""
+        open_questions = parsed.get("open_questions") or []
+        if not isinstance(open_questions, list):
+            open_questions = []
+        if not summary:
+            return
+        memory_service.update_case_snapshot(
+            own_db,
+            organization_id=organization_id,
+            matter_id=matter_id,
+            summary=summary[:1000],
+            key_entities={},
+            open_questions=[str(q)[:300] for q in open_questions[:8]],
+            last_chat_message_id=last_assistant_message_id,
+        )
+        logger.info(
+            "snapshot updated: matter=%s session=%s v=%s",
+            matter_id, session_id, _current_snapshot_version(own_db, matter_id, organization_id),
+        )
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("maybe_update_case_snapshot failed: %s", exc)
+    finally:
+        own_db.close()
+
+
+def _safe_json_loads(raw: str | None) -> dict | None:
+    import json as _json
+    if not raw:
+        return None
+    text = raw.strip()
+    # Strip markdown code fences if present.
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        last_fence = text.rfind("```")
+        if first_newline != -1 and last_fence != -1:
+            text = text[first_newline + 1 : last_fence].strip()
+    try:
+        result = _json.loads(text)
+        return result if isinstance(result, dict) else None
+    except _json.JSONDecodeError:
+        # Fallback: try to find a JSON object inside the response.
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                result = _json.loads(text[start : end + 1])
+                return result if isinstance(result, dict) else None
+            except _json.JSONDecodeError:
+                return None
+        return None
+
+
+def _current_snapshot_version(db, matter_id: int, organization_id: int) -> int | None:
+    from app.models.memory import CaseContextSnapshot
+    snap = (
+        db.query(CaseContextSnapshot)
+        .filter(
+            CaseContextSnapshot.organization_id == organization_id,
+            CaseContextSnapshot.matter_id == matter_id,
+        )
+        .first()
+    )
+    return snap.version if snap is not None else None

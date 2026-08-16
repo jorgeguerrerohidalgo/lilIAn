@@ -203,6 +203,12 @@ def send_message(
         db, current_user, membership, request.session_id, saved_message, response_content, logger
     )
 
+    # Refresh rolling case snapshot if the session is long enough. Best-effort.
+    chat_service.maybe_update_case_snapshot(
+        session_id=request.session_id,
+        last_assistant_message_id=saved_message["id"],
+    )
+
     return MessageResponse(
         content=response_content,
         session_id=request.session_id,
@@ -380,6 +386,16 @@ async def send_message_stream(
             return int(saved["id"])
 
         message_id = await run_in_threadpool(persist_assistant)
+
+        # Fire-and-forget snapshot refresh. We do not block the
+        # stream close on this because the user already has the
+        # answer in hand; snapshot is only consumed on the next session.
+        await run_in_threadpool(
+            chat_service.maybe_update_case_snapshot,
+            request.session_id,
+            message_id,
+        )
+
         yield f"data: {json.dumps({'type': 'done', 'message_id': message_id, 'content': full_content})}\n\n"
 
     return StreamingResponse(

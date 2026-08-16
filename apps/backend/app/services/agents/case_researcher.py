@@ -2,6 +2,11 @@
 applicable Chilean laws, similar judicial precedents, identified risks,
 and suggested next steps. Used in the chat as the "Investigar caso"
 mode.
+
+Runs as a multi-step ReAct loop: the agent decides which tools to call
+(search_laws / search_precedents / search_matter_documents) based on
+the initial matter context and the user's query, iterates up to 6
+times, then emits a final_answer in the SCHEMA below.
 """
 from __future__ import annotations
 
@@ -10,7 +15,7 @@ import logging
 from typing import Any
 
 from app.services.agents.base import AgentContext, AgentResult
-from app.services.llm import get_llm_provider
+from app.services.agents.loop import build_initial_prompt, react_loop
 
 logger = logging.getLogger(__name__)
 
@@ -59,81 +64,45 @@ SCHEMA = {
 }
 
 
-SYSTEM_PROMPT = """Eres un abogado investigador chileno senior. Tu trabajo es producir un
-brief estructurado de un caso legal para otro abogado del equipo.
-
-REGLAS OBLIGATORIAS:
-1. SOLO puedes citar leyes chilenas que aparezcan explícitamente en el
-   contexto proporcionado. NO inventes artículos ni jurisprudencia.
-2. Si el contexto no contiene información suficiente para una sección,
-   devuelve esa sección con un array vacío y un mensaje breve.
-3. Las leyes y precedentes que cites DEBEN provenir de los fragmentos
-   entregados en el contexto (marcados como "[Ley]" o "[Precedente]").
-4. Siempre incluye la advertencia final: "Este análisis es preliminar y
-   no reemplaza la revisión profesional de un abogado habilitado en
-   Chile."
-
-Responde ÚNICAMENTE con un JSON válido siguiendo el esquema entregado."""
-
-
-def _build_user_prompt(ctx: AgentContext) -> str:
-    parts: list[str] = []
-    if ctx.memory_block:
-        parts.append(ctx.memory_block)
-        parts.append("")
-    if ctx.matter_summary:
-        parts.append("INFORMACIÓN DEL CASO:")
-        parts.append(ctx.matter_summary)
-        parts.append("")
-    if ctx.rag_chunks:
-        parts.append("FRAGMENTOS DE DOCUMENTOS DEL CASO:")
-        for i, chunk in enumerate(ctx.rag_chunks[:8], 1):
-            parts.append(f"[Doc {i}] {chunk.get('text', '')[:1500]}")
-        parts.append("")
-    if ctx.precedents:
-        parts.append("PRECEDENTES JUDICIALES:")
-        for i, p in enumerate(ctx.precedents[:5], 1):
-            parts.append(f"[Precedente {i}] {p.get('text', '')[:1500]}")
-        parts.append("")
-    parts.append("Genera el brief estructurado del caso en JSON siguiendo el esquema.")
-    return "\n".join(parts)
-
-
 def case_researcher(ctx: AgentContext) -> AgentResult:
     user_query = ctx.input.get("query") or "Resumen general del caso"
-    user_prompt = _build_user_prompt(ctx)
-    provider = get_llm_provider()
 
-    raw = provider.generate(
-        prompt=user_prompt,
-        system_prompt=SYSTEM_PROMPT + f"\n\nEsquema JSON: {json.dumps(SCHEMA)}",
-        max_tokens=3000,
-        temperature=0.3,
+    initial_prompt = build_initial_prompt(
+        matter_summary=ctx.matter_summary,
+        rag_chunks=ctx.rag_chunks,
+        precedents=ctx.precedents,
+        user_query=user_query,
     )
 
-    parsed: dict[str, Any]
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        logger.warning("case_researcher: failed to parse LLM JSON output, returning raw")
-        parsed = {
-            "summary": raw[:1500] if raw else "Sin respuesta",
-            "applicable_laws": [],
-            "relevant_precedents": [],
-            "identified_risks": [],
-            "next_steps": [],
-            "_raw": True,
-            "_query": user_query,
-        }
+    loop_result = react_loop(
+        initial_prompt=initial_prompt,
+        context_block=ctx.memory_block,
+        final_answer_schema=SCHEMA,
+    )
 
+    parsed: dict[str, Any] = loop_result["output"]
     parsed["_query"] = user_query
     parsed["_disclaimer"] = (
         "Este análisis es preliminar y no reemplaza la revisión profesional "
         "de un abogado habilitado en Chile."
     )
+    parsed["_iterations"] = len(loop_result["steps"])
+
+    # Serialize the step trace for inclusion in the agent_run.output_json
+    # so the UI / API consumer can show what the agent actually did.
+    parsed["_steps"] = [
+        {
+            "step_index": s.get("step_index"),
+            "kind": s.get("kind"),
+            "tool_name": s.get("tool_name"),
+            "reasoning": (s.get("reasoning") or "")[:300],
+            "duration_ms": s.get("duration_ms", 0),
+        }
+        for s in loop_result["steps"]
+    ]
 
     return AgentResult(
         output=parsed,
-        total_tokens=0,  # LLM provider does not surface token counts today
-        raw_response=raw,
+        total_tokens=0,
+        raw_response=json.dumps(parsed, ensure_ascii=False)[:4000],
     )
