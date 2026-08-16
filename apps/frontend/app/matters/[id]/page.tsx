@@ -163,7 +163,6 @@ export default function MatterDetailPage() {
   const [processPoll, setProcessPoll] = useState<{ docId: number } | null>(null);
   const [analyzePoll, setAnalyzePoll] = useState<{ docId: number } | null>(null);
   const [viewAnalysisPoll, setViewAnalysisPoll] = useState<{ docId: number } | null>(null);
-  const [requestAnalysisPoll, setRequestAnalysisPoll] = useState<{ prevAnalysisId: number | null } | null>(null);
 
   // Legal area state for chat
   const defaultLegalArea = matter ? (matterTypeToLegalArea[matter.matter_type] || "other") : "other";
@@ -231,13 +230,69 @@ export default function MatterDetailPage() {
       if (res.ok) {
         await fetchDeadlines();
       } else {
-        setDeadlinesError(`Error al refrescar plazos (HTTP ${res.status})`);
+        const data = await res.json().catch(() => ({}));
+        setDeadlinesError(data.detail || `Error al refrescar plazos (HTTP ${res.status})`);
       }
     } catch (err) {
       setDeadlinesError(err instanceof Error ? err.message : "Error de conexión");
     } finally {
       setRefreshingDeadlines(false);
     }
+  };
+
+  /**
+   * Poll the matter analysis until we either get a fresh report, see an
+   * error, or run out of attempts. Replaces the previous child-component
+   * polling which only watched for new IDs and could not detect backend
+   * failures, leaving the UI spinning forever.
+   */
+  const pollAnalysisUntilDone = async (prevAnalysisId: number | null) => {
+    const maxAttempts = 60; // ~5 minutes at 5s/attempt
+    for (let i = 0; i < maxAttempts; i++) {
+      // 1. Try to fetch the latest report. If we have one and (it's new
+      //    or there was no previous one), we're done.
+      const latestRes = await fetch(`/api/v1/analysis/matters/${params.id}/latest`);
+      if (latestRes.ok) {
+        const data = await latestRes.json();
+        if (data && data.id !== undefined && (prevAnalysisId === null || data.id !== prevAnalysisId)) {
+          setAnalysis(data);
+          setAnalyzing(false);
+          setAnalysisStage("done");
+          setAnalysisSuccess("✓ Análisis completado");
+          setAnalysisError("");
+          // The analysis also auto-generates deadline alerts; refresh them.
+          fetchDeadlines();
+          return;
+        }
+      }
+
+      // 2. Check matter status for explicit failure.
+      const statusRes = await fetch(`/api/v1/analysis/matters/${params.id}/status`);
+      if (statusRes.ok) {
+        const s = await statusRes.json();
+        if (s.status === "failed") {
+          setAnalyzing(false);
+          setAnalysisStage("idle");
+          setAnalysisError(
+            s.error
+              ? `El análisis falló: ${s.error}`
+              : "El análisis falló por un error del servidor. Revisa los logs del backend."
+          );
+          return;
+        }
+        if (s.status === "processing") {
+          setAnalysisStage("analyzing");
+        }
+      }
+
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    // Timed out
+    setAnalyzing(false);
+    setAnalysisStage("idle");
+    setAnalysisError(
+      "El análisis está tardando más de lo esperado. Verifica el backend y vuelve a intentarlo."
+    );
   };
 
   useEffect(() => {
@@ -424,10 +479,13 @@ export default function MatterDetailPage() {
       setAnalysisSuccess("Análisis iniciado. Esto puede tardar 1-3 minutos dependiendo de la cantidad de documentos.");
       setAnalysisStage("analyzing");
       const prevAnalysisId = analysisRef.current?.id ?? null;
-      setRequestAnalysisPoll({ prevAnalysisId });
+      // Poll inline so we can detect failures and update the stage. Do
+      // NOT use the previous child-component polling — it could not see
+      // backend errors and left the UI stuck forever.
+      await pollAnalysisUntilDone(prevAnalysisId);
     } else {
-      const data = await res.json();
-      setAnalysisError(data.detail || "Error al solicitar análisis");
+      const data = await res.json().catch(() => ({}));
+      setAnalysisError(data.detail || `Error al iniciar análisis (HTTP ${res.status})`);
       setAnalysisStage("idle");
     }
     setAnalyzing(false);
@@ -459,7 +517,16 @@ export default function MatterDetailPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim() || !activeSession || sendingMessage) return;
+    if (!chatInput.trim() || sendingMessage) {
+      if (!activeSession) {
+        setChatError("Crea o selecciona una sesión de chat primero.");
+      }
+      return;
+    }
+    if (!activeSession) {
+      setChatError("Crea o selecciona una sesión de chat primero.");
+      return;
+    }
 
     setSendingMessage(true);
     setChatError("");
@@ -479,34 +546,40 @@ export default function MatterDetailPage() {
       message: inputToSend,
     };
 
-    // Only include legal_area_override if user selected something different from default
     if (selectedLegalArea && selectedLegalArea !== defaultLegalArea) {
       payload.legal_area_override = selectedLegalArea;
     }
 
-    const res = await fetch(`/api/v1/chat/message`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const assistantMessage: ChatMessage = {
-        id: data.message_id,
-        role: "assistant",
-        content: data.content,
-        created_at: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-    } else {
-      const data = await res.json();
-      setChatError(data.detail || "Error al enviar mensaje");
+    try {
+      const res = await fetch(`/api/v1/chat/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const assistantMessage: ChatMessage = {
+          id: data.message_id ?? Date.now() + 1,
+          role: "assistant",
+          content: data.content || "(Sin respuesta)",
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setChatError(
+          data.detail || `Error del servidor (HTTP ${res.status}). Intenta de nuevo.`
+        );
+        setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
+      }
+    } catch (err) {
+      setChatError(
+        err instanceof Error ? err.message : "Error de conexión con el servidor."
+      );
       setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
+    } finally {
+      setSendingMessage(false);
     }
-    setSendingMessage(false);
   };
 
   if (loading) {
@@ -1252,36 +1325,12 @@ export default function MatterDetailPage() {
           className="space-y-6"
         >
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Tiempos y Fechas Críticas</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Plazos de firma, vencimientos, multas, garantías y prescripciones detectadas en tus documentos.
-                </p>
-              </div>
-              <button
-                onClick={handleRefreshDeadlines}
-                disabled={refreshingDeadlines}
-                type="button"
-                className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-              >
-                {refreshingDeadlines ? (
-                  <>
-                    <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Buscando plazos...
-                  </>
-                ) : (
-                  <>
-                    <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Buscar plazos en documentos
-                  </>
-                )}
-              </button>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Tiempos y Fechas Críticas</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Plazos de firma, vencimientos, multas, garantías y prescripciones detectadas automáticamente
+                a partir del análisis de tus documentos. Se actualizan cada vez que ejecutas el análisis con IA.
+              </p>
             </div>
 
             {deadlinesError && (
@@ -1602,32 +1651,7 @@ export default function MatterDetailPage() {
           onDone={() => setViewAnalysisPoll(null)}
         />
       )}
-      {requestAnalysisPoll && (
-        <MatterAnalysisPoll
-          prevAnalysisId={requestAnalysisPoll.prevAnalysisId}
-          analysisRef={analysisRef}
-          fetchAnalysis={fetchAnalysis}
-          onComplete={() => {
-            setAnalyzing(false);
-            setAnalysisStage("done");
-            setAnalysisSuccess("✓ Análisis completado");
-            setAnalysisError("");
-            setRequestAnalysisPoll(null);
-            // Clear success message after 5 seconds
-            setTimeout(() => setAnalysisSuccess(""), 5000);
-          }}
-          onTimeout={() => {
-            setAnalyzing(false);
-            setAnalysisStage("idle");
-            if (!analysisRef.current) {
-              setAnalysisError("El análisis está tardando más de lo esperado. Intenta de nuevo más tarde.");
-            }
-            setAnalysisSuccess("");
-            setRequestAnalysisPoll(null);
-          }}
-        />
-      )}
-    </div>
+      </div>
   );
 }
 
@@ -1733,43 +1757,6 @@ function DocumentViewAnalysisPoll({ docId, onResult, onDone, onTimeout }: Docume
     onResult: (result) => {
       if (result.value) onResult(result.value);
       if (result.done) onDone();
-    },
-    onTimeout,
-    enabled: true,
-  });
-
-  return null;
-}
-
-interface MatterAnalysisPollProps {
-  prevAnalysisId: number | null;
-  analysisRef: React.MutableRefObject<AnalysisReport | null>;
-  fetchAnalysis: () => Promise<void>;
-  onComplete: () => void;
-  onTimeout: () => void;
-}
-
-function MatterAnalysisPoll({
-  prevAnalysisId,
-  analysisRef,
-  fetchAnalysis,
-  onComplete,
-  onTimeout,
-}: MatterAnalysisPollProps) {
-  const prevIdRef = useRef(prevAnalysisId);
-  prevIdRef.current = prevAnalysisId;
-
-  usePoll({
-    intervalMs: POLL_INTERVAL_MS,
-    maxAttempts: POLL_MAX_ATTEMPTS,
-    task: async () => {
-      await fetchAnalysis();
-      const current = analysisRef.current;
-      const isNew = current !== null && current.id !== prevIdRef.current;
-      return { done: isNew, value: current ?? undefined };
-    },
-    onResult: (result) => {
-      if (result.done) onComplete();
     },
     onTimeout,
     enabled: true,

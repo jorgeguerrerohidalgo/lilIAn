@@ -104,6 +104,39 @@ def get_analysis_report(
     return AnalysisReportDetailResponse(**response_data)
 
 
+@router.get("/matters/{matter_id}/status")
+def get_matter_analysis_status(
+    matter_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db)
+):
+    """Lightweight status endpoint so the frontend can detect analysis
+    failures without waiting for the polling to time out. Returns
+    ``{status, error}`` where ``status`` is the matter's current
+    lifecycle status and ``error`` carries the failure message when
+    the last attempt set ``status = "error:<reason>"``.
+    """
+    matter = db.query(Matter).filter(
+        Matter.id == matter_id,
+        Matter.organization_id == membership.organization_id,
+    ).first()
+    if not matter:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    status = matter.status or "new"
+    error_message = None
+    if isinstance(status, str) and status.startswith("error:"):
+        error_message = status[len("error:"):].strip() or "Error desconocido"
+        status = "failed"
+    return {
+        "matter_id": matter_id,
+        "status": status,
+        "error": error_message,
+        "updated_at": matter.updated_at.isoformat() if matter.updated_at else None,
+    }
+
+
 @router.get("/matters/{matter_id}/latest", response_model=AnalysisReportDetailResponse)
 def get_latest_analysis(
     matter_id: int,

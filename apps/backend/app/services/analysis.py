@@ -1108,7 +1108,7 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
         analysis_result = analyze_contract(documents_text, matter_type_value, organization_id)
 
         if "error" in analysis_result and not analysis_result.get("resumen_ejecutivo"):
-            matter.status = "missing_information"
+            matter.status = f"error:{analysis_result.get('error', 'unknown')[:120]}"
             db.commit()
             return analysis_result
 
@@ -1116,6 +1116,35 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
             matter_id, organization_id, user_id, analysis_result,
             validation_summary=validation_summary
         )
+
+        # Auto-generate deadline alerts from each analyzed document so the
+        # Tiempos tab is populated as a side-effect of the matter analysis.
+        # Best-effort: a failure here does NOT invalidate the analysis report.
+        try:
+            from app.models.document import Document
+            from app.services.deadline_generator import generate_alerts_from_document
+            analyzed_docs = (
+                db.query(Document)
+                .filter(
+                    Document.matter_id == matter_id,
+                    Document.organization_id == organization_id,
+                    Document.status == "analyzed",
+                )
+                .all()
+            )
+            total_alerts = 0
+            for doc in analyzed_docs:
+                ids = generate_alerts_from_document(doc.id)
+                total_alerts += len(ids)
+            logger.info(
+                "matter %s: generated %d deadline alerts across %d documents",
+                matter_id, total_alerts, len(analyzed_docs),
+            )
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("deadline generation skipped for matter %s: %s", matter_id, exc)
+
+        matter.status = "analysis_ready"
+        db.commit()
 
         return {
             "report_id": report.id,
