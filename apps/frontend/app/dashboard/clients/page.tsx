@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getApiUrl } from "@/lib/api";
 
-
-const API_URL = getApiUrl();
 
 interface Client {
   id: number;
@@ -33,7 +29,6 @@ interface ClientFormData {
 }
 
 export default function ClientsPage() {
-  const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -63,26 +58,16 @@ export default function ClientsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/auth/login");
-      return;
-    }
     fetchClients();
-  }, [router, search]);
-
-  const getToken = () => localStorage.getItem("token") || "";
+  }, [search]);
 
   const fetchClients = async () => {
     setLoading(true);
-    const token = getToken();
     const url = search
       ? `/api/v1/clients?search=${encodeURIComponent(search)}`
       : `/api/v1/clients`;
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await fetch(url);
 
     if (res.ok) {
       const data = await res.json();
@@ -98,7 +83,6 @@ export default function ClientsPage() {
     setFormSuccess("");
     setSubmitting(true);
 
-    const token = getToken();
     const method = editingClient ? "PUT" : "POST";
     const url = editingClient
       ? `/api/v1/clients/${editingClient.id}`
@@ -108,7 +92,6 @@ export default function ClientsPage() {
       const res = await fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
@@ -149,10 +132,8 @@ export default function ClientsPage() {
   const handleDelete = async (clientId: number) => {
     if (!confirm("¿Estás seguro de que deseas eliminar este cliente?")) return;
 
-    const token = getToken();
     const res = await fetch(`/api/v1/clients/${clientId}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (res.ok) {

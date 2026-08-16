@@ -8,10 +8,6 @@ import { StatCard } from "@/components/ui";
 import { Badge } from "@/components/ui";
 import { MatterStatusBadge, UrgencyBadge } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
-import { getApiUrl } from "@/lib/api";
-
-
-const API_URL = getApiUrl();
 
 interface Matter {
   id: number;
@@ -88,14 +84,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    fetch(`/api/v1/matters`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
+    fetch(`/api/v1/matters`)
       .then((res) => res.json())
       .then((data) => {
         setMatters(data || []);

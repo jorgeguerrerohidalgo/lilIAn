@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getApiUrl } from "@/lib/api";
 
-
-const API_URL = getApiUrl();
 
 const matterTypes = [
   { value: "contract_review", label: "Revisión de contrato" },
@@ -52,17 +49,12 @@ export default function NewMatterPage() {
 
   useEffect(() => {
     if (clientIdFromUrl) {
-      const token = localStorage.getItem("token");
-      if (token) {
-        fetch(`/api/v1/clients/${clientIdFromUrl}`, {
-          headers: { Authorization: `Bearer ${token}` },
+      fetch(`/api/v1/clients/${clientIdFromUrl}`)
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => {
+          if (data) setClientName(data.name);
         })
-          .then((res) => res.ok ? res.json() : null)
-          .then((data) => {
-            if (data) setClientName(data.name);
-          })
-          .catch(() => {});
-      }
+        .catch(() => {});
     }
   }, [clientIdFromUrl]);
 
@@ -71,18 +63,11 @@ export default function NewMatterPage() {
     setErrors({});
     setLoading(true);
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/auth/login");
-      return;
-    }
-
     try {
       const res = await fetch(`/api/v1/matters`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(form),
       });

@@ -6,10 +6,7 @@ import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
 import { MatterStatusBadge, UrgencyBadge } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
-import { getApiUrl } from "@/lib/api";
 
-
-const API_URL = getApiUrl();
 
 interface Matter {
   id: number;
@@ -68,23 +65,13 @@ export default function MattersPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      window.location.href = "/auth/login";
-      return;
-    }
-
-    fetch(`/api/v1/matters`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`/api/v1/matters`)
       .then((res) => res.json())
       .then(async (data) => {
         setMatters(data);
         const clientIds = [...new Set<number>(data.filter((m: Matter) => m.client_id).map((m: Matter) => m.client_id as number))];
         const clientPromises = clientIds.map((clientId: number) =>
-          fetch(`/api/v1/clients/${clientId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }).then((res) => res.json())
+          fetch(`/api/v1/clients/${clientId}`).then((res) => res.json())
         );
         const clientResults = await Promise.all(clientPromises);
         const clientMap: Record<number, Client> = {};

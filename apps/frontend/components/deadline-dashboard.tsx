@@ -38,14 +38,9 @@ export function DeadlineDashboard() {
 
   const fetchDashboard = async () => {
     try {
-      const token = localStorage.getItem("access_token");
       const [summaryRes, alertsRes] = await Promise.all([
-        fetch("/api/v1/alerts/summary", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch("/api/v1/alerts?limit=10", {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
+        fetch("/api/v1/alerts/summary"),
+        fetch("/api/v1/alerts?limit=10"),
       ]);
 
       if (summaryRes.ok) {

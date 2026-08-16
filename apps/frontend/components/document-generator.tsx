@@ -63,10 +63,7 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
   const fetchTemplates = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`/api/v1/doc-templates/templates`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`/api/v1/doc-templates/templates`);
       if (res.ok) {
         const data = await res.json();
         setTemplates(data);
@@ -94,13 +91,11 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
     setSuggesting(true);
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch(
         `/api/v1/doc-templates/suggest-variables?template_id=${selectedTemplate.id}`,
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ matter_id: matterId }),
@@ -129,11 +124,9 @@ export function DocumentGenerator({ matterId }: { matterId?: number }) {
 
     setGenerating(true);
     try {
-      const token = localStorage.getItem("token");
       const res = await fetch(`/api/v1/doc-templates/generate`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

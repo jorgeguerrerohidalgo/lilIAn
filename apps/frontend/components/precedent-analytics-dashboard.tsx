@@ -53,10 +53,7 @@ export function PrecedentAnalyticsDashboard() {
 
   const fetchFilters = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`/api/v1/precedents/analytics/filters`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`/api/v1/precedents/analytics/filters`);
       if (res.ok) {
         const data = await res.json();
         setFilters(data);
@@ -72,7 +69,6 @@ export function PrecedentAnalyticsDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token");
       const params = new URLSearchParams();
       if (selectedCourt) params.append("court", selectedCourt);
       if (selectedArea) params.append("legal_area", selectedArea);
@@ -81,8 +77,7 @@ export function PrecedentAnalyticsDashboard() {
       params.append("include_text_analysis", includeTextAnalysis.toString());
 
       const res = await fetch(
-        `/api/v1/precedents/analytics?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `/api/v1/precedents/analytics?${params.toString()}`
       );
 
       if (res.ok) {

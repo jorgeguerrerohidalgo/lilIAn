@@ -3,10 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
-import { getApiUrl } from "@/lib/api";
 
-
-const API_URL = getApiUrl();
 
 interface Client {
   id: number;
@@ -73,37 +70,25 @@ export default function ClientDetailPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/auth/login");
-      return;
-    }
     fetchClient();
     fetchMatters();
-  }, [clientId, router]);
-
-  const getToken = () => localStorage.getItem("token") || "";
+  }, [clientId]);
 
   const fetchClient = async () => {
-    const token = getToken();
-    const res = await fetch(`/api/v1/clients/${clientId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await fetch(`/api/v1/clients/${clientId}`);
 
     if (res.ok) {
       const data = await res.json();
       setClient(data);
     } else {
       setError("Cliente no encontrado");
+      setLoading(false);
     }
   };
 
   const fetchMatters = async () => {
     setLoading(true);
-    const token = getToken();
-    const res = await fetch(`/api/v1/matters?client_id=${clientId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await fetch(`/api/v1/matters?client_id=${clientId}`);
 
     if (res.ok) {
       const data = await res.json();

@@ -67,11 +67,8 @@ export function DeadlineAlertsList({ matterId }: Props) {
 
   const fetchAlerts = async () => {
     try {
-      const token = localStorage.getItem("token") || localStorage.getItem("access_token");
       logger.info("Fetching alerts for matter:", matterId, "API_URL:", API_URL);
-      const res = await fetch(`/api/v1/alerts/matters/${matterId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`/api/v1/alerts/matters/${matterId}`);
       logger.info("Alerts response:", res.status, res.ok);
       if (res.ok) {
         const data = await res.json();
@@ -88,11 +85,9 @@ export function DeadlineAlertsList({ matterId }: Props) {
   const updateAlert = async (alertId: number, status: string) => {
     setUpdating(alertId);
     try {
-      const token = localStorage.getItem("token") || localStorage.getItem("access_token");
       const res = await fetch(`/api/v1/alerts/${alertId}`, {
         method: "PATCH",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ status }),
