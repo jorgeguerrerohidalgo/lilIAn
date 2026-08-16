@@ -1,8 +1,8 @@
-# Operaciones manuales para cerrar Fases 2 y 3
+# Operaciones manuales para cerrar Fases 2, 3 y resto
 
 > **Para quién es este doc:** ti, después de que yo termine de escribir código.
 > **Estado de los commits al momento de escribir este doc:**
-> los 6 commits de Fase 0 + 1 + 2 + 3 están en `main` **localmente**.
+> los 9 commits de Fase 0 + 1 + 2 + 3 + resto están en `main` **localmente**.
 > NO se han pusheado todavía. Railway y Vercel siguen corriendo código viejo.
 
 ---
@@ -17,6 +17,8 @@
 | `87da8de` | Streaming LLM (Anthropic + endpoint + frontend) | Vercel + Railway |
 | `0b38665` | Agentes backend (case_researcher, drafting_assistant, compliance_checker) + schema | Vercel + Railway + Supabase |
 | `79da34c` | UI: dropdown de modo en el chat | Vercel |
+| `dc810f5` | Feedback endpoint + thumbs up/down en chat | Vercel + Railway |
+| `ae2ce5f` | Rolling case snapshots + ReAct loop para case_researcher | Railway |
 
 ---
 
@@ -151,28 +153,133 @@ Abre https://lil-i-rj551xub2-jorgeguerrerohidalgo710.vercel.app en el browser (o
 
 ### 5c. Probar la memoria persistente
 
-1. En el chat, pregunta algo que NO debería estar en los documentos del caso, p.ej. "Resume el caso en 3 frases".
-2. Verifica que la respuesta menciona detalles del caso real (si tienes documentos cargados) o que indique que no hay documentos.
-3. **Para verificar la persistencia de `user_facts`:**
-   ```sql
-   -- En Supabase SQL editor
-   SELECT id, organization_id, user_id, kind, content, confidence
-   FROM user_facts
-   ORDER BY created_at DESC
-   LIMIT 10;
-   ```
-   Al principio estará vacío. Los facts se crean cuando:
-   - El usuario califica con thumbs up/down un mensaje (botón aún no en UI → se llenará con código futuro)
-   - Se llama `memory.record_user_fact()` directamente desde admin/seed
+A partir del commit `dc810f5` (thumbs UI) + `ae2ce5f` (snapshot hook), la memoria se llena automáticamente a partir del uso real.
 
-4. **Para verificar la persistencia de `case_context_snapshots`:**
-   ```sql
-   SELECT id, matter_id, summary, version, updated_at
-   FROM case_context_snapshots
-   ORDER BY updated_at DESC
-   LIMIT 5;
-   ```
-   También empezará vacío. Se llena cuando un endpoint llame a `memory.update_case_snapshot()` (lo añadiremos en Fase 3 cuando los agentes ejecuten resúmenes).
+**`user_facts`** — se llena cuando el usuario hace click en 👍 o en 👎 (+ corrección) sobre una respuesta del asistente. Detalles en Paso 5e.
+
+**`case_context_snapshots`** — se actualiza automáticamente después de cada respuesta del asistente en sesiones con ≥4 mensajes. Detalles en Paso 5f.
+
+Para verificar que ambas tablas existen y son escribibles, basta con abrir el chat y tener una conversación de 2-3 turnos. Después:
+
+```sql
+-- user_facts: vacío hasta que alguien califique un mensaje
+SELECT id, kind, content, confidence, source, created_at
+FROM user_facts
+ORDER BY created_at DESC LIMIT 10;
+
+-- case_context_snapshots: se actualiza después de cada turno ≥4 mensajes
+SELECT id, matter_id, summary, version, updated_at
+FROM case_context_snapshots
+ORDER BY updated_at DESC LIMIT 5;
+```
+
+---
+
+### 5d. Probar los agentes (incluye loop multi-step de case_researcher)
+
+El chat tiene un dropdown "Modo" encima del input con 4 opciones. A partir del commit `ae2ce5f`, el modo "Investigar caso" ejecuta un **loop ReAct multi-step** (hasta 6 iteraciones) en lugar de una sola llamada LLM.
+
+#### Probar `case_researcher` (con multi-step)
+
+1. Asegúrate de tener un `matter` con al menos 1 documento cargado (si no, créalo en `/matters/new` y sube un PDF).
+2. En el chat, selecciona "Investigar caso" en el dropdown.
+3. Escribe: "Dame el brief del caso".
+4. Espera 10-30 segundos (más lento que antes porque ahora itera).
+5. **Debes ver:** respuesta estructurada con secciones Resumen / Leyes aplicables / Precedentes / Riesgos / Próximos pasos / Disclaimer. Puede incluir una sección `_steps` con el detalle del loop.
+
+Para verificar el loop en la BD:
+
+```sql
+SELECT
+  ar.id AS run_id,
+  ar.status,
+  ar.output_json->>'_iterations' AS iterations,
+  COUNT(s.id) AS step_count
+FROM agent_runs ar
+LEFT JOIN agent_steps s ON s.run_id = ar.id
+WHERE ar.agent_kind = 'case_researcher'
+GROUP BY ar.id, ar.status, ar.output_json
+ORDER BY ar.started_at DESC LIMIT 5;
+```
+
+Inspecciona qué herramientas llamó:
+
+```sql
+SELECT step_index, kind, tool_name, reasoning, duration_ms
+FROM agent_steps
+WHERE run_id = <run_id_de_arriba>
+ORDER BY step_index;
+```
+
+Verás intercalados `reasoning` (decisión del agente), `tool_call` (acción a tomar), `tool_result` (observación de la herramienta), y al final `final_answer`. Si `iterations = 1`, el agente decidió que el contexto pre-coleccionado bastaba y no llamó tools.
+
+#### Probar `drafting_assistant` y `compliance_checker`
+
+(igual que en la versión anterior del doc — single-shot, devuelven draft / violaciones respectivamente)
+
+#### Verificar que las corridas quedan registradas
+
+```sql
+SELECT id, agent_kind, status, started_at, completed_at, total_tokens
+FROM agent_runs
+ORDER BY started_at DESC LIMIT 10;
+
+SELECT run_id, step_index, kind, tool_name, tokens_used, duration_ms
+FROM agent_steps
+ORDER BY run_id DESC, step_index LIMIT 20;
+```
+
+---
+
+### 5e. Probar feedback (thumbs up/down) — commit `dc810f5`
+
+Cada mensaje del assistant tiene botones de pulgar arriba / abajo al lado del timestamp.
+
+1. En el chat, después de recibir una respuesta, click en **👍**. El botón desaparece y aparece "Marcado como útil".
+2. Verifica:
+
+```sql
+SELECT id, organization_id, chat_message_id, user_id, rating, created_at
+FROM feedback_signals ORDER BY created_at DESC LIMIT 5;
+```
+
+3. Click en **👎** sobre otra respuesta. Aparece un textarea pidiendo corrección.
+4. Escribe una corrección (ej: "Prefiero respuestas más cortas") y click **Enviar**.
+5. Verifica que el fact se promovió a `user_facts`:
+
+```sql
+SELECT kind, content, confidence, source
+FROM user_facts WHERE source = 'feedback'
+ORDER BY created_at DESC LIMIT 5;
+```
+
+`content` debe ser tu corrección textual; `confidence` 0.7 (negativo) o 0.9 (positivo).
+
+6. **Inicia una nueva sesión de chat** (cierra y abre el chat, o cambia de matter y vuelve).
+7. Pregunta algo y mira la respuesta: si el system prompt dice algo como "Sobre el usuario: [preference] ...", el bloque de memoria se está inyectando.
+
+---
+
+### 5f. Verificar rolling case snapshots — commit `ae2ce5f`
+
+Después de cada respuesta del assistant en una sesión con **≥4 mensajes** (2 turnos completos), el backend genera fire-and-forget un resumen ejecutivo + preguntas abiertas para `case_context_snapshots`.
+
+1. Conversa en el chat con al menos 2 preguntas y 2 respuestas (4 mensajes totales).
+2. Espera 5-10 segundos (la generación corre como background task).
+3. Verifica:
+
+```sql
+SELECT cs.id, cs.matter_id, cs.summary, cs.open_questions, cs.version, cs.updated_at
+FROM case_context_snapshots cs
+ORDER BY cs.updated_at DESC LIMIT 5;
+```
+
+- `summary` = 1 frase ejecutiva
+- `open_questions` = JSON array de preguntas sin resolver
+- `version` empieza en 1 y sube con cada update (1 → 2 → 3...)
+
+4. Sigue enviando mensajes → cada nuevo mensaje dispara otro snapshot. La `version` sube.
+5. **Inicia una nueva sesión sobre el mismo `matter_id`**. El primer system prompt ahora incluye una sección "Sobre el caso:" con el `summary` que generaste arriba.
 
 ---
 
@@ -234,22 +341,34 @@ Mide la calidad con una búsqueda manual en el chat: si preguntas "despido injus
 
 ## Paso 7 — Verificación final (smoke test completo)
 
-Checklist para considerar Fases 2 y 3 cerradas:
+Checklist consolidado para considerar Fases 2, 3 y resto cerradas:
+
+**Infraestructura**
 
 - [ ] `git push origin main` hecho
 - [ ] Vercel SSO desactivado
-- [ ] 5 migraciones SQL aplicadas en Supabase
-- [ ] `user_facts`, `case_context_snapshots`, `feedback_signals`, `agent_runs`, `agent_steps` existen en la BD
+- [ ] 5 migraciones SQL aplicadas en Supabase (`028`-`032`)
+- [ ] Las 5 tablas existen: `user_facts`, `case_context_snapshots`, `feedback_signals`, `agent_runs`, `agent_steps`
 - [ ] Railway redeployado y `/health` responde 200
-- [ ] Login funciona (entra a `/dashboard`, no loop)
+- [ ] (Opcional) `EMBEDDING_PROVIDER=openai` activado + corpus reindexado
+
+**Chat + memoria + agentes**
+
+- [ ] Login funciona (entra a `/dashboard`, sin loop)
 - [ ] Chat responde con streaming (tokens incrementales)
-- [ ] Historial del chat persiste tras refresh del browser
-- [ ] Dropdown "Modo" visible arriba del input del chat
-- [ ] Modo "Investigar caso" devuelve un brief estructurado (summary + leyes + riesgos)
-- [ ] Modo "Redactar documento" devuelve un draft con variables
+- [ ] Historial del chat persiste tras refresh
+- [ ] Dropdown "Modo" visible y funciona
+- [ ] Modo "Investigar caso" devuelve brief estructurado con `_iterations ≥ 1`
 - [ ] (curl) Modo "Revisar cumplimiento" devuelve violaciones con ley citada
-- [ ] (Opcional) Embeddings reales activados + corpus reindexado
-- [ ] (Opcional) Calidad de búsqueda semántica mejorada
+- [ ] Modo "Redactar documento" devuelve un draft
+
+**Feedback + snapshots**
+
+- [ ] 👍 crea un `feedback_signals` con rating=+1
+- [ ] 👎 + corrección crea `feedback_signals` con rating=-1 y un `user_facts` con source='feedback'
+- [ ] Sesión con ≥4 mensajes crea/actualiza `case_context_snapshots` con summary + open_questions
+- [ ] Version del snapshot sube con cada turno nuevo
+- [ ] Nueva sesión sobre el mismo matter hereda el snapshot en el system prompt
 
 ---
 
