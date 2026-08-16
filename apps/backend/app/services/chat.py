@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from app.core.config import settings
@@ -5,6 +6,8 @@ from app.core.database import SessionLocal
 from app.models.chat import ChatMessage, ChatSession
 from app.models.document import Document
 from app.models.legal_area import MATTER_TYPE_TO_LEGAL_AREA, LegalArea
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_CHAT = """Eres un asistente legal chileno especializado en análisis documental y apoyo jurídico preliminar.
 
@@ -325,7 +328,8 @@ def generate_chat_response(
     organization_id: int,
     user_message: str,
     matter_type: str | None = None,
-    legal_area_override: LegalArea | None = None
+    legal_area_override: LegalArea | None = None,
+    user_id: int | None = None,
 ) -> tuple[str, dict | None]:
     from app.services.llm import get_llm_provider
 
@@ -344,7 +348,32 @@ def generate_chat_response(
 
     provider = get_llm_provider()
 
-    system_prompt = get_chat_system_prompt(matter_type, context, user_message, legal_area=legal_area)
+    base_system_prompt = get_chat_system_prompt(matter_type, context, user_message, legal_area=legal_area)
+
+    # Harvey-grade persistent memory: inject user facts + case snapshot if
+    # we can identify the user. Failure to load memory is non-fatal — the
+    # chat still works, it just forgets.
+    memory_block = ""
+    if user_id is not None:
+        try:
+            from app.services import memory as memory_service
+
+            mem_db = SessionLocal()
+            try:
+                memory_block = memory_service.inject_into_prompt(
+                    mem_db,
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    matter_id=matter_id,
+                )
+            finally:
+                mem_db.close()
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("memory.inject_into_prompt failed: %s", exc)
+
+    system_prompt = (
+        f"{memory_block}\n\n{base_system_prompt}" if memory_block else base_system_prompt
+    )
 
     history = get_chat_history(session_id, limit=5)
     conversation = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in history])

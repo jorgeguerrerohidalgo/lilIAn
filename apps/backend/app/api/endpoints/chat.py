@@ -186,6 +186,7 @@ def send_message(
         user_message=request.message,
         matter_type=matter_type,
         legal_area_override=legal_area_override,
+        user_id=current_user.id,
     )
 
     saved_message = chat_service.save_chat_message(
