@@ -98,7 +98,7 @@ def list_audit_logs(
             entity_type=log.entity_type,
             entity_id=log.entity_id,
             ip_address=log.ip_address,
-            metadata=json.loads(log.log_metadata) if log.log_metadata else None,
+            metadata=log.extra if log.extra else None,
             created_at=log.created_at.isoformat()
         )
         for log in logs

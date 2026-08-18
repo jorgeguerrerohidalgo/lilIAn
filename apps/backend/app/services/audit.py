@@ -32,7 +32,10 @@ def record_audit_log(
         entity_id=entity_id,
         ip_address=ip_address,
         user_agent=user_agent,
-        metadata=json.dumps(metadata) if metadata else None
+        # `extra` is the Python attribute; the DB column is `metadata` (JSONB).
+        # We pass the dict directly so SQLAlchemy serialises it as JSONB
+        # rather than coercing a string into a JSONB column.
+        extra=metadata,
     )
     db.add(audit_log)
     db.commit()

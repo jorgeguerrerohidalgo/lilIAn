@@ -60,7 +60,7 @@ def _make_audit_log(db, *, org_id, user_id, action, entity_type=None, entity_id=
         entity_type=entity_type,
         entity_id=entity_id,
         ip_address=ip,
-        log_metadata=str(metadata) if metadata else None,
+        extra=metadata,
         created_at=datetime.utcnow() - timedelta(days=days_ago),
     )
     db.add(log)

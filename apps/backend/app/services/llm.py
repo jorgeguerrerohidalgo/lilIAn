@@ -116,7 +116,7 @@ class AnthropicLLM(LLMProvider):
                     elif event_type in ("message_stop", "end"):
                         return
 
-    @with_retry(max_retries=5, initial_delay=3.0)
+    @with_retry(max_retries=2, initial_delay=2.0)
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         if not self.api_key:
             logger.error("AnthropicLLM: API key is not configured")
@@ -237,7 +237,7 @@ class OpenAILLM(LLMProvider):
                         if content:
                             yield content
 
-    @with_retry(max_retries=5, initial_delay=1.0)
+    @with_retry(max_retries=2, initial_delay=2.0)
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         if not self.api_key:
             logger.error("OpenAILLM: API key is not configured")
@@ -326,7 +326,7 @@ class MiniMaxLLM(LLMProvider):
         if text:
             yield text
 
-    @with_retry(max_retries=5, initial_delay=3.0)
+    @with_retry(max_retries=2, initial_delay=2.0)
     def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
         messages = []
         if system_prompt:

@@ -1050,19 +1050,162 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
     Cambia el estado del caso a ``processing``, recupera los chunks
     relevantes para el análisis, ejecuta la validación documental,
     invoca ``analyze_contract`` y guarda el resultado en
-    ``AnalysisReport`` y ``RiskItem``.
-
-    Args:
-        matter_id: ID del caso a analizar.
-        organization_id: ID de la organización (multi-tenant).
-        user_id: ID del usuario que dispara el análisis; se persiste
-            como ``generated_by_user_id``.
-
-    Returns:
-        dict con ``report_id``, ``status`` (``completed`` o
-        ``missing_information``), ``confidence`` y ``risk_count``.
-        Si el caso no existe devuelve ``{"error": "Caso no encontrado"}``.
+    ``AnalysisReport`` y ``RiskItem``. Any uncaught exception is
+    captured and reflected in ``matter.status`` as ``error:<reason>``
+    so the frontend can show the failure instead of polling forever.
     """
+    try:
+        return _generate_analysis_for_matter_inner(matter_id, organization_id, user_id)
+    except Exception as exc:
+        logger.exception("generate_analysis_for_matter crashed: %s", exc)
+        _set_matter_error_status(matter_id, str(exc))
+        return {"error": str(exc)}
+
+
+def _set_matter_error_status(matter_id: int, error_msg: str) -> None:
+    """Best-effort: persist the failure onto the matter row so the
+    ``/status`` endpoint reports it without the frontend having to
+    parse exception strings."""
+    try:
+        db = SessionLocal()
+        matter = db.query(Matter).filter(Matter.id == matter_id).first()
+        if matter is not None:
+            matter.status = f"error:{error_msg[:120]}"
+            db.commit()
+        db.close()
+    except Exception as inner:  # pragma: no cover - last resort
+        logger.warning("could not persist matter error status: %s", inner)
+
+
+def _extract_deadlines_from_processed_doc(
+    db, doc, matter_type: str | None, organization_id: int
+) -> int:
+    """Lightweight fallback for docs that have extracted_text but no
+    DocumentAnalysis yet. Calls the LLM with a short prompt to extract
+    just the timeline, then writes DeadlineAlert rows directly.
+
+    Returns the number of alerts created. Best-effort: any failure
+    is logged and the function returns 0.
+    """
+    if not doc.extracted_text or len(doc.extracted_text.strip()) < 200:
+        return 0
+    try:
+        from app.services.deadline_generator import parse_timeline_item, classify_urgency, calculate_importance_score
+        from app.models.deadline_alert import DeadlineAlert
+        from app.services.llm import get_llm_provider
+        from datetime import date, datetime, timedelta
+        import json as _json
+
+        provider = get_llm_provider()
+        prompt = (
+            "Analiza el siguiente fragmento de contrato chileno y extrae SOLO los plazos, "
+            "fechas críticas y vencimientos mencionados. Para cada uno devuelve un JSON con "
+            "los campos: evento (texto breve), tipo ('vencimiento'|'aviso_previo'|'renovacion'|"
+            "'prescripcion'|'pago'|'garantia'|'firma'|'plazo_sin_penalidad'), fecha_iso (YYYY-MM-DD "
+            "si está explícita, sino null), plazo_dias (número o null si no hay), "
+            "consecuencia (qué pasa si no se cumple), y referencia_legal (ley aplicable si la hay).\n"
+            "Responde con un array JSON. Si no encuentras plazos, devuelve [].\n\n"
+            f"TEXTO:\n{doc.extracted_text[:15000]}"
+        )
+        raw = provider.generate(
+            prompt=prompt,
+            system_prompt="=Eres un asistente legal chileno que extrae plazos contractuales. Responde SOLO con JSON válido.",
+            max_tokens=2000,
+            temperature=0.2,
+        )
+        # Parse the JSON array
+        text = (raw or "").strip()
+        if text.startswith("```"):
+            first_nl = text.find("\n")
+            last_fence = text.rfind("```")
+            if first_nl != -1 and last_fence != -1:
+                text = text[first_nl + 1:last_fence].strip()
+        try:
+            items = _json.loads(text)
+        except _json.JSONDecodeError:
+            start = text.find("[")
+            end = text.rfind("]")
+            if start != -1 and end > start:
+                items = _json.loads(text[start:end + 1])
+            else:
+                return 0
+        if not isinstance(items, list) or not items:
+            return 0
+
+        created = 0
+        today = date.today()
+        for item in items[:8]:  # cap per doc
+            if not isinstance(item, dict):
+                continue
+            evento = str(item.get("evento") or item.get("event") or "").strip()[:200]
+            if not evento:
+                continue
+            event_type = str(item.get("tipo") or item.get("type") or "vencimiento").strip().lower()
+            if event_type not in {"vencimiento", "aviso_previo", "renovacion", "prescripcion", "pago", "garantia", "firma", "plazo_sin_penalidad"}:
+                event_type = "vencimiento"
+
+            due_date = None
+            date_str = item.get("fecha_iso") or item.get("date")
+            if isinstance(date_str, str):
+                for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+                    try:
+                        due_date = datetime.strptime(date_str, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+            plazo = item.get("plazo_dias") or item.get("days")
+            if due_date is None and isinstance(plazo, (int, float)) and plazo > 0:
+                due_date = today + timedelta(days=int(plazo))
+            if due_date is None:
+                due_date = today + timedelta(days=30)
+
+            days_remaining = (due_date - today).days
+            urgency = classify_urgency(event_type, days_remaining)
+            importance = calculate_importance_score(urgency, days_remaining)
+
+            # De-dupe against existing alerts
+            source_event = f"{event_type}:{evento[:80]}"
+            existing = (
+                db.query(DeadlineAlert)
+                .filter(
+                    DeadlineAlert.document_id == doc.id,
+                    DeadlineAlert.source_event == source_event,
+                    DeadlineAlert.status != "dismissed",
+                )
+                .first()
+            )
+            if existing:
+                continue
+
+            alert = DeadlineAlert(
+                organization_id=organization_id,
+                matter_id=doc.matter_id,
+                document_id=doc.id,
+                title=evento,
+                description=str(item.get("consecuencia") or item.get("consecuence") or "")[:500] or None,
+                event_type=event_type,
+                due_date=due_date,
+                days_remaining=days_remaining,
+                is_overdue=days_remaining < 0,
+                urgency=urgency,
+                importance_score=importance,
+                source_event=source_event,
+                legal_reference=str(item.get("referencia_legal") or item.get("legal_reference") or "")[:200] or None,
+                consequence=str(item.get("consecuencia") or "")[:500] or None,
+            )
+            db.add(alert)
+            created += 1
+        if created:
+            db.commit()
+        return created
+    except Exception as exc:
+        logger.warning("inline deadline extraction failed for doc %s: %s", doc.id, exc)
+        return 0
+
+
+def _generate_analysis_for_matter_inner(
+    matter_id: int, organization_id: int, user_id: int
+) -> dict:
     db = SessionLocal()
     try:
         matter = db.query(Matter).filter(
@@ -1085,7 +1228,6 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
 
         matter_type_value = matter.matter_type.value if hasattr(matter.matter_type, 'value') else matter.matter_type
 
-        # Ejecutar validación de documentos antes del análisis
         validation_result = None
         try:
             import asyncio
@@ -1117,13 +1259,15 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
             validation_summary=validation_summary
         )
 
-        # Auto-generate deadline alerts from each analyzed document so the
-        # Tiempos tab is populated as a side-effect of the matter analysis.
-        # Best-effort: a failure here does NOT invalidate the analysis report.
+        # Auto-generate deadline alerts from EVERY document that already
+        # has a DocumentAnalysis row (status="analyzed"). Best-effort.
+        # If the user has not yet clicked "Analizar" on a particular
+        # document, that document is skipped here — its timeline gets
+        # extracted the next time the user clicks "Analizar" on it.
         try:
             from app.models.document import Document
             from app.services.deadline_generator import generate_alerts_from_document
-            analyzed_docs = (
+            ready_docs = (
                 db.query(Document)
                 .filter(
                     Document.matter_id == matter_id,
@@ -1133,12 +1277,36 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
                 .all()
             )
             total_alerts = 0
-            for doc in analyzed_docs:
+            for doc in ready_docs:
                 ids = generate_alerts_from_document(doc.id)
                 total_alerts += len(ids)
+
+            # Fallback: if no doc has been individually analyzed yet, do
+            # a lightweight inline timeline extraction from any
+            # "processed" doc using only the extracted_text. This makes
+            # the Tiempos tab populate as a side-effect of the matter
+            # analysis even when the user never clicked "Analizar" on
+            # each doc individually.
+            if not ready_docs:
+                processed_docs = (
+                    db.query(Document)
+                    .filter(
+                        Document.matter_id == matter_id,
+                        Document.organization_id == organization_id,
+                        Document.status == "processed",
+                        Document.extracted_text.is_not(None),
+                    )
+                    .all()
+                )
+                for doc in processed_docs[:3]:  # cap at 3 to keep tokens bounded
+                    alerts = _extract_deadlines_from_processed_doc(
+                        db, doc, matter_type_value, organization_id
+                    )
+                    total_alerts += alerts
+
             logger.info(
-                "matter %s: generated %d deadline alerts across %d documents",
-                matter_id, total_alerts, len(analyzed_docs),
+                "matter %s: generated %d deadline alerts",
+                matter_id, total_alerts,
             )
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("deadline generation skipped for matter %s: %s", matter_id, exc)
