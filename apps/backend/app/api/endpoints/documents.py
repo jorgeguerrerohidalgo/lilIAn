@@ -221,6 +221,57 @@ def delete_document(
     db.commit()
 
 
+@router.get("/{document_id}/debug")
+def debug_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db)
+):
+    """Diagnostic endpoint for stuck documents.
+
+    Returns the document's status, storage_path, whether the file
+    actually exists on disk, and the document's timestamps. Used to
+    figure out why a document is stuck in "processing" — almost always
+    a storage issue (Railway's ephemeral filesystem wiped the file on
+    the latest deploy).
+    """
+    import os
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.organization_id == membership.organization_id
+    ).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    file_exists = False
+    resolved_path = None
+    if document.storage_path:
+        from app.services.storage import get_file_path
+        resolved_path = get_file_path(document.storage_path)
+        if resolved_path:
+            file_exists = os.path.exists(resolved_path)
+
+    return {
+        "document_id": document.id,
+        "status": document.status,
+        "original_filename": document.original_filename,
+        "storage_path": document.storage_path,
+        "resolved_path": resolved_path,
+        "file_exists_on_disk": file_exists,
+        "has_extracted_text": bool(document.extracted_text),
+        "extracted_text_length": len(document.extracted_text) if document.extracted_text else 0,
+        "file_size_bytes": document.file_size,
+        "page_count": document.page_count,
+        "created_at": document.created_at.isoformat() if document.created_at else None,
+        "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+        "hint": (
+            "El archivo no existe en disco. Railway borra /app/storage/documents "
+            "en cada redeploy. Solución: re-subir el documento."
+        ) if not file_exists and document.storage_path else None,
+    }
+
+
 @router.post("/{document_id}/process")
 def reprocess_document(
     document_id: int,
