@@ -240,21 +240,49 @@ def run_migrations_endpoint(
 ) -> dict:
     """One-shot admin endpoint to run the startup migrations manually.
 
-    This exists because Railway's Railpack cache was returning stale
-    images after several deploys, so the lifespan hook that calls the
-    heal never actually ran in production. Triggering this endpoint
-    on the live container runs the same SQL heal against the live DB
-    without requiring a fresh build.
+    Uses a raw ``psycopg2`` connection in autocommit mode because
+    SQLAlchemy's ``execution_options(isolation_level="AUTOCOMMIT")``
+    silently rolls back ``ALTER TYPE ... ADD VALUE`` on Postgres.
+
+    Safe to call repeatedly: every statement is idempotent
+    (``ADD VALUE IF NOT EXISTS``, ``ADD COLUMN IF NOT EXISTS``,
+    conditional ``UPDATE``).
     """
-    from migrations.fix_matter_status_enum import (
-        _add_enum_value,
-        _ensure_last_error_column,
-        _heal_corrupt_status_rows,
+    import logging
+    import os
+
+    import psycopg2
+
+    raw_url = os.environ.get("DATABASE_URL", "")
+    conn = psycopg2.connect(
+        raw_url.replace("postgresql+psycopg2://", "postgresql://")
     )
-    _add_enum_value()
-    _ensure_last_error_column()
-    healed = _heal_corrupt_status_rows()
-    return {"healed_rows": healed, "status": "ok"}
+    try:
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("ALTER TYPE matterstatus ADD VALUE IF NOT EXISTS 'failed'")
+        cur.execute("ALTER TABLE matters ADD COLUMN IF NOT EXISTS last_error TEXT")
+        cur.execute(
+            """
+            UPDATE matters
+               SET status = 'failed', last_error = SUBSTR(status, 7)
+             WHERE status LIKE 'error:%' AND last_error IS NULL
+            """
+        )
+        healed = cur.rowcount
+        cur.execute("SELECT enum_range(NULL::matterstatus)::text")
+        enum_values = cur.fetchone()[0]
+        cur.close()
+        logging.getLogger("lilian.admin").info(
+            "run-migrations completed; healed=%d enum=%s", healed, enum_values
+        )
+        return {
+            "healed_rows": healed,
+            "enum_values": enum_values,
+            "status": "ok",
+        }
+    finally:
+        conn.close()
 
 
 @app.post("/admin/force-fix-enum", tags=["admin"])
