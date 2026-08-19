@@ -25,6 +25,7 @@ class MatterStatus(enum.StrEnum):
     ANALYSIS_READY = "analysis_ready"
     PENDING_HUMAN_REVIEW = "pending_human_review"
     MISSING_INFORMATION = "missing_information"
+    FAILED = "failed"
     CONTACT_CLIENT = "contact_client"
     IN_PROGRESS = "in_progress"
     CLOSED = "closed"

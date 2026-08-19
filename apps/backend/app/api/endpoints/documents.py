@@ -322,7 +322,6 @@ def debug_document(
             "file_size_bytes": document.file_size,
             "page_count": document.page_count,
             "created_at": document.created_at.isoformat() if document.created_at else None,
-            "updated_at": document.updated_at.isoformat() if document.updated_at else None,
             "processed_at": (
                 document.processed_at.isoformat()
                 if getattr(document, "processed_at", None) else None

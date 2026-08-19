@@ -188,7 +188,7 @@ def get_matter_analysis_status(
     failures without waiting for the polling to time out. Returns
     ``{status, error}`` where ``status`` is the matter's current
     lifecycle status and ``error`` carries the failure message when
-    the last attempt set ``status = "error:<reason>"``.
+    the last attempt set ``status = "failed"``.
     """
     matter = db.query(Matter).filter(
         Matter.id == matter_id,
@@ -198,15 +198,12 @@ def get_matter_analysis_status(
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
     status = matter.status or "new"
-    error_message = None
-    if isinstance(status, str) and status.startswith("error:"):
-        error_message = status[len("error:"):].strip() or "Error desconocido"
-        status = "failed"
+    error_message = getattr(matter, "last_error", None) if status == "failed" else None
     return {
         "matter_id": matter_id,
         "status": status,
         "error": error_message,
-        "updated_at": matter.updated_at.isoformat() if matter.updated_at else None,
+        "updated_at": matter.updated_at.isoformat() if getattr(matter, "updated_at", None) else None,
     }
 
 

@@ -14,6 +14,15 @@ cd /app
 # at import time.
 export ANYIO_MAX_THREADS=${ANYIO_MAX_THREADS:-128}
 
+# Idempotent DB migration: heal any rows whose ``status`` carries the
+# historical ``"error:..."`` prefix (no longer in the MatterStatus enum)
+# and add the ``last_error`` column if it hasn't been added yet. Without
+# this, every read of a matter row from a previous failed analysis
+# raises a LookupError and crashes the request. See
+# apps/backend/migrations/fix_matter_status_enum.py.
+python -m migrations.fix_matter_status_enum || \
+  echo "[start.sh] fix_matter_status_enum migration failed; continuing startup" >&2
+
 exec python -m uvicorn app.main:app \
   --host 0.0.0.0 \
   --port ${PORT:-8000} \

@@ -1065,12 +1065,25 @@ def generate_analysis_for_matter(matter_id: int, organization_id: int, user_id: 
 def _set_matter_error_status(matter_id: int, error_msg: str) -> None:
     """Best-effort: persist the failure onto the matter row so the
     ``/status`` endpoint reports it without the frontend having to
-    parse exception strings."""
+    parse exception strings.
+
+    The error message is stored in the dedicated ``last_error`` column
+    (added by the ``fix_matter_status_enum`` migration) while the
+    canonical ``status`` enum stays in a valid value (``failed``).
+    Storing the error inline in ``status`` with an ``"error:"`` prefix
+    was the original sin that crashed every read of the row with a
+    ``LookupError`` once a previous analysis run had failed.
+    """
     try:
         db = SessionLocal()
         matter = db.query(Matter).filter(Matter.id == matter_id).first()
         if matter is not None:
-            matter.status = f"error:{error_msg[:120]}"
+            matter.status = "failed"
+            # ``last_error`` may not exist on pre-migration deployments —
+            # guard with ``getattr`` so the failure path itself never
+            # crashes with an ``AttributeError``.
+            if hasattr(matter, "last_error"):
+                matter.last_error = error_msg[:500]
             db.commit()
         db.close()
     except Exception as inner:  # pragma: no cover - last resort
@@ -1090,11 +1103,15 @@ def _extract_deadlines_from_processed_doc(
     if not doc.extracted_text or len(doc.extracted_text.strip()) < 200:
         return 0
     try:
-        from app.services.deadline_generator import parse_timeline_item, classify_urgency, calculate_importance_score
-        from app.models.deadline_alert import DeadlineAlert
-        from app.services.llm import get_llm_provider
-        from datetime import date, datetime, timedelta
         import json as _json
+        from datetime import date, datetime, timedelta
+
+        from app.models.deadline_alert import DeadlineAlert
+        from app.services.deadline_generator import (
+            calculate_importance_score,
+            classify_urgency,
+        )
+        from app.services.llm import get_llm_provider
 
         provider = get_llm_provider()
         prompt = (
@@ -1250,7 +1267,9 @@ def _generate_analysis_for_matter_inner(
         analysis_result = analyze_contract(documents_text, matter_type_value, organization_id)
 
         if "error" in analysis_result and not analysis_result.get("resumen_ejecutivo"):
-            matter.status = f"error:{analysis_result.get('error', 'unknown')[:120]}"
+            matter.status = "failed"
+            if hasattr(matter, "last_error"):
+                matter.last_error = analysis_result.get("error", "unknown")[:500]
             db.commit()
             return analysis_result
 
