@@ -1,5 +1,6 @@
 import logging as _logging
 import uuid as _uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -34,12 +35,44 @@ from app.core.config import settings
 _app_logger = _logging.getLogger("lilian.errors")
 
 
+def _run_startup_migrations() -> None:
+    """Run idempotent DB migrations on application startup.
+
+    Why this lives here instead of in ``start.sh``:
+
+      - The Railway service was reconfigured in the UI to use
+        ``RAILPACK`` instead of the Dockerfile, so ``start.sh`` no
+        longer runs. Railpack auto-detects Python and starts uvicorn
+        directly.
+      - Putting the heal here guarantees it runs on every container
+        boot, regardless of builder (Dockerfile, Nixpacks, Railpack).
+      - Each statement is idempotent (``ADD VALUE IF NOT EXISTS``,
+        ``ADD COLUMN IF NOT EXISTS``, conditional ``UPDATE``), so
+        repeated boots are cheap and safe.
+    """
+    try:
+        from migrations.fix_matter_status_enum import main as _heal
+        _heal()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning(
+            "startup migration fix_matter_status_enum failed (continuing): %s",
+            exc,
+        )
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    _run_startup_migrations()
+    yield
+
+
 app = FastAPI(
     title="lilIAn - API",
     description="Plataforma legaltech chilena asistida por IA",
     version="0.1.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=_lifespan,
 )
 
 
