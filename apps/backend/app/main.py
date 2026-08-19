@@ -255,3 +255,52 @@ def run_migrations_endpoint(
     _ensure_last_error_column()
     healed = _heal_corrupt_status_rows()
     return {"healed_rows": healed, "status": "ok"}
+
+
+@app.post("/admin/force-fix-enum", tags=["admin"])
+def force_fix_enum_endpoint(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Last-resort endpoint that uses a raw psycopg2 connection in
+    AUTOCOMMIT mode to force ``ALTER TYPE matterstatus ADD VALUE
+    'failed'``.
+
+    The lifespan / ``run-migrations`` endpoint uses SQLAlchemy's
+    ``execution_options(isolation_level="AUTOCOMMIT")``, which on
+    Postgres + SQLAlchemy 2.0 sometimes silently rolls back the
+    DDL. This endpoint drops to the DBAPI directly so the ALTER TYPE
+    is guaranteed to commit.
+    """
+    import logging
+    import os
+
+    import psycopg2
+
+    raw_url = os.environ.get("DATABASE_URL", "")
+    # SQLAlchemy sometimes prefixes the URL with ``postgresql+psycopg2://``.
+    conn = psycopg2.connect(raw_url.replace("postgresql+psycopg2://", "postgresql://"))
+    try:
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("ALTER TYPE matterstatus ADD VALUE IF NOT EXISTS 'failed'")
+        cur.execute("ALTER TABLE matters ADD COLUMN IF NOT EXISTS last_error TEXT")
+        cur.execute(
+            """
+            UPDATE matters
+               SET status = 'failed', last_error = SUBSTR(status, 7)
+             WHERE status LIKE 'error:%' AND last_error IS NULL
+            """
+        )
+        healed = cur.rowcount
+        cur.execute(
+            "SELECT enum_range(NULL::matterstatus)::text"
+        )
+        enum_values = cur.fetchone()[0]
+        cur.close()
+    finally:
+        conn.close()
+
+    logging.getLogger("lilian.admin").info(
+        "force-fix-enum completed; healed=%d enum=%s", healed, enum_values
+    )
+    return {"healed_rows": healed, "enum_values": enum_values, "status": "ok"}
