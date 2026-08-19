@@ -62,6 +62,10 @@ def _run_startup_migrations() -> None:
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
+    _app_logger.info(
+        "lilian api starting — build marker commit=%s",
+        "e62134f-fix-migration-lifespan",
+    )
     _run_startup_migrations()
     yield
 
