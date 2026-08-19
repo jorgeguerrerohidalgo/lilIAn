@@ -2,12 +2,13 @@ import logging as _logging
 import uuid as _uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.deps.auth import get_current_user
 from app.api.endpoints import (
     admin,
     agents,
@@ -31,6 +32,7 @@ from app.api.endpoints import (
     templates,
 )
 from app.core.config import settings
+from app.models.user import User
 
 _app_logger = _logging.getLogger("lilian.errors")
 
@@ -230,3 +232,26 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
+@app.post("/admin/run-migrations", tags=["admin"])
+def run_migrations_endpoint(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """One-shot admin endpoint to run the startup migrations manually.
+
+    This exists because Railway's Railpack cache was returning stale
+    images after several deploys, so the lifespan hook that calls the
+    heal never actually ran in production. Triggering this endpoint
+    on the live container runs the same SQL heal against the live DB
+    without requiring a fresh build.
+    """
+    from migrations.fix_matter_status_enum import (
+        _add_enum_value,
+        _ensure_last_error_column,
+        _heal_corrupt_status_rows,
+    )
+    _add_enum_value()
+    _ensure_last_error_column()
+    healed = _heal_corrupt_status_rows()
+    return {"healed_rows": healed, "status": "ok"}
