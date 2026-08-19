@@ -235,41 +235,116 @@ def debug_document(
     figure out why a document is stuck in "processing" — almost always
     a storage issue (Railway's ephemeral filesystem wiped the file on
     the latest deploy).
+
+    Wrapped in a defensive try/except so this endpoint — which exists
+    precisely to help debug — never itself returns an opaque 500. Any
+    unexpected exception is captured into the response body so the
+    caller can see exactly what blew up.
     """
+    import logging as _logging
     import os
-    document = db.query(Document).filter(
-        Document.id == document_id,
-        Document.organization_id == membership.organization_id
-    ).first()
-    if not document:
-        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    import traceback as _tb
 
-    file_exists = False
-    resolved_path = None
-    if document.storage_path:
-        from app.services.storage import get_file_path
-        resolved_path = get_file_path(document.storage_path)
-        if resolved_path:
-            file_exists = os.path.exists(resolved_path)
+    logger = _logging.getLogger("lilian.documents.debug")
 
-    return {
-        "document_id": document.id,
-        "status": document.status,
-        "original_filename": document.original_filename,
-        "storage_path": document.storage_path,
-        "resolved_path": resolved_path,
-        "file_exists_on_disk": file_exists,
-        "has_extracted_text": bool(document.extracted_text),
-        "extracted_text_length": len(document.extracted_text) if document.extracted_text else 0,
-        "file_size_bytes": document.file_size,
-        "page_count": document.page_count,
-        "created_at": document.created_at.isoformat() if document.created_at else None,
-        "updated_at": document.updated_at.isoformat() if document.updated_at else None,
-        "hint": (
-            "El archivo no existe en disco. Railway borra /app/storage/documents "
-            "en cada redeploy. Solución: re-subir el documento."
-        ) if not file_exists and document.storage_path else None,
+    debug_info: dict = {
+        "document_id": document_id,
+        "queried_with_user": current_user.id,
+        "queried_with_org": membership.organization_id,
     }
+
+    try:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.organization_id == membership.organization_id
+        ).first()
+
+        if not document:
+            debug_info["status"] = "not_found"
+            debug_info["hint"] = (
+                "No existe un documento con ese id en tu organización, "
+                "o pertenece a otra organización."
+            )
+            return debug_info
+
+        file_exists = False
+        resolved_path = None
+        storage_error = None
+        if document.storage_path:
+            try:
+                from app.services.storage import get_file_path
+                resolved_path = get_file_path(document.storage_path)
+                if resolved_path:
+                    file_exists = os.path.exists(resolved_path)
+            except Exception as storage_exc:
+                storage_error = (
+                    f"{type(storage_exc).__name__}: {storage_exc}"
+                )
+                logger.warning(
+                    "storage lookup failed for doc %s: %s",
+                    document.id, storage_error,
+                )
+
+        hint = None
+        if document.status in ("processing", "uploaded") and not file_exists:
+            hint = (
+                "El archivo no existe en disco. Railway borra "
+                "/app/storage/documents en cada redeploy. "
+                "Solución: elimina el documento y vuelve a subirlo."
+            )
+        elif document.status == "failed":
+            hint = (
+                "El procesamiento del documento falló. Revisa los logs "
+                "del servidor buscando el document_id para ver el error."
+            )
+        elif document.status == "processed" and not document.extracted_text:
+            hint = (
+                "El documento está marcado como procesado pero no tiene "
+                "texto extraído — posible corrupción del extraction pipeline."
+            )
+
+        debug_info.update({
+            "status": document.status,
+            "original_filename": document.original_filename,
+            "mime_type": document.mime_type,
+            "storage_path": document.storage_path,
+            "storage_backend": os.environ.get("STORAGE_BACKEND", "local"),
+            "storage_root": (
+                os.path.realpath(os.environ.get("STORAGE_PATH",
+                                               "/app/storage/documents"))
+            ),
+            "resolved_path": resolved_path,
+            "file_exists_on_disk": file_exists,
+            "has_extracted_text": bool(document.extracted_text),
+            "extracted_text_length": (
+                len(document.extracted_text) if document.extracted_text else 0
+            ),
+            "file_size_bytes": document.file_size,
+            "page_count": document.page_count,
+            "created_at": document.created_at.isoformat() if document.created_at else None,
+            "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+            "processed_at": (
+                document.processed_at.isoformat()
+                if getattr(document, "processed_at", None) else None
+            ),
+            "storage_error": storage_error,
+            "hint": hint,
+        })
+        return debug_info
+
+    except Exception as exc:
+        logger.exception("debug endpoint crashed for doc %s", document_id)
+        debug_info.update({
+            "status": "endpoint_error",
+            "exception_type": type(exc).__name__,
+            "exception_detail": str(exc),
+            "traceback": _tb.format_exc().splitlines()[-10:],
+            "hint": (
+                "El endpoint de debug crasheó mientras armaba el informe. "
+                "Comparte esta respuesta con el equipo de desarrollo."
+            ),
+        })
+        return debug_info
 
 
 @router.post("/{document_id}/process")

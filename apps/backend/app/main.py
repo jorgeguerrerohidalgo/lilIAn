@@ -1,6 +1,11 @@
-from fastapi import FastAPI
+import logging as _logging
+import uuid as _uuid
+
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.endpoints import (
     admin,
@@ -26,6 +31,9 @@ from app.api.endpoints import (
 )
 from app.core.config import settings
 
+_app_logger = _logging.getLogger("lilian.errors")
+
+
 app = FastAPI(
     title="lilIAn - API",
     description="Plataforma legaltech chilena asistida por IA",
@@ -33,6 +41,79 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+
+def _error_envelope(
+    detail: str,
+    request_id: str,
+    *,
+    error_type: str | None = None,
+    extra: dict | None = None,
+) -> dict:
+    body = {
+        "detail": detail,
+        "request_id": request_id,
+        "error_type": error_type,
+    }
+    if extra:
+        body.update(extra)
+    return body
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Attach a stable request_id to every request and response.
+
+    The id flows into the JSON error envelope when exceptions bubble up
+    so the frontend can quote it in bug reports.
+    """
+    request_id = request.headers.get("x-request-id") or str(_uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["x-request-id"] = request_id
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Pydantic / FastAPI request-body validation: return 422 with JSON."""
+    request_id = getattr(request.state, "request_id", str(_uuid.uuid4()))
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=_error_envelope(
+            detail="Request validation failed",
+            request_id=request_id,
+            error_type="validation_error",
+            extra={"errors": exc.errors()},
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Last-resort handler.
+
+    Before this existed, an unhandled exception inside a route returned
+    a plain ``Internal Server Error`` text body with no JSON, no
+    request_id, and (worst) occasionally poisoned the shared DB session
+    so subsequent requests on unrelated paths also returned 500. The
+    handler logs the full traceback server-side, returns a JSON envelope
+    the frontend can parse, and crucially does NOT re-raise: the
+    request lifecycle ends here so the next request starts clean.
+    """
+    request_id = getattr(request.state, "request_id", str(_uuid.uuid4()))
+    _app_logger.exception(
+        "unhandled exception on %s %s (request_id=%s)",
+        request.method, request.url.path, request_id,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=_error_envelope(
+            detail=f"{type(exc).__name__}: {exc}",
+            request_id=request_id,
+            error_type=type(exc).__name__,
+        ),
+    )
 
 # S7-05: compress responses larger than 1KB to cut bandwidth for
 # analytics / list endpoints. Mounted BEFORE CORS so the

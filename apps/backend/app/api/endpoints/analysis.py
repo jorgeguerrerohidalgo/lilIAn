@@ -1,4 +1,8 @@
 
+import logging as _logging
+import threading
+from contextlib import suppress
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -18,10 +22,57 @@ from app.schemas.analysis import (
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
+_logger = _logging.getLogger("lilian.analysis")
+
+# Per-matter in-process lock so two concurrent POSTs for the same case do
+# not race each other and corrupt the matter's status / DB rows.
+_analysis_locks: dict[int, threading.Lock] = {}
+_analysis_locks_guard = threading.Lock()
+
+
+def _get_analysis_lock(matter_id: int) -> threading.Lock:
+    with _analysis_locks_guard:
+        lock = _analysis_locks.get(matter_id)
+        if lock is None:
+            lock = threading.Lock()
+            _analysis_locks[matter_id] = lock
+        return lock
+
 
 def run_analysis_task(matter_id: int, organization_id: int, user_id: int):
-    from app.services.analysis import generate_analysis_for_matter
-    generate_analysis_for_matter(matter_id, organization_id, user_id)
+    """Background-task entry point.
+
+    Wraps the real orchestrator with a per-matter lock and a hard
+    top-level ``try/except`` so a crash inside the analysis pipeline
+    never bubbles back into the FastAPI threadpool as an unhandled
+    exception (which is what was poisoning subsequent requests).
+    """
+    lock = _get_analysis_lock(matter_id)
+    if not lock.acquire(blocking=False):
+        _logger.warning(
+            "analysis for matter %s already running, skipping duplicate dispatch",
+            matter_id,
+        )
+        return
+    try:
+        from app.services.analysis import generate_analysis_for_matter
+        try:
+            generate_analysis_for_matter(matter_id, organization_id, user_id)
+        except Exception:
+            # Belt-and-braces: generate_analysis_for_matter already
+            # swallows + persists the failure, but if a future change
+            # leaks an exception we still must NOT let it bubble.
+            _logger.exception(
+                "background analysis task leaked exception for matter %s",
+                matter_id,
+            )
+            with suppress(Exception):
+                from app.services.analysis import _set_matter_error_status
+                _set_matter_error_status(
+                    matter_id, "background task crashed"
+                )
+    finally:
+        lock.release()
 
 
 @router.post("", status_code=202)

@@ -1356,8 +1356,35 @@ export default function MatterDetailPage() {
                 <p className="text-sm text-gray-500 max-w-md mx-auto mb-4">
                   {documents.length === 0
                     ? "Sube documentos en la pestaña Documentos para poder buscar plazos."
-                    : "Haz click en \"Buscar plazos en documentos\" para que la IA analice fechas críticas, multas, garantías y prescripciones."}
+                    : "Pulsa el botón para que la IA analice fechas críticas, multas, garantías y prescripciones en tus documentos."}
                 </p>
+                {documents.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRequestAnalysis}
+                    disabled={analyzing}
+                    aria-label="Buscar plazos en documentos"
+                    aria-busy={analyzing}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                  >
+                    {analyzing ? (
+                      <>
+                        <svg aria-hidden="true" className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Buscando plazos…
+                      </>
+                    ) : (
+                      "Buscar plazos en documentos"
+                    )}
+                  </button>
+                )}
+                {analyzing && (
+                  <p className="mt-3 text-xs text-gray-500">
+                    El análisis también actualizará la pestaña &quot;Análisis IA&quot;.
+                  </p>
+                )}
               </div>
             ) : (
               <ul className="space-y-3" aria-label="Lista de plazos detectados">
