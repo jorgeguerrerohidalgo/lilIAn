@@ -208,11 +208,27 @@ def delete_document(
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    # Eliminar chunks asociados primero
+    # Eliminar dependencias en orden: primero alerts que referencian
+    # este documento, luego chunks, luego risk_items generados por
+    # analyses que incluían este documento, y finalmente el documento.
+    # El FK constraint ``deadline_alerts_document_id_fkey`` bloquea
+    # el DELETE si quedan alerts vivos (audit 20-ago-2026).
+    from app.models.deadline_alert import DeadlineAlert
+    db.query(DeadlineAlert).filter(
+        DeadlineAlert.document_id == document_id
+    ).delete(synchronize_session=False)
+
     from app.models.document_chunk import DocumentChunk
     db.query(DocumentChunk).filter(
         DocumentChunk.document_id == document_id
     ).delete()
+
+    # Risk items no tienen FK directo al documento pero análisis sí
+    # referencian matter; los reports de análisis se quedan vivos,
+    # sólo se borra el documento. Si el análisis había inyectado
+    # riesgos que referencian al documento via source_fragment,
+    # esos riesgos viven en risk_items.analysis_report_id — no
+    # referencian document_id, así que están bien.
 
     if document.storage_path:
         storage.delete_file(document.storage_path)
