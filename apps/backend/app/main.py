@@ -343,11 +343,15 @@ def test_anthropic_raw_endpoint(
     schema. The response is returned verbatim so we can see whether
     the LLM provider is reachable and what the raw text looks like.
 
-    If the response carries ``{"error": "..."}`` then the provider
-    path is broken; otherwise it shows what Claude actually emitted.
+    Also performs a raw ``httpx`` POST to the Anthropic API and
+    returns the HTTP status, headers, and first 800 chars of body
+    so we can see exactly what the upstream is returning.
     """
     import logging
 
+    import httpx
+
+    from app.core.config import settings
     from app.services.llm import get_llm_provider
 
     log = logging.getLogger("lilian.admin")
@@ -364,8 +368,7 @@ def test_anthropic_raw_endpoint(
 
     test_prompt = (
         "DOCUMENTO DE PRUEBA: La Ley 18916 establece el Código Aeronáutico.\n\n"
-        "Responde con un objeto JSON válido que tenga ``ok=true`` y "
-        "``echo`` igual a ``received``."
+        "Responde con un objeto JSON válido que tenga ok=true y echo igual a received."
     )
 
     log.info("test-anthropic-raw: invoking provider=%s", type(provider).__name__)
@@ -376,8 +379,50 @@ def test_anthropic_raw_endpoint(
     )
     log.info("test-anthropic-raw: result=%s", str(result)[:500])
 
+    # Also do a raw HTTP probe to see exactly what Anthropic returns.
+    raw_status = None
+    raw_body_excerpt = None
+    raw_error = None
+    try:
+        api_key = settings.LLM_API_KEY
+        model = settings.LLM_MODEL
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": (
+                    "Responde SOLO con el siguiente JSON válido: "
+                    "{\"ok\": true, \"echo\": \"received\"}"
+                )},
+                {"role": "assistant", "content": "{"},
+            ],
+            "max_tokens": 200,
+            "temperature": 0.0,
+        }
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json=payload,
+            )
+            raw_status = resp.status_code
+            try:
+                raw_body_excerpt = resp.text[:800]
+            except Exception:
+                raw_body_excerpt = "<unreadable>"
+    except Exception as exc:
+        raw_error = f"{type(exc).__name__}: {exc}"
+
     return {
         "provider": type(provider).__name__,
         "provider_model": getattr(provider, "model", "unknown"),
         "result": result,
+        "raw_anthropic_probe": {
+            "status": raw_status,
+            "body_excerpt": raw_body_excerpt,
+            "error": raw_error,
+        },
     }
