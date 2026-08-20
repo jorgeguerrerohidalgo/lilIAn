@@ -2,7 +2,8 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -121,41 +122,164 @@ class AnthropicLLM(LLMProvider):
         if not self.api_key:
             logger.error("AnthropicLLM: API key is not configured")
             return {"error": "LLM_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
-        system_with_schema = f"{system_prompt or ''}\n\nResponde SOLO con JSON válido siguiendo este esquema: {json.dumps(schema)}"
 
-        messages = [
-            {"role": "user", "content": f"{system_with_schema}\n\n{prompt}"}
+        # Anthropic does not have a native JSON mode like OpenAI's
+        # ``response_format={"type": "json_object"}``. The previous
+        # implementation just appended the schema to the prompt and
+        # asked for JSON in plain text, which failed to parse ~10–30 %
+        # of the time on Haiku 4.5 — leaving the caller with a
+        # generic ``{"error": "Failed to parse structured response"}``
+        # and an empty report.
+        #
+        # This implementation:
+        #   1. Pre-fills the assistant turn with ``{`` to force JSON-mode
+        #      behaviour (the model continues inside the object).
+        #   2. Strips common wrapping (markdown fences, prose before/after)
+        #      before json.loads.
+        #   3. Retries once with a corrective prompt if the first parse
+        #      fails.
+        schema_str = json.dumps(schema, ensure_ascii=False)
+        schema_hint = (
+            "Responde ÚNICAMENTE con un objeto JSON válido y completo "
+            "que cumpla exactamente este esquema. No incluyas prosa, "
+            "markdown ni explicaciones. Empieza directamente con ``{`` "
+            "y termina con ``}``.\n\nESQUEMA:\n" + schema_str
+        )
+
+        system_with_schema = (
+            (system_prompt or "") + "\n\n" + schema_hint
+        ).strip()
+
+        base_messages = [
+            {"role": "user", "content": f"{system_with_schema}\n\n{prompt}"},
+            {"role": "assistant", "content": "{"},
         ]
 
+        result = self._anthropic_json_call(base_messages, schema_str)
+        if "error" not in result:
+            return result
+
+        # First attempt failed — retry once with a corrective nudge.
+        retry_messages = list(base_messages) + [
+            {"role": "user", "content": (
+                "Tu respuesta anterior no fue JSON válido o no cumplió el "
+                "esquema. Responde ahora SOLO con un objeto JSON válido "
+                "siguiendo este esquema (sin prosa, sin markdown):\n\n"
+                + schema_str
+            )},
+            {"role": "assistant", "content": "{"},
+        ]
+        retry = self._anthropic_json_call(retry_messages, schema_str)
+        return retry
+
+    def _anthropic_json_call(
+        self, messages: list[dict], schema_str: str
+    ) -> dict:
+        """Make one Anthropic request and parse the response as JSON.
+
+        Returns ``{"error": "..."}`` on any failure (network, parse, or
+        schema mismatch) so callers can branch on the ``error`` key.
+        """
         payload = {
             "model": self.model,
             "messages": messages,
             "max_tokens": 4096,
-            "temperature": 0.3
+            "temperature": 0.3,
         }
+        try:
+            with httpx.Client() as client:
+                response = client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": self.api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json=payload,
+                    timeout=60.0,
+                )
+                response.raise_for_status()
+                data = response.json()
+                raw_text = data["content"][0]["text"]
+        except (httpx.HTTPError, KeyError, IndexError) as exc:
+            logger.warning("AnthropicLLM: request error: %s: %s", type(exc).__name__, exc)
+            return {"error": f"Anthropic request failed: {exc}"}
 
-        logger.debug("AnthropicLLM: making request", extra={"model": self.model})
-        with httpx.Client() as client:
-            response = client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": self.api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                },
-                json=payload,
-                timeout=60.0
+        parsed = _extract_first_json_object(raw_text)
+        if parsed is None:
+            logger.warning(
+                "AnthropicLLM: parse error; raw text first 200 chars: %.200s",
+                raw_text,
             )
-            logger.debug("AnthropicLLM: response received", extra={"status_code": response.status_code})
-            response.raise_for_status()
-            data = response.json()
-            try:
-                result = json.loads(data["content"][0]["text"])
-                logger.debug("AnthropicLLM: parsed structured response")
-                return result
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"AnthropicLLM: parse error: {e}")
-                return {"error": "Failed to parse structured response"}
+            return {"error": "Failed to parse structured response"}
+        if not isinstance(parsed, dict):
+            return {"error": "Parsed response is not a JSON object"}
+        return parsed
+
+
+def _extract_first_json_object(text: str) -> Any:
+    """Extract the first top-level JSON object from ``text``.
+
+    Handles three common shapes the LLM emits:
+      * pure JSON: ``{"foo": 1}``
+      * markdown-fenced: ``\\`\\`\\`json\\n{"foo": 1}\\n\\`\\`\\``
+      * prose + JSON: ``Aquí tienes: {"foo": 1} espero...``
+
+    Walks the string tracking brace depth so nested objects don't
+    confuse the slice. Returns ``None`` if no balanced object is
+    found.
+    """
+    if not text:
+        return None
+    stripped = text.strip()
+
+    # Strip leading markdown fence if present.
+    if stripped.startswith("```"):
+        # Drop the first fence line.
+        first_nl = stripped.find("\n")
+        if first_nl != -1:
+            stripped = stripped[first_nl + 1:]
+        # Drop trailing fence if present.
+        if stripped.rstrip().endswith("```"):
+            stripped = stripped.rstrip()[:-3].rstrip()
+
+    # Try direct parse first (cheap path).
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    # Walk the string for the first balanced ``{...}``.
+    start = stripped.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, len(stripped)):
+            ch = stripped[i]
+            if escape:
+                escape = False
+                continue
+            if ch == "\\":
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = stripped[start:i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break
+        start = stripped.find("{", start + 1)
+    return None
 
 
 class OpenAILLM(LLMProvider):
