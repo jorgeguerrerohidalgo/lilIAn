@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from typing import Any
 
@@ -11,16 +12,27 @@ from app.models.matter import Matter
 from app.models.review import Review, ReviewStatus
 from app.models.risk_item import RiskItem
 
+logger = logging.getLogger(__name__)
+
 # S1-06: phrases that strongly suggest the upstream document (or the LLM
 # itself) tried to break out of the analysis sandbox. When detected, the
 # analysis is automatically flagged for human review.
+#
+# Important: these patterns are scanned inside the LLM's *response* only
+# (not inside the user-supplied document text). Scanning the document
+# would generate false positives on legitimate legal language such as
+# "you are now entering into a binding agreement" — that is normal
+# contract wording, not an injection attempt. The actual scanning is
+# enforced by ``_detect_prompt_injection`` which walks only the
+# instruction-shaped fields of the response payload.
 _PROMPT_INJECTION_PATTERNS = (
-    re.compile(r"ignore (all )?previous instructions", re.IGNORECASE),
-    re.compile(r"ignore (all )?above instructions", re.IGNORECASE),
-    re.compile(r"disregard (the )?(system|previous) prompt", re.IGNORECASE),
-    re.compile(r"you are now (?!a legal)", re.IGNORECASE),
-    re.compile(r"new instructions?:", re.IGNORECASE),
-    re.compile(r"<\|im_start\|>|<\|im_end\|>", re.IGNORECASE),
+    re.compile(r"ignore (?:all )?(?:previous|above|prior) instructions?", re.IGNORECASE),
+    re.compile(r"disregard (?:the )?(?:system|previous|original) prompt", re.IGNORECASE),
+    re.compile(r"forget (?:everything|all) (?:above|before)", re.IGNORECASE),
+    re.compile(r"<\|\s*im_start\s*\|>|<\|\s*im_end\s*\|>", re.IGNORECASE),
+    re.compile(r"\[INST\]|\[/INST\]|<\|system\|>|<\|user\|>|<\|assistant\|>", re.IGNORECASE),
+    re.compile(r"^\s*system\s*:\s*you are\b", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*assistant\s*:\s*", re.IGNORECASE | re.MULTILINE),
 )
 
 # Allowed string fields and their character sets. Anything outside these
@@ -29,14 +41,41 @@ _MAX_STRING_LEN = 8_000
 _MAX_LIST_ITEMS = 200
 
 
+_INSTRUCTION_FIELD_NAMES = frozenset({
+    "system",
+    "system_prompt",
+    "instructions",
+    "instruction",
+    "prompt",
+    "user_message",
+    "new_instructions",
+    "developer",
+    "tool",
+    "function_call",
+})
+
+
 def _detect_prompt_injection(payload: Any) -> bool:
-    """Walk the LLM output looking for injection patterns."""
+    """Walk the LLM output looking for injection patterns.
+
+    Only scans fields that look like *instructions* or *prompts*
+    (``system``, ``instructions``, ``prompt``, ``new_instructions``,
+    ``developer``, ``tool``, etc.). Free-text fields that summarize
+    the document (``resumen_ejecutivo``, ``puntos_criticos``,
+    ``risks[*].description``) are skipped so legitimate legal
+    language such as *"you are now entering into a binding
+    agreement"* does not produce false positives.
+    """
     if isinstance(payload, str):
         return any(p.search(payload) for p in _PROMPT_INJECTION_PATTERNS)
     if isinstance(payload, list):
         return any(_detect_prompt_injection(item) for item in payload)
     if isinstance(payload, dict):
-        return any(_detect_prompt_injection(v) for v in payload.values())
+        for key, value in payload.items():
+            if isinstance(key, str) and key.lower() in _INSTRUCTION_FIELD_NAMES:
+                if _detect_prompt_injection(value):
+                    return True
+        return False
     return False
 
 
@@ -701,10 +740,19 @@ def get_chunks_text_for_analysis(matter_id: int, organization_id: int, max_chars
         db.close()
 
 
-def get_laws_context_for_rag(matter_type: str, organization_id: int) -> str:
+def get_laws_context_for_rag(matter_type: str, organization_id: int) -> tuple[str, str]:
     """Obtiene contexto de leyes chilenas indexadas en RAG si están disponibles.
 
-    Usa queries específicas según el tipo de materia (laboral, civil, etc.)
+    Returns a tuple of ``(text, source)``:
+
+      * ``source == "rag"``   — RAG returned hits, ``text`` is populated.
+      * ``source == "empty"`` — RAG returned no hits (index may be empty).
+      * ``source == "failed"``— RAG raised; ``text`` is empty.
+
+    The caller surfaces ``source`` as a warning on the analysis
+    result so the frontend can show *"sin contexto legal chileno —
+    RAG no disponible"* instead of silently producing a generic
+    report.
     """
     try:
         from app.services.embeddings import get_embedding_provider
@@ -735,14 +783,25 @@ def get_laws_context_for_rag(matter_type: str, organization_id: int) -> str:
                 # Incluir el nombre de la ley y artículo si está disponible
                 source = r.get('section_title', 'Fuente legal')
                 context_parts.append(f"- [{source}]\n  {r['content'][:1000]}")
-            return "\n\n".join(context_parts)
-        return ""
-    except Exception:
-        return ""
+            return "\n\n".join(context_parts), "rag"
+        return "", "empty"
+    except Exception as exc:
+        logger.warning(
+            "get_laws_context_for_rag failed (matter_type=%s org=%s): %s: %s",
+            matter_type, organization_id, type(exc).__name__, exc,
+        )
+        return "", "failed"
 
 
-def get_precedents_context_for_rag(matter_type: str, organization_id: int, top_k: int = 3) -> str:
-    """Obtiene contexto de precedentes judiciales para el análisis."""
+def get_precedents_context_for_rag(
+    matter_type: str, organization_id: int, top_k: int = 3
+) -> tuple[str, str]:
+    """Obtiene contexto de precedentes judiciales para el análisis.
+
+    Returns the same ``(text, source)`` tuple contract as
+    ``get_laws_context_for_rag`` so the caller can surface failures
+    instead of silently emitting a context-less report.
+    """
     try:
         from app.services.precedent_rag import get_precedent_context
 
@@ -756,9 +815,13 @@ def get_precedents_context_for_rag(matter_type: str, organization_id: int, top_k
             legal_area=None,
             top_k=top_k
         )
-        return context if context else ""
-    except Exception:
-        return ""
+        return context if context else "", "empty"
+    except Exception as exc:
+        logger.warning(
+            "get_precedents_context_for_rag failed (matter_type=%s org=%s): %s: %s",
+            matter_type, organization_id, type(exc).__name__, exc,
+        )
+        return "", "failed"
 
 
 def _empty_conflicts_result(summary: str, warnings: list) -> dict:
@@ -917,22 +980,47 @@ def analyze_contract(documents_text: str, matter_type: str, organization_id: int
 
     system_prompt = get_system_prompt_for_matter_type(matter_type)
 
-    # Obtener contexto de leyes si está disponible
-    laws_context = get_laws_context_for_rag(matter_type, organization_id)
+    # Obtener contexto de leyes si está disponible (failure surfaceado al reporte)
+    laws_context, laws_source = get_laws_context_for_rag(matter_type, organization_id)
     if laws_context:
         system_prompt += f"\n\nCONSULTA DE LEGISLACIÓN:\n{laws_context}"
 
     # Obtener contexto de precedentes judiciales si están disponibles
-    precedents_context = get_precedents_context_for_rag(matter_type, organization_id)
+    precedents_context, precedents_source = get_precedents_context_for_rag(
+        matter_type, organization_id
+    )
     if precedents_context:
         system_prompt += f"\n\nPRECEDENTES JUDICIALES RELEVANTES:\n{precedents_context}"
 
     prompt = f"""Analiza el siguiente documento legal y proporciona un informe estructurado según el esquema JSON solicitado.
 
 DOCUMENTO:
-{documents_text[:30000]}
+{documents_text[:80000]}
 
 Proporciona el análisis en formato JSON siguiendo exactamente el esquema especificado."""
+
+    # Surface RAG availability into the result so the UI can warn when
+    # the analysis was produced without Chilean legal context. We do
+    # this BEFORE the LLM call so the warnings survive validation.
+    rag_warnings: list[str] = []
+    if laws_source == "empty":
+        rag_warnings.append(
+            "RAG de legislación chilena no devolvió resultados — "
+            "el índice podría estar vacío para esta materia."
+        )
+    elif laws_source == "failed":
+        rag_warnings.append(
+            "RAG de legislación chilena falló — el análisis se generó "
+            "sin contexto legal específico."
+        )
+    if precedents_source == "empty":
+        rag_warnings.append(
+            "RAG de precedentes judiciales no devolvió resultados."
+        )
+    elif precedents_source == "failed":
+        rag_warnings.append(
+            "RAG de precedentes judiciales falló."
+        )
 
     try:
         raw_result = provider.generate_structured(prompt, system_prompt, RISK_ANALYSIS_SCHEMA)
@@ -940,6 +1028,11 @@ Proporciona el análisis en formato JSON siguiendo exactamente el esquema especi
         # S1-06: validate, shape-check and flag for human review when the
         # upstream document contains prompt-injection patterns.
         result = _validate_llm_output(raw_result)
+
+        # Merge RAG availability warnings so the UI can show "sin contexto
+        # legal" rather than silently producing a context-less report.
+        existing_warnings = result.get("warnings", []) or []
+        result["warnings"] = list(existing_warnings) + rag_warnings
 
         # Detectar conflictos normativos si hay suficiente contexto legal
         if laws_context:
@@ -1122,7 +1215,7 @@ def _extract_deadlines_from_processed_doc(
             "si está explícita, sino null), plazo_dias (número o null si no hay), "
             "consecuencia (qué pasa si no se cumple), y referencia_legal (ley aplicable si la hay).\n"
             "Responde con un array JSON. Si no encuentras plazos, devuelve [].\n\n"
-            f"TEXTO:\n{doc.extracted_text[:15000]}"
+            f"TEXTO:\n{doc.extracted_text[:30000]}"
         )
         raw = provider.generate(
             prompt=prompt,
@@ -1247,21 +1340,44 @@ def _generate_analysis_for_matter_inner(
 
         validation_result = None
         try:
+            # Run validate_matter_documents (an async coroutine) inside a
+            # short-lived asyncio.run() call wrapped in a hard timeout.
+            # The previous implementation used ``asyncio.new_event_loop``
+            # + ``run_until_complete`` directly, which is a known
+            # antipattern: nested event loops can deadlock with the
+            # anyio threadpool that FastAPI BackgroundTasks runs on, and
+            # there is no way to abort a hung coroutine. asyncio.run()
+            # builds a fresh loop safely, and ``wait_for`` enforces a
+            # 120 s ceiling so the analysis never gets stuck past that.
             import asyncio
 
             from app.services.document_validator import validate_matter_documents
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
             try:
-                validation_result = loop.run_until_complete(
-                    validate_matter_documents(matter_id, organization_id)
-                )
-            finally:
-                loop.close()
+                async def _run_validator() -> object:
+                    return await asyncio.wait_for(
+                        validate_matter_documents(matter_id, organization_id),
+                        timeout=120.0,
+                    )
 
-            validation_summary = validation_result.validation_summary if validation_result else None
-        except Exception:
+                validation_result = asyncio.run(_run_validator())
+            except TimeoutError:
+                logger.warning(
+                    "validate_matter_documents timed out after 120s for matter %s",
+                    matter_id,
+                )
+                validation_result = None
+
+            validation_summary = (
+                validation_result.validation_summary
+                if validation_result is not None and hasattr(validation_result, "validation_summary")
+                else None
+            )
+        except Exception as exc:
+            logger.warning(
+                "validate_matter_documents failed for matter %s: %s: %s",
+                matter_id, type(exc).__name__, exc,
+            )
             validation_summary = None
 
         analysis_result = analyze_contract(documents_text, matter_type_value, organization_id)
