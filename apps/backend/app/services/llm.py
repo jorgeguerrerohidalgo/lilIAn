@@ -183,7 +183,11 @@ class AnthropicLLM(LLMProvider):
         payload = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": 4096,
+            # 8192 tokens is enough for RISK_ANALYSIS_SCHEMA (12+ top-level
+            # fields with nested arrays). 4096 was truncating mid-response
+            # and producing "Failed to parse structured response" in
+            # production (confirmed by audit on 19-Aug-2026).
+            "max_tokens": 8192,
             "temperature": 0.3,
         }
         try:

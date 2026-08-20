@@ -548,16 +548,34 @@ FORMATO DE SALIDA:
 
 # ==================== SCHEMA MEJORADO ====================
 
+# Slimmed-down schema sent to the LLM.
+#
+# The previous 12-field RISK_ANALYSIS_SCHEMA was too large: combined
+# with the multi-page system prompt + 80k-char document text, Claude
+# Haiku 4.5 ran out of output budget at 4096 max_tokens, producing
+# truncated responses that ``json.loads`` rejected as
+# "Failed to parse structured response". The downstream
+# ``_validate_llm_output`` then returned an empty report.
+#
+# The fields that the UI actually renders (see
+# ``apps/frontend/app/matters/[id]/page.tsx`` lines 1145–1295) are:
+# resumen_ejecutivo, puntos_criticos, relevant_clauses, risks,
+# missing_information, next_steps, confidence. We keep exactly those.
+# The richer fields (timeline, citas_documentales, parties,
+# key_obligations, amounts, normative_conflicts) are intentionally
+# dropped from the JSON schema — they were rarely populated correctly
+# and forced the LLM to spend its output budget on data the UI
+# doesn't show.
 RISK_ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
         "resumen_ejecutivo": {
             "type": "string",
-            "description": "Resumen ejecutivo del análisis en 2-3 párrafos claros"
+            "description": "Resumen ejecutivo del análisis en 2-3 párrafos claros. Cita artículos específicos de la legislación chilena cuando sea posible."
         },
         "puntos_criticos": {
             "type": "array",
-            "description": "Lista detallada de puntos que requieren revisión prioritaria",
+            "description": "Lista de puntos críticos que requieren revisión prioritaria (3-6 items).",
             "items": {
                 "type": "object",
                 "properties": {
@@ -568,54 +586,10 @@ RISK_ANALYSIS_SCHEMA = {
                 }
             }
         },
-        "document_type": {"type": "string", "description": "Tipo de documento identificado"},
-        "parties": {"type": "array", "items": {"type": "string"}, "description": "Partes identificadas"},
-        "key_obligations": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Obligaciones principales identificadas"
-        },
-        "dates_and_deadlines": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Fechas y plazos relevantes"
-        },
-        "timeline": {
-            "type": "array",
-            "description": "Timeline estructurado de plazos y fechas importantes",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "evento": {"type": "string", "description": "Nombre del evento o plazo"},
-                    "fecha_contrato": {"type": "string", "description": "Fecha mencionada en el contrato"},
-                    "plazo_dias": {"type": "integer", "description": "Número de días del plazo"},
-                    "fecha_limite": {"type": "string", "description": "Fecha límite calculada (hoy + plazo)"},
-                    "consecuencia": {"type": "string", "description": "Consecuencia de no cumplir"},
-                    "articulo_legal": {"type": "string", "description": "Artículo que fundamenta el plazo"}
-                }
-            }
-        },
-        "citas_documentales": {
-            "type": "array",
-            "description": "Artículos y leyes mencionados explícitamente en el documento",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "articulo_citado": {"type": "string", "description": "Artículo citado (ej: 'Art. 123 Código del Trabajo')"},
-                    "contexto_exacto": {"type": "string", "description": "Texto exacto donde aparece la cita"},
-                    "obligacion_derecho": {"type": "string", "description": "Obligación o derecho que establece"}
-                }
-            }
-        },
-        "amounts": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Montos mencionados"
-        },
         "relevant_clauses": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Cláusulas relevantes o preocupantes"
+            "description": "Cláusulas relevantes o preocupantes del documento."
         },
         "risks": {
             "type": "array",
@@ -625,57 +599,15 @@ RISK_ANALYSIS_SCHEMA = {
                     "level": {"type": "string", "enum": ["green", "yellow", "red", "gray"]},
                     "title": {"type": "string"},
                     "description": {"type": "string"},
-                    "source_fragment": {"type": "string"},
-                    "impact": {"type": "string"},
-                    "recommendation": {"type": "string"},
-                    "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
+                    "recommendation": {"type": "string"}
                 }
             }
         },
-        "legal_fundament": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Artículos y leyes potencialmente aplicables"
-        },
         "missing_information": {"type": "array", "items": {"type": "string"}},
-        "suggested_questions": {"type": "array", "items": {"type": "string"}},
         "next_steps": {"type": "array", "items": {"type": "string"}},
-        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
-        "normative_conflicts": {
-            "type": "object",
-            "description": "Conflictos detectados entre cláusulas del contrato y legislación chilena",
-            "properties": {
-                "conflicts": {
-                    "type": "array",
-                    "description": "Cláusulas que contradicen directamente la ley",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "clause": {"type": "string"},
-                            "issue": {"type": "string"},
-                            "law": {"type": "string"},
-                            "severity": {"type": "string", "enum": ["high", "medium", "low"]}
-                        }
-                    }
-                },
-                "observations": {
-                    "type": "array",
-                    "description": "Cláusulas en observación",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "clause": {"type": "string"},
-                            "concern": {"type": "string"},
-                            "recommendation": {"type": "string"}
-                        }
-                    }
-                },
-                "summary": {"type": "string"},
-                "confidence": {"type": "string"}
-            }
-        }
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]}
     },
-    "required": ["resumen_ejecutivo", "puntos_criticos", "risks"]
+    "required": ["resumen_ejecutivo", "puntos_criticos", "risks", "confidence"]
 }
 
 
