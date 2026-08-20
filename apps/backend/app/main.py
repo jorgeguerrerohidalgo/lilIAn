@@ -332,3 +332,52 @@ def force_fix_enum_endpoint(
         "force-fix-enum completed; healed=%d enum=%s", healed, enum_values
     )
     return {"healed_rows": healed, "enum_values": enum_values, "status": "ok"}
+
+
+@app.post("/admin/test-anthropic-raw", tags=["admin"])
+def test_anthropic_raw_endpoint(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Bypasses the entire analysis pipeline and invokes
+    ``AnthropicLLM.generate_structured`` directly with a tiny synthetic
+    schema. The response is returned verbatim so we can see whether
+    the LLM provider is reachable and what the raw text looks like.
+
+    If the response carries ``{"error": "..."}`` then the provider
+    path is broken; otherwise it shows what Claude actually emitted.
+    """
+    import logging
+
+    from app.services.llm import get_llm_provider
+
+    log = logging.getLogger("lilian.admin")
+    provider = get_llm_provider()
+
+    test_schema = {
+        "type": "object",
+        "properties": {
+            "ok": {"type": "boolean"},
+            "echo": {"type": "string"},
+        },
+        "required": ["ok", "echo"],
+    }
+
+    test_prompt = (
+        "DOCUMENTO DE PRUEBA: La Ley 18916 establece el Código Aeronáutico.\n\n"
+        "Responde con un objeto JSON válido que tenga ``ok=true`` y "
+        "``echo`` igual a ``received``."
+    )
+
+    log.info("test-anthropic-raw: invoking provider=%s", type(provider).__name__)
+    result = provider.generate_structured(
+        prompt=test_prompt,
+        system_prompt="Eres un asistente de prueba.",
+        schema=test_schema,
+    )
+    log.info("test-anthropic-raw: result=%s", str(result)[:500])
+
+    return {
+        "provider": type(provider).__name__,
+        "provider_model": getattr(provider, "model", "unknown"),
+        "result": result,
+    }
