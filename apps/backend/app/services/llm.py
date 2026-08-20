@@ -205,6 +205,17 @@ class AnthropicLLM(LLMProvider):
                 response.raise_for_status()
                 data = response.json()
                 raw_text = data["content"][0]["text"]
+                # Diagnostic logging — the audit confirmed that
+                # ``Failed to parse structured response`` was firing in
+                # production with no visibility into WHY. Inspect
+                # ``stop_reason`` so we can tell truncation (max_tokens)
+                # apart from valid-but-unparseable output.
+                stop_reason = data.get("stop_reason", "unknown")
+                usage = data.get("usage", {}) or {}
+                logger.info(
+                    "AnthropicLLM: stop_reason=%s usage=%s raw_len=%d",
+                    stop_reason, usage, len(raw_text or ""),
+                )
         except (httpx.HTTPError, KeyError, IndexError) as exc:
             logger.warning("AnthropicLLM: request error: %s: %s", type(exc).__name__, exc)
             return {"error": f"Anthropic request failed: {exc}"}
@@ -212,10 +223,15 @@ class AnthropicLLM(LLMProvider):
         parsed = _extract_first_json_object(raw_text)
         if parsed is None:
             logger.warning(
-                "AnthropicLLM: parse error; raw text first 200 chars: %.200s",
+                "AnthropicLLM: parse error; stop_reason=%s raw text first 400 chars: %.400s",
+                stop_reason if 'stop_reason' in dir() else 'unknown',
                 raw_text,
             )
-            return {"error": "Failed to parse structured response"}
+            return {
+                "error": "Failed to parse structured response",
+                "stop_reason": stop_reason if 'stop_reason' in dir() else 'unknown',
+                "raw_excerpt": (raw_text or "")[:400],
+            }
         if not isinstance(parsed, dict):
             return {"error": "Parsed response is not a JSON object"}
         return parsed

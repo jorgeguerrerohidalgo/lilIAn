@@ -286,6 +286,8 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [mode, setMode] = useState<AgentMode>('qa');
+  // Bumped whenever the bootstrap must re-run (e.g. session 404).
+  const [bootstrapRetryKey, setBootstrapRetryKey] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -326,8 +328,11 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
 
   // Bootstrap: cuando se abre el panel por primera vez, restaurar o crear
   // una sesión de chat. Solo se ejecuta si no hay sessionId en estado.
+  // También re-corre cuando ``bootstrapRetryKey`` cambia (p.ej. tras un
+  // 404 al cargar historial), para crear una sesión nueva.
   useEffect(() => {
     if (!isOpen || sessionId !== null) return;
+    void bootstrapRetryKey; // dependencia declarada para eslint-plugin-react-hooks
     let cancelled = false;
 
     async function bootstrap() {
@@ -364,7 +369,7 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
     // contextInfo.matterId changes when the user navigates between matters;
     // re-bootstrap so the session always reflects the current matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, contextInfo?.matterId]);
+  }, [isOpen, contextInfo?.matterId, bootstrapRetryKey]);
 
   const resolveMatterId = async (preferred: number | undefined): Promise<number | null> => {
     if (preferred !== undefined) return preferred;
@@ -402,9 +407,21 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
     );
     if (!res.ok) {
       // Si la sesión guardada ya no existe (borrada en backend), limpiamos
-      // y dejamos que el siguiente intento cree una nueva.
+      // y dejamos que el siguiente intento cree una nueva. Sin este
+      // manejo, el panel quedaba en "Conectando..." con el input
+      // disabled para siempre (bug fijado el 19-ago-2026).
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
       setSessionId(null);
+      setError(
+        res.status === 404
+          ? "La sesión de chat guardada ya no existe. Creando una nueva..."
+          : `No se pudo cargar el historial de la sesión (HTTP ${res.status}). Reintentando...`
+      );
+      // Trigger bootstrap again so a fresh session is created on the
+      // next render. The useEffect that calls bootstrap depends on
+      // [isOpen], so changing sessionId alone would not re-run it; we
+      // re-run via a state hint the bootstrap effect watches.
+      setBootstrapRetryKey((k) => k + 1);
       return;
     }
     const history = await res.json();
@@ -865,12 +882,12 @@ export function ChatPanel({ isOpen, onClose, contextInfo }: ChatPanelProps) {
               onKeyDown={handleKeyDown}
               placeholder={mode === 'qa' && sessionId === null && error === null ? "Conectando..." : "Escribe tu consulta..."}
               aria-label="Escribe tu pregunta al asistente"
-              disabled={mode === 'qa' && sessionId === null}
+              disabled={mode === 'qa' && sessionId === null && error === null}
               className="flex-1 px-4 py-3 rounded-xl bg-white border border-gray-300 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:opacity-50"
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || isLoading || (mode === 'qa' && sessionId === null)}
+              disabled={!input.trim() || isLoading || (mode === 'qa' && sessionId === null && error === null)}
               aria-label="Enviar mensaje"
               aria-busy={isLoading}
               className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
