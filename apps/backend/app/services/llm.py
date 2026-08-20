@@ -180,6 +180,20 @@ class AnthropicLLM(LLMProvider):
         Returns ``{"error": "..."}`` on any failure (network, parse, or
         schema mismatch) so callers can branch on the ``error`` key.
         """
+        # Extract the assistant prefill from the last message so the
+        # parser can re-prepend it before searching for the first
+        # balanced JSON object. Claude's response is the *continuation*
+        # of the prefill, not a complete JSON string.
+        prefill = ""
+        for msg in reversed(messages):
+            if (
+                isinstance(msg, dict)
+                and msg.get("role") == "assistant"
+                and isinstance(msg.get("content"), str)
+            ):
+                prefill = msg["content"]
+                break
+
         payload = {
             "model": self.model,
             "messages": messages,
@@ -220,7 +234,7 @@ class AnthropicLLM(LLMProvider):
             logger.warning("AnthropicLLM: request error: %s: %s", type(exc).__name__, exc)
             return {"error": f"Anthropic request failed: {exc}"}
 
-        parsed = _extract_first_json_object(raw_text)
+        parsed = _extract_first_json_object(raw_text, prefill=prefill)
         if parsed is None:
             logger.warning(
                 "AnthropicLLM: parse error; stop_reason=%s raw text first 400 chars: %.400s",
@@ -237,13 +251,17 @@ class AnthropicLLM(LLMProvider):
         return parsed
 
 
-def _extract_first_json_object(text: str) -> Any:
+def _extract_first_json_object(text: str, *, prefill: str = "") -> Any:
     """Extract the first top-level JSON object from ``text``.
 
-    Handles three common shapes the LLM emits:
+    Handles four common shapes the LLM emits:
       * pure JSON: ``{"foo": 1}``
       * markdown-fenced: ``\\`\\`\\`json\\n{"foo": 1}\\n\\`\\`\\``
       * prose + JSON: ``Aquí tienes: {"foo": 1} espero...``
+      * prefill continuation: Claude was told the assistant turn
+        already started with ``prefill``; the response only contains
+        the *rest* of the object. We need to re-prepend the prefill
+        before parsing.
 
     Walks the string tracking brace depth so nested objects don't
     confuse the slice. Returns ``None`` if no balanced object is
@@ -251,7 +269,17 @@ def _extract_first_json_object(text: str) -> Any:
     """
     if not text:
         return None
+
+    # If we asked Claude to continue from a prefill (e.g. ``{``), the
+    # raw response does not start with ``{`` — Claude's text starts
+    # with the next character. Prepend the prefill so the slice
+    # brackets are balanced. The audit on 19-Aug-2026 confirmed
+    # production returned the response ``\\n  "ok": true, "echo":
+    # "received"\\n}`` with stop_reason=end_turn, which the OLD
+    # extractor failed to parse because there was no leading ``{``.
     stripped = text.strip()
+    if prefill and not stripped.startswith(prefill):
+        stripped = prefill + stripped
 
     # Strip leading markdown fence if present.
     if stripped.startswith("```"):
