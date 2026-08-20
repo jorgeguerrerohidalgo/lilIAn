@@ -266,7 +266,7 @@ export default function MatterDetailPage() {
         }
       }
 
-      // 2. Check matter status for explicit failure.
+      // 2. Check matter status for explicit failure or success.
       const statusRes = await fetch(`/api/v1/analysis/matters/${params.id}/status`);
       if (statusRes.ok) {
         const s = await statusRes.json();
@@ -282,6 +282,14 @@ export default function MatterDetailPage() {
         }
         if (s.status === "processing") {
           setAnalysisStage("analyzing");
+        }
+        // The backend transitions status to "analysis_ready" (or
+        // "missing_information" when there isn't enough text) when the
+        // pipeline finishes. The OLD polling only checked "failed",
+        // so a successful analysis looked like a hang to the user
+        // (bug fixed on 20-aug-2026).
+        if (s.status === "analysis_ready" || s.status === "missing_information") {
+          setAnalysisStage("done");
         }
       }
 
