@@ -701,12 +701,15 @@ def get_laws_context_for_rag(matter_type: str, organization_id: int) -> tuple[st
 
         provider.generate_embedding(query)
 
+        # ``hybrid_search`` requires ``matter_id`` (positional). Pass 0
+        # so the search spans the whole organization. Previous code
+        # passed ``embedding_weight=0.7`` which TypeError'd because
+        # that parameter doesn't exist on this version of rag.py.
         results = hybrid_search(
             query=query,
             organization_id=organization_id,
-            matter_id=None,  # Buscar en todo el organization
+            matter_id=0,
             top_k=5,
-            embedding_weight=0.7
         )
 
         if results:
@@ -740,12 +743,16 @@ def get_precedents_context_for_rag(
         mt = matter_type.lower() if matter_type else "other"
         query = QUERIES_PRECEDENT_POR_TIPO.get(mt, "fallos judiciales jurisprudencia chilena")
 
+        # ``organization_id`` is a required positional argument of
+        # ``get_precedent_context`` — the previous call dropped it,
+        # raising TypeError inside the swallowed except.
         context = get_precedent_context(
             query=query,
+            organization_id=organization_id,
             court=None,
             year=None,
             legal_area=None,
-            top_k=top_k
+            top_k=top_k,
         )
         return context if context else "", "empty"
     except Exception as exc:
