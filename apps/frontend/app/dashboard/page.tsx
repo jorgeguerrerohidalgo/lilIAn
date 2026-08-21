@@ -6,8 +6,9 @@ import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
 import { StatCard } from "@/components/ui";
 import { Badge } from "@/components/ui";
-import { MatterStatusBadge, UrgencyBadge } from "@/components/ui";
+import { MatterStatusBadge, UrgencyBadge, Tooltip } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 interface Matter {
   id: number;
@@ -114,12 +115,14 @@ export default function DashboardPage() {
             Gestiona tus casos legales y documentos
           </p>
         </div>
+        <Tooltip label={TOOLTIPS.newCase} side="bottom">
         <Link href="/matters/new" data-tour-target="new-matter">
           <Button variant="primary" size="lg">
             <PlusIcon />
             Nuevo caso
           </Button>
         </Link>
+        </Tooltip>
       </div>
 
       {/* Stats Grid */}
@@ -134,11 +137,15 @@ export default function DashboardPage() {
           value={inProgress}
           icon={<DocumentIcon className="w-8 h-8" />}
         />
+        <Tooltip label={TOOLTIPS.pendingAnalyses} side="top">
+        <div>
         <StatCard
           label="Listos para revisión"
           value={readyForReview}
           icon={<CheckCircleIcon />}
         />
+        </div>
+        </Tooltip>
         <StatCard
           label="Urgentes"
           value={urgent}

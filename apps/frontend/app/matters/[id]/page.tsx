@@ -18,6 +18,8 @@ import {
   type TabType,
 } from "@/components/matters/constants";
 import { toastFromError, useToast } from "@/lib/toast";
+import { Tooltip } from "@/components/ui";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 // S3-07: named constants for the polling magic numbers used by the four
 // poll loops below. S3-08 migrated those loops from inline ``setInterval``
@@ -801,6 +803,7 @@ export default function MatterDetailPage() {
                 onChange={handleFileUpload}
                 disabled={uploading}
               />
+              <Tooltip label={TOOLTIPS.uploadContract} side="bottom">
               <label
                 htmlFor="file-upload"
                 className="cursor-pointer flex flex-col items-center"
@@ -813,6 +816,7 @@ export default function MatterDetailPage() {
                 </span>
                 <span id="file-upload-help" className="text-sm text-gray-400 mt-1">PDF, DOCX, DOC, TXT, Imágenes (máx. 50MB)</span>
               </label>
+              </Tooltip>
             </div>
             {uploadError && (
               <div role="alert" aria-live="assertive" className="mt-3 p-3 bg-red-50 text-red-600 rounded-lg text-sm">{uploadError}</div>
@@ -1086,6 +1090,10 @@ export default function MatterDetailPage() {
 
             {/* Action button — always visible, always actionable */}
             <div className="flex flex-wrap items-center gap-3 mb-4">
+              <Tooltip
+                label={analysis && analysisStage === "done" ? TOOLTIPS.reAnalyze : TOOLTIPS.startAnalysis}
+                side="bottom"
+              >
               <button
                 onClick={handleRequestAnalysis}
                 disabled={analyzing || analysisStage === "analyzing" || analysisStage === "extracting" || analysisStage === "generating"}
@@ -1108,11 +1116,13 @@ export default function MatterDetailPage() {
                   </span>
                 )}
               </button>
+              </Tooltip>
 
               {/* S1.6: Exporta el reporte a PDF (o Markdown si el backend
                   no tiene weasyprint disponible). Disponible solo cuando
                   hay un análisis cargado en pantalla. */}
               {analysis && analysis.id && (
+                <Tooltip label={TOOLTIPS.exportPdf} side="bottom">
                 <button
                   type="button"
                   onClick={() => {
@@ -1134,6 +1144,7 @@ export default function MatterDetailPage() {
                   </svg>
                   Exportar PDF
                 </button>
+                </Tooltip>
               )}
 
               <span className="text-xs text-gray-500">
@@ -1464,6 +1475,7 @@ export default function MatterDetailPage() {
                     : "Pulsa el botón para que la IA analice fechas críticas, multas, garantías y prescripciones en tus documentos."}
                 </p>
                 {documents.length > 0 && (
+                  <Tooltip label={TOOLTIPS.findDeadlines} side="top">
                   <button
                     type="button"
                     onClick={handleRequestAnalysis}
@@ -1484,6 +1496,7 @@ export default function MatterDetailPage() {
                       "Buscar plazos en documentos"
                     )}
                   </button>
+                  </Tooltip>
                 )}
                 {analyzing && (
                   <p className="mt-3 text-xs text-gray-500">
@@ -1689,15 +1702,18 @@ export default function MatterDetailPage() {
                   </div>
                   <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
                     <div className="flex gap-3">
+                      <Tooltip label={TOOLTIPS.chatInput} side="top">
                       <input
                         type="text"
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         placeholder="Escribe tu mensaje..."
                         aria-label="Mensaje para el chat"
+                        title={TOOLTIPS.chatInput}
                         className="flex-1 px-4 py-2 border border-gray-300 text-gray-900 bg-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-400"
                         disabled={sendingMessage}
                       />
+                      </Tooltip>
                       <button
                         type="submit"
                         disabled={sendingMessage || !chatInput.trim()}

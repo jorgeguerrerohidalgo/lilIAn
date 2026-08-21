@@ -7,6 +7,8 @@ import Image from "next/image";
 import { ChatWidget } from "@/components/chat";
 import { clearLegacyTokens } from "@/lib/auth-cookie";
 import { WelcomeTourOverlay, useWelcomeTour } from "@/components/onboarding/welcome-tour";
+import { Tooltip } from "@/components/ui";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 interface User {
   id: number;
@@ -202,7 +204,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
             // S1.2: tour step 2 anchors to the Casos nav item.
             const tourProps = item.href === "/matters" ? { "data-tour-target": "matters-list" } : {};
-            return (
+            // S6.2: contextual tooltip per nav item.
+            const navTooltip =
+              item.href === "/dashboard/billing"
+                ? TOOLTIPS.currentPlan
+                : item.href === "/matters"
+                ? TOOLTIPS.newCase
+                : null;
+            const link = (
               <Link
                 key={item.href}
                 href={item.href}
@@ -219,6 +228,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {item.label}
                 {item.count !== undefined && <CountBadge count={item.count} />}
               </Link>
+            );
+            return navTooltip ? (
+              <Tooltip key={item.href} label={navTooltip} side="right">
+                {link}
+              </Tooltip>
+            ) : (
+              link
             );
           })}
         </nav>

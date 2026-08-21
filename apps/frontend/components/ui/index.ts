@@ -8,3 +8,5 @@ export type { MatterStatus, UrgencyLevel } from './badge';
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty, TableLoading } from './table';
 export { RiskScoreBar } from './risk-score-bar';
 export { EmptyState } from './empty-state';
+export { Tooltip } from './tooltip';
+export type { TooltipProps, TooltipSide } from './tooltip';

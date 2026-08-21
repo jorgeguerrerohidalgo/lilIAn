@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
-import { MatterStatusBadge, UrgencyBadge } from "@/components/ui";
+import { MatterStatusBadge, UrgencyBadge, Tooltip } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 
 interface Matter {
@@ -157,6 +158,7 @@ export default function MattersPage() {
             </p>
 
             <div className="space-y-3">
+              <Tooltip label={TOOLTIPS.sampleContract} side="top">
               <Button
                 type="button"
                 variant="primary"
@@ -168,6 +170,7 @@ export default function MattersPage() {
               >
                 {seeding ? "Creando contrato de ejemplo…" : "Probar con un contrato de ejemplo"}
               </Button>
+              </Tooltip>
               <Link href="/matters/new">
                 <Button variant="outline" className="w-full">
                   Crear mi primer caso

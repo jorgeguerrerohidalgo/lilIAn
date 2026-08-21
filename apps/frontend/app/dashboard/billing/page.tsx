@@ -8,6 +8,8 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { Badge } from "@/components/ui";
+import { Tooltip } from "@/components/ui";
+import { TOOLTIPS } from "@/lib/tooltips";
 
 /**
  * Billing page (S2.05).
@@ -328,18 +330,23 @@ function BillingPageInner() {
 
           <div className="flex flex-wrap gap-3 mt-6">
             {isFree ? (
+              <Tooltip label={TOOLTIPS.billingUpgrade} side="bottom">
               <Link href="/pricing">
                 <Button variant="primary" size="md">
                   Cambiar de plan
                 </Button>
               </Link>
+              </Tooltip>
             ) : (
               <>
+                <Tooltip label={TOOLTIPS.billingUpgrade} side="bottom">
                 <Link href="/pricing">
                   <Button variant="secondary" size="md">
                     Cambiar de plan
                   </Button>
                 </Link>
+                </Tooltip>
+                <Tooltip label={TOOLTIPS.manageSubscription} side="bottom">
                 <Button
                   variant="outline"
                   size="md"
@@ -349,6 +356,7 @@ function BillingPageInner() {
                 >
                   Administrar suscripción
                 </Button>
+                </Tooltip>
               </>
             )}
           </div>
