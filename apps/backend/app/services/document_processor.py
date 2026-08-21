@@ -15,7 +15,10 @@ from app.models.matter import Matter
 logger = logging.getLogger(__name__)
 
 # S1-07: hard caps on PDF processing to avoid DoS / memory exhaustion.
-MAX_PDF_PAGES = 500
+# 21-aug-2026: bumped from 500 → 1000 to admit DFL-1 (528 pages) and other
+# long Chilean law PDFs without splitting them. Memory cost is still bounded
+# by MAX_PDF_BYTES (50 MB).
+MAX_PDF_PAGES = 1000
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB aligned with MAX_FILE_SIZE
 MAX_DOCX_BYTES = 50 * 1024 * 1024
 

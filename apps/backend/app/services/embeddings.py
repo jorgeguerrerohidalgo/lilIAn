@@ -111,11 +111,17 @@ class OpenAIEmbedding(EmbeddingProvider):
         try:
             return retry_wrapper()
         except Exception as e:
-            is_retry, code = is_retryable(e)
-            if not is_retry:
-                logger.warning(f"OpenAI embedding auth error, using dummy: {e}")
+            if not self.api_key:
+                # Provider not configured (dev / CI). Fall back to dummy so
+                # local tests don't break when there's no real key.
+                logger.warning(f"OpenAI embedding not configured, using dummy: {e}")
             else:
-                logger.warning(f"OpenAI embedding failed after retries, using dummy: {e}")
+                # Provider IS configured but the API call failed (rate
+                # limit, no credits, network error, etc.). Fail loud so the
+                # operator notices — never silently degrade to dummy in
+                # production. 21-aug-2026: see STATE_OF_PRODUCT §4.
+                logger.error(f"OpenAI embedding failed and no fallback allowed: {e}")
+                raise
             dummy = DummyEmbedding(dimensions=self._dimensions_for(text))
             return dummy.generate_embedding(text)
 
@@ -159,11 +165,16 @@ class OpenAIEmbedding(EmbeddingProvider):
         try:
             return retry_wrapper()
         except Exception as e:
-            is_retry, code = is_retryable(e)
-            if not is_retry:
-                logger.warning(f"OpenAI embeddings auth error, using dummy: {e}")
+            if not self.api_key:
+                # Provider not configured (dev / CI). Fall back to dummy.
+                logger.warning(f"OpenAI embeddings not configured, using dummy: {e}")
             else:
-                logger.warning(f"OpenAI embeddings failed after retries, using dummy: {e}")
+                # Provider IS configured but the API call failed (rate
+                # limit, no credits, network error, etc.). Fail loud so
+                # the operator notices — never silently degrade to dummy
+                # in production. 21-aug-2026: see STATE_OF_PRODUCT §4.
+                logger.error(f"OpenAI embeddings failed and no fallback allowed: {e}")
+                raise
             # Mixed-dim fallback: emit per-text dimensions.
             return [
                 DummyEmbedding(dimensions=self._dimensions_for(t)).generate_embedding(t)
