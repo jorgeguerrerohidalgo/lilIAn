@@ -16,6 +16,12 @@ class Client(Base):
     # Datos personales/empresa
     name = Column(String(255), nullable=False)
     company_name = Column(String(255), nullable=True)
+    # TODO S5.5: integrar con SII para auto-rellenar razón social,
+    # régimen tributario, inicio de actividades y dirección comercial
+    # cuando el RUT corresponde a una persona jurídica. Ver
+    # docs/TODO_S5.5_SII_DT_SUSESO.md para el alcance completo
+    # (Ettiene SII, DT y SUSESO, multi-sprint). Hoy el dato lo ingresa
+    # manualmente el abogado.
     rut = Column(String(20), nullable=True)  # RUT chileno o CI/Pasaporte
     email = Column(String(255), nullable=True)
     phone = Column(String(50), nullable=True)
