@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1
     SENTRY_RELEASE: str | None = None
 
+    # S4.5: signing secret for public share links. Falls back to
+    # JWT_SECRET so deployments never fail just because this is
+    # unset.
+    SHARE_LINK_SECRET: str | None = None
+
     # S2-05: where the user lands after a successful Stripe Checkout and
     # where they go when they cancel. Surfaced in the response from
     # ``POST /api/v1/saas/checkout`` so the frontend can just redirect.

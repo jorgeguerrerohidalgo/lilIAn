@@ -166,6 +166,8 @@ export default function MatterDetailPage() {
   const [selectedDocForAnalysis, setSelectedDocForAnalysis] = useState<DocumentAnalysis | null>(null);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  // S4.5: in-flight flag for the "Compartir" button on the Análisis IA tab.
+  const [sharing, setSharing] = useState(false);
 
   // Analysis state
   const [analysis, setAnalysis] = useState<AnalysisReport | null>(null);
@@ -557,6 +559,50 @@ export default function MatterDetailPage() {
       });
     }
     setAnalyzing(false);
+  };
+
+  // S4.5: request a signed URL from the backend and copy it to the
+  // clipboard so the lawyer can paste it into an email or chat.
+  const handleShareReport = async () => {
+    if (!analysis?.id) return;
+    setSharing(true);
+    try {
+      const res = await fetch("/api/v1/shares", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ report_id: analysis.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.show({
+          message: data.detail || "No se pudo generar el enlace",
+          type: "error",
+        });
+        return;
+      }
+      const data = (await res.json()) as { url: string };
+      // Try to copy; fall back to showing the URL in a toast so the
+      // user can copy it manually.
+      try {
+        await navigator.clipboard.writeText(data.url);
+        toast.show({
+          message: "Enlace copiado al portapapeles",
+          type: "success",
+        });
+      } catch {
+        toast.show({
+          message: `Enlace generado: ${data.url}`,
+          type: "info",
+        });
+      }
+    } catch {
+      toast.show({
+        message: "Error de red al generar el enlace",
+        type: "error",
+      });
+    } finally {
+      setSharing(false);
+    }
   };
 
   const handleCreateSession = async () => {
@@ -1145,6 +1191,23 @@ export default function MatterDetailPage() {
                   Exportar PDF
                 </button>
                 </Tooltip>
+              )}
+
+              {/* S4.5: Compartir — generate a signed public link to the
+                  report and copy it to the clipboard. */}
+              {analysis && analysis.id && (
+                <button
+                  type="button"
+                  onClick={handleShareReport}
+                  disabled={sharing}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Compartir reporte con un enlace público"
+                >
+                  <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  {sharing ? "Generando enlace…" : "Compartir"}
+                </button>
               )}
 
               <span className="text-xs text-gray-500">
