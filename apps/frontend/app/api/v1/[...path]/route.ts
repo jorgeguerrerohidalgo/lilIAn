@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getApiUrl } from "@/lib/api";
+import { ERR_BFF } from "@/lib/i18n/es";
 
 /**
  * BFF catch-all proxy (S5-fix).
@@ -65,7 +66,7 @@ async function proxy(
 ): Promise<NextResponse> {
   if (!ALLOWED_METHODS.has(request.method)) {
     return NextResponse.json(
-      { detail: `Method ${request.method} not allowed` },
+      { detail: ERR_BFF.methodNotAllowed(request.method) },
       { status: 405 },
     );
   }
@@ -73,7 +74,7 @@ async function proxy(
   const apiUrl = getApiUrl();
   if (!apiUrl) {
     return NextResponse.json(
-      { detail: "API URL not configured" },
+      { detail: ERR_BFF.apiUrlNotConfigured },
       { status: 500 },
     );
   }
@@ -82,7 +83,7 @@ async function proxy(
   // Build the upstream path. The catch-all gives us the segments
   // after /api/v1/. Reject anything that tries to break out.
   if (!path || path.some((segment) => segment.includes("..") || segment.includes("/"))) {
-    return NextResponse.json({ detail: "Invalid path" }, { status: 400 });
+    return NextResponse.json({ detail: ERR_BFF.invalidPath }, { status: 400 });
   }
   const upstreamPath = `/api/v1/${path.join("/")}`;
 
@@ -131,7 +132,7 @@ async function proxy(
     });
   } catch (err) {
     return NextResponse.json(
-      { detail: "Backend unreachable" },
+      { detail: ERR_BFF.backendUnreachable },
       { status: 502 },
     );
   }

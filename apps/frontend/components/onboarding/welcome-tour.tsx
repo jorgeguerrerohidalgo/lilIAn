@@ -8,8 +8,8 @@
  * the relevant UI areas one at a time:
  *
  *   1. "Sube un contrato"        → apunta a /matters/new
- *   2. "Click Analizar"           → apunta a la pestaña Documentos de un caso
- *   3. "Ve tu reporte"            → apunta a la pestaña Análisis IA
+ *   2. "Pulsa Analizar"           → apunta a la pestaña Documentos de un caso
+ *   3. "Revisa tu reporte"        → apunta a la pestaña Análisis IA
  *
  * Persistence: a single boolean is recorded in localStorage under the
  * "lilian.welcomeTour.completed" key. Render is gated on:

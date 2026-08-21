@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getApiUrl } from "@/lib/api";
+import { ERR_BFF } from "@/lib/i18n/es";
 
 /**
  * BFF route (S5-fix): proxies the backend's /api/v1/auth/login and
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
   const apiUrl = getApiUrl();
   if (!apiUrl) {
     return NextResponse.json(
-      { detail: "API URL not configured" },
+      { detail: ERR_BFF.apiUrlNotConfigured },
       { status: 500 },
     );
   }
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json(
-      { detail: "Backend unreachable" },
+      { detail: ERR_BFF.backendUnreachable },
       { status: 502 },
     );
   }
