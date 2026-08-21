@@ -22,6 +22,12 @@ class Document(Base):
     extracted_text = Column(Text)
     page_count = Column(Integer)
     detected_document_type = Column(String(100))
+    # Progress tracking for the Documentos tab stepper UI. The pipeline
+    # in document_processor.py updates these as it runs so the user
+    # sees "Extrayendo texto (30%) → Generando chunks (60%) → Listo"
+    # instead of just "Procesando...".
+    processing_step = Column(String(50))
+    processing_progress = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
     processed_at = Column(DateTime)
 

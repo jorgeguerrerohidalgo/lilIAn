@@ -237,6 +237,43 @@ def delete_document(
     db.commit()
 
 
+@router.get("/{document_id}/progress")
+def get_document_progress(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db)
+):
+    """Lightweight endpoint for the Documentos tab stepper UI.
+
+    The frontend polls this every ~1.5s while ``status == "processing"``
+    so the user sees a real stepper
+    (``Extrayendo texto (30%) → Generando chunks (60%) → Listo``)
+    instead of a single ``Procesando...`` label. The endpoint only
+    reads two columns from the documents row, so it stays cheap even
+    with frequent polling.
+
+    Returns:
+        ``status``: same as documents.status
+        ``processing_step``: short machine-readable name
+        ``processing_progress``: integer 0-100
+    """
+    document = db.query(Document).filter(
+        Document.id == document_id,
+        Document.organization_id == membership.organization_id
+    ).first()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    return {
+        "document_id": document_id,
+        "status": document.status,
+        "processing_step": document.processing_step,
+        "processing_progress": document.processing_progress,
+    }
+
+
 @router.get("/{document_id}/debug")
 def debug_document(
     document_id: int,

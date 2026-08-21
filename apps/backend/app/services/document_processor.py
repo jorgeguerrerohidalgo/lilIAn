@@ -323,8 +323,17 @@ def create_chunks_for_document(
     if skip_result is not None:
         return skip_result
 
+    # Skip the embedding network call when the configured provider is the
+    # DummyEmbedding (no real model). Production runs with
+    # EMBEDDING_PROVIDER=dummy so each chunk would otherwise block on
+    # ``provider.generate_embedding`` for 30-60 s per chunk × N chunks
+    # before falling back. The chunks are still persisted; only the
+    # vector column is left empty (RAG falls back to keyword search).
+    embedding_provider = None
     try:
-        embedding_provider = get_embedding_provider()
+        provider_obj = get_embedding_provider()
+        if type(provider_obj).__name__ != "DummyEmbedding":
+            embedding_provider = provider_obj
     except Exception:
         embedding_provider = None
 
@@ -428,6 +437,7 @@ def _run_processing_pipeline(
         return skipped
 
     _mark_processing(db, document)
+    _set_progress(db, document, "resolving", 5)
 
     legal_area = _infer_legal_area(db, document)
     if legal_area:
@@ -439,18 +449,24 @@ def _run_processing_pipeline(
 
     extracted_text = _extract_and_store_text(db, document, file_path)
     if extracted_text is None:
+        _set_progress(db, document, "failed", 100)
         return _fail_document(db, document, "Text extraction failed")
 
+    _set_progress(db, document, "recording_pages", 45)
     # PDF page count is best-effort; never blocks processing.
     _record_pdf_page_count(document, file_path)
+    _set_progress(db, document, "storing_text", 50)
     _mark_processed(db, document, extracted_text)
 
+    _set_progress(db, document, "chunking", 60)
     chunk_result = _create_chunks(
         db, document, extracted_text, legal_area, force
     )
 
     # Clasificar documento de forma async (no bloquea procesamiento)
+    _set_progress(db, document, "classifying", 99)
     _classify_document_async(document.id)
+    _set_progress(db, document, "done", 100)
 
     logger.info(f"[PROCESS] Doc {document_id}: COMPLETED SUCCESSFULLY")  # S4-05
     return _build_result(document, legal_area, chunk_result)
@@ -509,6 +525,7 @@ def _create_chunks(
         force=force,
     )
     logger.info(f"[PROCESS] Doc {document.id}: chunk_result={chunk_result}")  # S4-05
+    _set_progress(db, document, "indexed", 95)
     return chunk_result
 
 
@@ -585,6 +602,21 @@ def _fail_document(db: Session, document: Document, error_msg: str) -> dict:
     return {"error": error_msg, "status": "failed"}
 
 
+def _set_progress(
+    db: Session, document: Document, step: str, percent: int
+) -> None:
+    """Update ``processing_step`` and ``processing_progress`` and commit.
+
+    The frontend polls ``/documents/{id}/progress`` to render a stepper
+    so the user sees "Extrayendo texto (30%) → Generando chunks (60%)
+    → Listo" instead of just "Procesando...". Each stage commits
+    immediately so a refresh after a slow step shows the latest state.
+    """
+    document.processing_step = step
+    document.processing_progress = max(0, min(100, percent))
+    db.commit()
+
+
 def _extract_and_store_text(
     db: Session, document: Document, file_path: str
 ) -> str | None:
@@ -604,6 +636,7 @@ def _extract_and_store_text(
         El texto extraído como cadena, o ``None`` si la extracción
         devolvió una cadena vacía.
     """
+    _set_progress(db, document, "extracting_text", 20)
     logger.info(f"[PROCESS] Doc {document.id}: Calling extract_text_from_file")
     extracted_text = extract_text_from_file(file_path, document.mime_type)
     document.extracted_text = extracted_text

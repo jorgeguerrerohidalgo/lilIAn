@@ -24,6 +24,21 @@ import {
 const POLL_INTERVAL_MS = MATTER_DOCUMENT_POLL.intervalMs; // 5_000
 const POLL_MAX_ATTEMPTS = MATTER_DOCUMENT_POLL.maxAttempts; // 60
 
+// Human-readable labels for the processing-step values the backend
+// writes to documents.processing_step. Keeping them in Spanish to
+// match the rest of the UI.
+const STEP_LABELS: Record<string, string> = {
+  resolving: "Localizando archivo…",
+  extracting_text: "Extrayendo texto…",
+  recording_pages: "Contando páginas…",
+  storing_text: "Guardando texto…",
+  chunking: "Generando chunks…",
+  indexed: "Indexando…",
+  classifying: "Clasificando…",
+  done: "Listo",
+  failed: "Falló",
+};
+
 interface Matter {
   id: number;
   title: string;
@@ -130,6 +145,14 @@ export default function MatterDetailPage() {
   const [deletingDocId, setDeletingDocId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState("");
   const [processingDocId, setProcessingDocId] = useState<number | null>(null);
+  // Per-document processing step + percent, polled from
+  // /api/v1/documents/{id}/progress while ``processingDocId`` is set.
+  // The Documentos tab used to show just ``Procesando...`` for the
+  // entire pipeline (which can take ~30-90s on a 50k-char doc), leaving
+  // the user wondering if it was stuck. Now the stepper shows the
+  // current stage + percent so the user knows what's happening.
+  const [processingStep, setProcessingStep] = useState<string | null>(null);
+  const [processingPercent, setProcessingPercent] = useState<number | null>(null);
   const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null);
   const [docProcessError, setDocProcessError] = useState("");
   const [docAnalyzeError, setDocAnalyzeError] = useState("");
@@ -404,6 +427,8 @@ export default function MatterDetailPage() {
 
   const handleProcessDocument = async (docId: number) => {
     setProcessingDocId(docId);
+    setProcessingStep("resolving");
+    setProcessingPercent(0);
     setDocProcessError("");
 
     const res = await fetch(`/api/v1/documents/${docId}/process`, {
@@ -418,6 +443,8 @@ export default function MatterDetailPage() {
       const data = await res.json();
       setDocProcessError(data.detail || "Error al procesar documento");
       setProcessingDocId(null);
+      setProcessingStep(null);
+      setProcessingPercent(null);
     }
   };
 
@@ -803,12 +830,23 @@ export default function MatterDetailPage() {
                           className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
                         >
                           {(processingDocId === doc.id || doc.status === "queued" || doc.status === "processing") ? (
-                            <span role="status" aria-live="polite" className="flex items-center gap-1">
-                              <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                              </svg>
-                              {doc.status === "queued" ? "En cola..." : "Procesando..."}
+                            <span role="status" aria-live="polite" className="flex flex-col items-end gap-1 min-w-[140px]">
+                              <span className="flex items-center gap-1 text-blue-700">
+                                <svg aria-hidden="true" className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                {STEP_LABELS[processingStep ?? ""] || (doc.status === "queued" ? "En cola..." : "Procesando...")}
+                              </span>
+                              <span className="w-full h-1 bg-blue-100 rounded-full overflow-hidden">
+                                <span
+                                  className="block h-full bg-blue-600 transition-all duration-300"
+                                  style={{ width: `${processingPercent ?? 0}%` }}
+                                />
+                              </span>
+                              <span className="text-[10px] text-blue-600 tabular-nums">
+                                {processingPercent ?? 0}%
+                              </span>
                             </span>
                           ) : "Procesar"}
                         </button>
@@ -1646,14 +1684,22 @@ export default function MatterDetailPage() {
       {processPoll && (
         <DocumentProcessPoll
           docId={processPoll.docId}
+          onProgress={(step, percent) => {
+            setProcessingStep(step);
+            setProcessingPercent(percent);
+          }}
           onDone={() => {
             fetchDocuments();
+            setProcessingStep(null);
+            setProcessingPercent(null);
             setProcessingDocId(null);
             setProcessPoll(null);
           }}
           onTimeout={() => {
             setDocProcessError("El procesamiento está tardando más de lo esperado.");
             fetchDocuments();
+            setProcessingStep(null);
+            setProcessingPercent(null);
             setProcessingDocId(null);
             setProcessPoll(null);
           }}
@@ -1706,9 +1752,10 @@ interface DocumentProcessPollProps {
   docId: number;
   onDone: () => void;
   onTimeout: () => void;
+  onProgress: (step: string, percent: number) => void;
 }
 
-function DocumentProcessPoll({ docId, onDone, onTimeout }: DocumentProcessPollProps) {
+function DocumentProcessPoll({ docId, onDone, onTimeout, onProgress }: DocumentProcessPollProps) {
   const docIdRef = useRef(docId);
   docIdRef.current = docId;
 
@@ -1716,9 +1763,23 @@ function DocumentProcessPoll({ docId, onDone, onTimeout }: DocumentProcessPollPr
     intervalMs: POLL_INTERVAL_MS,
     maxAttempts: POLL_MAX_ATTEMPTS,
     task: async () => {
-      const res = await fetch(`/api/v1/documents/${docIdRef.current}/analysis`);
-      if (res.ok) {
-        const data = await res.json();
+      // Hit /progress in parallel to /analysis so the stepper UI
+      // shows the current stage + percent. /analysis is the
+      // termination signal; /progress is the live readout.
+      const [progressRes, analysisRes] = await Promise.all([
+        fetch(`/api/v1/documents/${docIdRef.current}/progress`),
+        fetch(`/api/v1/documents/${docIdRef.current}/analysis`),
+      ]);
+
+      if (progressRes.ok) {
+        const p = await progressRes.json();
+        if (p.processing_step) {
+          onProgress(p.processing_step, p.processing_progress ?? 0);
+        }
+      }
+
+      if (analysisRes.ok) {
+        const data = await analysisRes.json();
         return {
           done: data.status === "processed" || Boolean(data.extracted_text),
           value: data,
@@ -1727,7 +1788,10 @@ function DocumentProcessPoll({ docId, onDone, onTimeout }: DocumentProcessPollPr
       return { done: false };
     },
     onResult: (result) => {
-      if (result.done) onDone();
+      if (result.done) {
+        onProgress("done", 100);
+        onDone();
+      }
     },
     onTimeout,
     enabled: true,
