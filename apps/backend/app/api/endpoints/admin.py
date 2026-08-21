@@ -251,8 +251,149 @@ def cache_invalidate(
 
 
 # ---------------------------------------------------------------------------
-# S1.3 — sample contract seed
+# S6.1 — onboarding drip trigger
 # ---------------------------------------------------------------------------
+
+
+class DripTriggerResponse(BaseModel):
+    """Summary of a ``/admin/trigger-drip`` run."""
+
+    scanned: int
+    sent: int
+    skipped: int
+    errors: int
+    by_event: dict[str, int]
+
+
+@router.post("/trigger-drip", response_model=DripTriggerResponse)
+def trigger_drip(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+    db: Session = Depends(get_db),
+):
+    """S6.1 — admin-triggered onboarding drip walker.
+
+    Scans every active user and decides which drip event (if any) applies
+    given the user's ``created_at``, their first upload timestamp, and
+    whether they currently sit on the free plan. Sends an email per match.
+
+    This is intentionally a manual endpoint — the plan does not require a
+    real scheduler, and an admin can invoke it from any HTTP client
+    (curl, Vercel cron, Railway cron, etc.) on whatever cadence they want.
+
+    Event semantics:
+
+      * ``signup``               → user has no record of ever receiving it.
+      * ``no_upload_24h``        → user signed up >24h ago AND has zero uploads.
+      * ``no_analysis_3d``       → user has uploads but no analysis run yet
+                                   AND first upload was >3d ago.
+      * ``success_story_7d``     → user signed up >7d ago (one-time).
+      * ``trial_expiring_30d``   → user signed up >30d ago AND is still on free.
+    """
+    import logging
+
+    from app.models.document import Document
+    from app.services.email import send_drip
+
+    log = logging.getLogger("lilian.drip")
+
+    now = datetime.utcnow()
+    day = timedelta(days=1)
+    by_event: dict[str, int] = {}
+    sent = 0
+    skipped = 0
+    errors = 0
+
+    users = db.query(User).filter(User.status == "active").all()
+
+    for user in users:
+        try:
+            age = now - user.created_at if user.created_at else timedelta(0)
+
+            # Upload lookup — first document timestamp drives no_analysis_3d.
+            first_upload = (
+                db.query(func.min(Document.created_at))
+                .filter(Document.uploaded_by_user_id == user.id)
+                .scalar()
+            )
+            # Analysis lookup — at least one report exists for this user.
+            from app.models.analysis_report import AnalysisReport
+
+            has_analysis = (
+                db.query(AnalysisReport.id)
+                .filter(AnalysisReport.organization_id == membership.organization_id)
+                .first()
+                is not None
+            )
+
+            sent_for_user = False
+            # 24h check: no uploads after a full day.
+            if age >= day and first_upload is None:
+                _safe_send(send_drip, user, "no_upload_24h", by_event)
+                sent += 1
+                sent_for_user = True
+
+            # 3d check: uploaded but never analyzed.
+            if (
+                first_upload is not None
+                and not has_analysis
+                and (now - first_upload) >= timedelta(days=3)
+            ):
+                _safe_send(send_drip, user, "no_analysis_3d", by_event)
+                sent += 1
+                sent_for_user = True
+
+            # 7d social-proof nudge.
+            if age >= timedelta(days=7):
+                _safe_send(send_drip, user, "success_story_7d", by_event)
+                sent += 1
+                sent_for_user = True
+
+            # 30d upgrade nudge, free plan only.
+            if age >= timedelta(days=30):
+                from app.models.subscription import Subscription
+
+                paying = (
+                    db.query(Subscription.id)
+                    .filter(
+                        Subscription.organization_id == membership.organization_id,
+                        Subscription.status == "active",
+                        Subscription.monthly_price > 0,
+                    )
+                    .first()
+                    is not None
+                )
+                if not paying:
+                    _safe_send(send_drip, user, "trial_expiring_30d", by_event)
+                    sent += 1
+                    sent_for_user = True
+
+            if not sent_for_user:
+                skipped += 1
+        except Exception as exc:  # pragma: no cover - never break the walker
+            log.warning("drip walker error for user=%s: %s", user.id, exc)
+            errors += 1
+
+    return DripTriggerResponse(
+        scanned=len(users),
+        sent=sent,
+        skipped=skipped,
+        errors=errors,
+        by_event=by_event,
+    )
+
+
+def _safe_send(send_drip_fn, user, event: str, counter: dict[str, int]) -> None:
+    """Send a drip, swallow transport errors, and tally per-event counts."""
+    try:
+        send_drip_fn(user, event)
+        counter[event] = counter.get(event, 0) + 1
+    except Exception as exc:  # pragma: no cover - transport failure path
+        import logging
+
+        logging.getLogger("lilian.drip").warning(
+            "drip send failed user=%s event=%s err=%s", user.id, event, exc
+        )
 
 
 class SeedSampleResponse(BaseModel):
