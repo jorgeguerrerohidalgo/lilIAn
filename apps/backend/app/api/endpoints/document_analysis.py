@@ -96,6 +96,7 @@ def get_document_analysis(
         "has_analysis": True,
         "document_id": document_id,
         "document_type": analysis.document_type,
+        "summary": analysis.indexed_content,  # SUMMARY is stored in indexed_content (see _persist_analysis_result)
         "participants": _decode("participants"),
         "financial_terms": _decode("financial_terms"),
         "obligations": _decode("obligations"),
