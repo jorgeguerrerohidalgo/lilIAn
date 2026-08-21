@@ -14,11 +14,137 @@ logger = logging.getLogger(__name__)
 
 # Ruta a los templates
 TEMPLATES_DIR = Path(__file__).parent / "document_templates"
+# Sub-carpetas por país. S5.4 agrega ``chile/contracts/`` con plantillas
+# markdown de uso notarial que se montan en la misma jerarquía.
+CHILE_TEMPLATES_DIR = TEMPLATES_DIR / "chile" / "contracts"
+
+
+def _load_markdown_template(md_path: Path) -> dict | None:
+    """S5.4 — carga un template markdown de ``chile/contracts/`` y lo
+    adapta al esquema JSON que consume ``document_generator``.
+
+    El bloque de metadata en la cabecera del MD (líneas ``>``: ``key``)
+    provee ``id``, ``category``, ``legal_area`` y ``description``. La
+    lista de variables se infiere de las marcas ``{{var}}`` en el
+    cuerpo, marcándolas como requeridas por defecto cuando aparecen
+    en MAYÚSCULAS en una lista "VARIABLES" al pie, o como opcionales
+    en los ``{{#if ...}}``.
+    """
+    try:
+        text = md_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    inline = _parse_blockquote_metadata(text)
+    body = _strip_blockquote_metadata(text)
+
+    base_id = md_path.stem
+    template_id = inline.get("id") or base_id
+    category = inline.get("category", "chile")
+    description = inline.get("description", "")
+
+    variables = _extract_variables_from_template(body)
+
+    return {
+        "id": template_id,
+        "name": inline.get("name") or base_id.replace("-", " ").title(),
+        "category": category,
+        "description": description,
+        "legal_area": inline.get("legal_area"),
+        "framework": inline.get("framework"),
+        "language": "es-CL",
+        "format": "markdown",
+        "path": str(md_path.relative_to(TEMPLATES_DIR.parent)),
+        "variables": variables,
+        "template": body,
+    }
+
+
+def _parse_blockquote_metadata(text: str) -> dict[str, str]:
+    """Parsea los ``> **Clave:** valor`` al inicio del archivo."""
+
+    meta: dict[str, str] = {}
+    capture = True
+    for line in text.splitlines():
+        if not line.startswith(">"):
+            if line.strip() == "" or line.startswith("#"):
+                continue
+            # Cualquier línea que no sea de metadata corta la captura.
+            capture = False
+            continue
+        if line.strip() == ">":
+            continue
+        # Saltar el separador "---".
+        if line.strip() == "---":
+            continue
+        # Extraer **Clave:** valor
+        match = re.match(r"^>\s*\*\*([^*]+):\*\*\s*(.*)$", line)
+        if match:
+            key = match.group(1).strip().lower().replace(" ", "_")
+            value = match.group(2).strip()
+            meta[key] = value
+    return meta
+
+
+def _strip_blockquote_metadata(text: str) -> str:
+    """Quita la cabecera de metadata (líneas ``>``) y deja el cuerpo."""
+
+    out_lines: list[str] = []
+    skip_header = True
+    for line in text.splitlines():
+        if skip_header:
+            if line.strip() == "" or line.startswith(">"):
+                continue
+            skip_header = False
+        out_lines.append(line)
+    return "\n".join(out_lines).strip()
+
+
+def _extract_variables_from_template(body: str) -> list[dict]:
+    """Encuentra ``{{var}}`` en el cuerpo y devuelve la lista de
+    variables con un heurístico de ``required``.
+    """
+
+    used = set()
+    for match in re.finditer(r"\{\{#if\s*!?(\w+)\}\}", body):
+        used.add(match.group(1))
+    for match in re.finditer(r"\{\{(\w+)\}\}", body):
+        used.add(match.group(1))
+
+    # Mapeo a required basándonos en una convención propia: variables
+    # que aparecen en cláusulas SIN un ``{{#if}}`` cercano son
+    # requeridas; las que sólo aparecen en ``{{#if}}`` son opcionales.
+    used_in_conditional = set()
+    for match in re.finditer(r"\{\{#if\s*!?(\w+)\}\}", body):
+        used_in_conditional.add(match.group(1))
+
+    variables = []
+    for name in sorted(used):
+        variables.append({
+            "key": name,
+            "label": name.replace("_", " ").title(),
+            "required": name not in used_in_conditional,
+        })
+    return variables
+
+
+def _load_chile_contracts() -> list[dict]:
+    """S5.4 — carga todos los .md de ``chile/contracts/``."""
+
+    if not CHILE_TEMPLATES_DIR.exists():
+        return []
+
+    templates: list[dict] = []
+    for file in sorted(CHILE_TEMPLATES_DIR.glob("*.md")):
+        template = _load_markdown_template(file)
+        if template:
+            templates.append(template)
+    return templates
 
 
 def get_all_templates() -> list[dict]:
     """Obtiene todos los templates disponibles."""
-    templates = []
+    templates: list[dict] = []
 
     if not TEMPLATES_DIR.exists():
         return templates
@@ -32,6 +158,9 @@ def get_all_templates() -> list[dict]:
                 templates.append(template_data)
         except Exception:
             continue
+
+    # S5.4: plantillas markdown de contratos notariales chilenos.
+    templates.extend(_load_chile_contracts())
 
     return templates
 
