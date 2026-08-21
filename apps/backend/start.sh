@@ -23,6 +23,13 @@ export ANYIO_MAX_THREADS=${ANYIO_MAX_THREADS:-128}
 python -m migrations.fix_matter_status_enum || \
   echo "[start.sh] fix_matter_status_enum migration failed; continuing startup" >&2
 
+# Idempotent DB migration: add email_verified / verification_token /
+# verification_sent_at to users. Required by S1.1 self-service signup.
+# Without these columns the login endpoint raises UndefinedColumn and
+# 500s for every user. See apps/backend/migrations/add_email_verification.py.
+python -m migrations.add_email_verification || \
+  echo "[start.sh] add_email_verification migration failed; continuing startup" >&2
+
 exec python -m uvicorn app.main:app \
   --host 0.0.0.0 \
   --port ${PORT:-8000} \
