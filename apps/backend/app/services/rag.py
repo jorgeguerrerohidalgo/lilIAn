@@ -210,9 +210,23 @@ def search_laws_by_embedding(
     law_code: str = None,
     top_k: int = 5,
     similarity_threshold: float = 0.5,
-    legal_area: LegalArea | None = None
+    legal_area: LegalArea | None = None,
+    candidate_limit: int = 4000,
 ) -> list[dict]:
-    """Busca en chunks de leyes chilenas por embedding."""
+    """Busca en chunks de leyes chilenas por embedding.
+
+    S5.1 — pragmatic implementation: load at most ``candidate_limit``
+    chunks and score them in Python. The proper long-term fix is to
+    migrate ``law_chunks.embedding`` to a real pgvector column and use
+    the ``<=>`` operator with an IVFFlat / HNSW index. See
+    ROADMAP_HARVEY_FEATURES.md → "Real embeddings" follow-ups.
+
+    The ``candidate_limit`` cap protects against Supabase statement
+    timeouts when the corpus grows past a few thousand chunks: the
+    query below loads every embedding column into Python memory, which
+    is ``O(N * 1536 * 8 bytes)`` — ~110 MB for 17K chunks — and is the
+    bottleneck, not the cosine math.
+    """
     if not LAW_CHUNKS_AVAILABLE:
         return []
 
@@ -224,28 +238,48 @@ def search_laws_by_embedding(
         if legal_area is not None:
             query = query.filter(LawChunk.legal_area == legal_area)
 
-        chunks = query.all()
+        # Order by id so the candidate window is stable across calls;
+        # the random sample alternative would skew results.
+        chunks = query.order_by(LawChunk.id).limit(candidate_limit).all()
 
         results = []
+        skipped_dim_mismatch = 0
+        query_dim = len(query_embedding)
         for chunk in chunks:
             if not chunk.embedding:
                 continue
 
             try:
                 stored_embedding = json.loads(chunk.embedding)
-                similarity = cosine_similarity(query_embedding, stored_embedding)
-
-                if similarity >= similarity_threshold:
-                    results.append({
-                        "chunk_id": chunk.id,
-                        "content": chunk.content,
-                        "law_code": chunk.law_code,
-                        "law_name": chunk.law_name,
-                        "article_number": chunk.article_number,
-                        "similarity": similarity
-                    })
             except (json.JSONDecodeError, TypeError):
                 continue
+
+            # S5.1 — law_indexer used EMBEDDING_DIM_SHORT (512) for chunks
+            # shorter than SHORT_DOC_CHAR_THRESHOLD and 1536 otherwise, so
+            # the corpus has mixed dimensions. Cosine requires matching
+            # dims; skip (don't error) and count. TODO: reindex all
+            # law_chunks at 1536 dims to drop the 512-dim branch entirely.
+            if len(stored_embedding) != query_dim:
+                skipped_dim_mismatch += 1
+                continue
+
+            similarity = cosine_similarity(query_embedding, stored_embedding)
+
+            if similarity >= similarity_threshold:
+                results.append({
+                    "chunk_id": chunk.id,
+                    "content": chunk.content,
+                    "law_code": chunk.law_code,
+                    "law_name": chunk.law_name,
+                    "article_number": chunk.article_number,
+                    "similarity": similarity
+                })
+
+        if skipped_dim_mismatch:
+            logger.debug(
+                "search_laws_by_embedding skipped %d chunks (dim %d != query dim %d)",
+                skipped_dim_mismatch, len(stored_embedding) if chunks else -1, query_dim,
+            )
 
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results[:top_k]

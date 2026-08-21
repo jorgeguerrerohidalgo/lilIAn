@@ -11,9 +11,15 @@ logger = logging.getLogger(__name__)
 
 _CHAT_RULES = (
     "REGLAS:\n"
-    "- Responde SOLO con información de los fragmentos proporcionados.\n"
-    "- NO inventes normas, artículos ni jurisprudencia.\n"
-    "- Si falta información, indícalo.\n"
+    "- Responde usando los fragmentos proporcionados en CONTEXTO, que pueden\n"
+    "  provenir de tres fuentes: (1) documentos del caso actual, (2) leyes\n"
+    "  chilenas relevantes, (3) precedentes judiciales.\n"
+    "- NO inventes normas, artículos ni jurisprudencia. Solo cita lo que\n"
+    "  aparece explícitamente en los fragmentos.\n"
+    "- Cuando cites una ley, incluye el nombre del cuerpo legal y el\n"
+    "  número de artículo. Cuando cites un documento del caso, indica\n"
+    "  el nombre del archivo.\n"
+    "- Si ninguna fuente tiene información suficiente, indícalo claramente.\n"
     "- Tono profesional, contexto legal chileno.\n"
     '- Incluye: "Este análisis es preliminar y no reemplaza la revisión profesional de un abogado habilitado en Chile."\n'
     "\nCONTEXTO:\n{context}\n\nPregunta: {question}"
@@ -95,14 +101,24 @@ def get_relevant_context(
     query: str,
     top_k: int = 5,
     legal_area: LegalArea | None = None,
-    include_precedents: bool = True
+    include_precedents: bool = True,
+    include_laws: bool = True,
 ) -> str:
     from app.services.embeddings import get_embedding_provider
-    from app.services.rag import hybrid_search
+    from app.services.rag import hybrid_search, search_laws_by_embedding
 
     try:
         provider = get_embedding_provider()
-        provider.generate_embedding(query)
+        # S5.1: force 1536-dim embeddings for the query so we stay
+        # compatible with law_chunks (all indexed at 1536 — the
+        # EMBEDDING_DIM_SHORT=512 branch only triggers for batched calls
+        # where every text is short, which never happens with our mixed
+        # batches). Without this, short Spanish queries get a 512-dim
+        # vector and cosine_similarity raises against the 1536-dim
+        # corpus.
+        query_embedding = provider.generate_embedding(
+            query if len(query) >= 2000 else query + " " * (2000 - len(query)),
+        )
 
         results = hybrid_search(
             query=query,
@@ -114,7 +130,7 @@ def get_relevant_context(
 
         context_parts = []
 
-        # Agregar contexto de documentos
+        # Agregar contexto de documentos del caso
         if results:
             for i, result in enumerate(results, 1):
                 doc = None
@@ -133,6 +149,32 @@ def get_relevant_context(
                 )
         else:
             context_parts.append("No se encontró información relevante en los documentos del caso.")
+
+        # Agregar contexto del corpus de leyes chilenas (S5.1 — 14 leyes
+        # indexadas con embeddings reales). Habilita preguntas jurídicas
+        # generales (e.g. causales de despido) que no aparecen en los
+        # documentos del caso actual.
+        if include_laws:
+            try:
+                law_results = search_laws_by_embedding(
+                    query_embedding=query_embedding,
+                    top_k=4,
+                    similarity_threshold=0.4,
+                    legal_area=legal_area,
+                )
+                if law_results:
+                    law_lines = []
+                    for lr in law_results:
+                        art = f" (art. {lr['article_number']})" if lr.get("article_number") else ""
+                        law_lines.append(
+                            f"- {lr['law_name']}{art} [similitud {lr['similarity']:.2f}]: "
+                            f"{lr['content'][:1500]}"
+                        )
+                    context_parts.append(
+                        "LEYES CHILENAS APLICABLES:\n" + "\n".join(law_lines)
+                    )
+            except Exception:
+                pass  # Silencioso si falla búsqueda de leyes
 
         # Agregar contexto de precedentes judiciales
         if include_precedents:
