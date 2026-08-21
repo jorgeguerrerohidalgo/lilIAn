@@ -17,115 +17,92 @@ from app.models.document_chunk import DocumentChunk
 logger = logging.getLogger(__name__)
 
 
-# Schema para análisis estructurado
+# Slimmed schema sent to the LLM.
+#
+# The previous 12-field DOCUMENT_ANALYSIS_SCHEMA was too large:
+# combined with the 50k-char document text and the multi-paragraph
+# PROMPT_ANALYSIS template, Claude Haiku 4.5 ran out of output
+# budget at 8192 max_tokens, producing responses like
+# ``{"document_type": "...", "participants": [], "summary": ""}``
+# — the type was set but every other field was empty.
+#
+# The fields that the UI/``get_document_analysis`` endpoint actually
+# consumes (see ``apps/backend/app/api/endpoints/document_analysis.py``
+# line 86+) are document_type, summary, participants, financial_terms,
+# unusual_clauses, legal_references, and risk_assessment. The dropped
+# fields (clauses_by_type, obligations, contract_timeline,
+# indexed_content) were rarely populated correctly and forced the LLM
+# to spend its output budget on data the UI does not show directly.
 DOCUMENT_ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
         "document_type": {
             "type": "string",
-            "description": "Tipo de documento detectado"
+            "description": "Tipo de documento detectado (ej: 'contrato de servicios', 'contrato laboral')"
+        },
+        "summary": {
+            "type": "string",
+            "description": "Resumen ejecutivo breve del documento en 2-3 párrafos."
         },
         "participants": {
             "type": "array",
+            "description": "Empresas/personas que firman el documento.",
             "items": {
                 "type": "object",
                 "properties": {
-                    "company": {"type": "string", "description": "Razón social de la empresa o entidad"},
-                    "rut": {"type": "string", "description": "RUT de la empresa (ej: 76.123.456-7)"},
-                    "representative": {"type": "string", "description": "Nombre del representante legal"},
-                    "representative_rut": {"type": "string", "description": "RUT del representante legal"},
-                    "role": {"type": "string", "description": "Rol: 'contratante', 'contratista', 'proveedor', 'cliente', etc."},
-                    "verified": {"type": "boolean"}
+                    "company": {"type": "string", "description": "Razón social de la empresa"},
+                    "rut": {"type": "string", "description": "RUT de la empresa"},
+                    "representative": {"type": "string", "description": "Nombre del representante"},
+                    "role": {"type": "string", "description": "Rol: 'contratante', 'contratista', etc."}
                 }
             }
         },
         "financial_terms": {
             "type": "object",
             "properties": {
-                "dates": {"type": "array", "items": {"type": "string"}},
-                "amounts": {"type": "array", "items": {"type": "string"}},
-                "terms": {"type": "array", "items": {"type": "string"}}
-            }
-        },
-        "obligations": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "party": {"type": "string"},
-                    "type": {"type": "string"},
-                    "description": {"type": "string"}
-                }
-            }
-        },
-        "clauses_by_type": {
-            "type": "object",
-            "additionalProperties": {
-                "type": "array",
-                "items": {"type": "string"}
+                "dates": {"type": "array", "items": {"type": "string"}, "description": "Fechas relevantes"},
+                "amounts": {"type": "array", "items": {"type": "string"}, "description": "Montos mencionados"},
+                "terms": {"type": "array", "items": {"type": "string"}, "description": "Plazos relevantes"}
             }
         },
         "unusual_clauses": {
             "type": "array",
+            "description": "Cláusulas que se desvían del estándar chileno.",
             "items": {
                 "type": "object",
                 "properties": {
-                    "clause": {"type": "string"},
-                    "risk_level": {"type": "string"},
-                    "explanation": {"type": "string"},
-                    "risk_score": {"type": "integer", "minimum": 0, "maximum": 100},
-                    "recommendation": {"type": "string"}
+                    "clause": {"type": "string", "description": "Resumen de la cláusula"},
+                    "risk_level": {"type": "string", "description": "low|medium|high|critical"},
+                    "explanation": {"type": "string", "description": "Por qué es inusual"},
+                    "recommendation": {"type": "string", "description": "Acción sugerida"}
                 }
             }
         },
         "legal_references": {
             "type": "array",
+            "description": "Leyes y artículos citados.",
             "items": {
                 "type": "object",
                 "properties": {
-                    "article": {"type": "string"},
-                    "context": {"type": "string"}
+                    "article": {"type": "string", "description": "ej: 'Art. 1545 Código Civil'"},
+                    "context": {"type": "string", "description": "Contexto de la cita"}
                 }
             }
-        },
-        "summary": {
-            "type": "string",
-            "description": "Resumen ejecutivo breve (max 200 palabras)"
         },
         "risk_assessment": {
             "type": "array",
-            "description": "Evaluación detallada de riesgo por cláusula",
+            "description": "Evaluación de riesgo por categoría.",
             "items": {
                 "type": "object",
                 "properties": {
-                    "clause_type": {"type": "string", "description": "Tipo de cláusula: penalidad, terminacion, garantia, confidencialidad, etc."},
-                    "clause_text": {"type": "string", "description": "Texto exacto de la cláusula relevante"},
-                    "risk_level": {"type": "string", "enum": ["high", "medium", "low"], "description": "Nivel de riesgo: HIGH (≥70), MEDIUM (40-69), LOW (<40)"},
-                    "risk_score": {"type": "integer", "minimum": 0, "maximum": 100, "description": "Score de 0-100"},
-                    "explanation": {"type": "string", "description": "Por qué esta cláusula es riesgosa"},
-                    "industry_standard": {"type": "string", "description": "Cuál es el estándar en contratos similares en Chile"},
-                    "recommendation": {"type": "string", "description": "Qué debería negociarse para reducir el riesgo"},
-                    "suggested_clause": {"type": "string", "description": "Texto alternativo sugerido más equilibrado"}
-                }
-            }
-        },
-        "contract_timeline": {
-            "type": "array",
-            "description": "Línea de tiempo de fechas clave del contrato",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "event": {"type": "string", "description": "Nombre del evento (ej: Inicio del contrato, Término, Aviso previo)"},
-                    "date": {"type": "string", "description": "Fecha exacta o referencia (ej: 15 de marzo de 2024, o Día 30 desde la firma)"},
-                    "days_from_signing": {"type": "integer", "description": "Días desde la firma del contrato"},
-                    "type": {"type": "string", "description": "Tipo: inicio, termino, aviso, renovacion, garantia, pago, firma, plazo_sin_penalidad"},
-                    "description": {"type": "string", "description": "Descripción del evento y su implicancia"},
-                    "consequence": {"type": "string", "description": "Consecuencia si no se cumple a tiempo. Si no hay penalidad contractual explícita, indica 'Sin penalidad contractual'"},
-                    "legal_reference": {"type": "string", "description": "Referencia legal aplicable (ej: Artículo 177 Código del Trabajo)"}
+                    "category": {"type": "string", "description": "Categoría (penalidad, terminación, garantía, etc.)"},
+                    "level": {"type": "string", "description": "low|medium|high"},
+                    "explanation": {"type": "string", "description": "Por qué"}
                 }
             }
         }
-    }
+    },
+    "required": ["document_type", "summary", "participants", "financial_terms", "unusual_clauses"]
 }
 
 
