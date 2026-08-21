@@ -353,6 +353,141 @@ def get_analysis_report(
     return AnalysisReportDetailResponse(**response_data)
 
 
+# ---------------------------------------------------------------------------
+# S1.6 — PDF (and Markdown fallback) export of an analysis report.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/reports/{report_id}/export/pdf")
+def export_analysis_pdf(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """S1.6 — render the analysis report as a PDF (preferred) or as
+    Markdown when no PDF library is available.
+
+    Returns ``application/pdf`` when ``weasyprint`` (PDF engine) is
+    importable and rendering succeeds; otherwise falls back to
+    ``text/markdown`` so the user can still share a textual export
+    with their colleagues. The frontend treats both content-types as a
+    file download — the only difference is the file extension.
+    """
+    report = db.query(AnalysisReport).filter(
+        AnalysisReport.id == report_id,
+        AnalysisReport.organization_id == membership.organization_id
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Informe no encontrado")
+
+    document_id = report.document_id
+    document = None
+    if document_id:
+        from app.models.document import Document
+        document = (
+            db.query(Document)
+            .filter(
+                Document.id == document_id,
+                Document.organization_id == membership.organization_id,
+            )
+            .first()
+        )
+
+    markdown_text = ""
+    try:
+        from app.services.markdown_generator import analysis_to_markdown
+
+        markdown_text = analysis_to_markdown(
+            analysis=report,
+            document=document,
+            include_raw_content=False,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        _logger.exception("analysis_to_markdown failed for report_id=%s: %s", report_id, exc)
+        raise HTTPException(
+            status_code=500,
+            detail="No pudimos generar el reporte. Inténtalo nuevamente.",
+        ) from exc
+
+    pdf_bytes = _render_pdf_with_weasyprint(markdown_text)
+    if pdf_bytes is not None:
+        filename = _safe_filename(report, extension="pdf")
+        from fastapi.responses import Response
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # Fallback: markdown with text/markdown so we always return SOMETHING
+    # the user can email. ``extension=md`` matches the content-type.
+    from fastapi.responses import PlainTextResponse
+
+    filename = _safe_filename(report, extension="md")
+    return PlainTextResponse(
+        content=markdown_text,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _render_pdf_with_weasyprint(markdown_text: str) -> bytes | None:
+    """Render Markdown to PDF bytes via weasyprint, or return ``None`` if
+    weasyprint isn't installed / fails.
+
+    Keeping the import lazy and conditional means the dependency stays
+    optional — the rest of the app boots on machines without weasyprint
+    (the S1.6 brief says no new heavy deps).
+    """
+    try:
+        import markdown as md  # type: ignore
+        from weasyprint import HTML  # type: ignore
+    except Exception:
+        return None
+
+    html_body = md.markdown(
+        markdown_text,
+        extensions=["tables", "fenced_code", "sane_lists"],
+    )
+    full_html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<style>"
+        "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;"
+        "color: #1f2937; margin: 32px; line-height: 1.55; }"
+        "h1, h2, h3 { color: #0f172a; }"
+        "h1 { font-size: 24px; margin-top: 24px; }"
+        "h2 { font-size: 18px; margin-top: 18px; }"
+        "table { border-collapse: collapse; width: 100%; margin: 12px 0; }"
+        "th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }"
+        "th { background: #f8fafc; }"
+        "code { background: #f1f5f9; padding: 1px 4px; border-radius: 4px; }"
+        "</style></head><body>" + html_body + "</body></html>"
+    )
+    try:
+        return HTML(string=full_html).write_pdf()
+    except Exception:
+        _logger.exception("weasyprint rendering failed")
+        return None
+
+
+def _safe_filename(report: AnalysisReport, extension: str) -> str:
+    """Return an ASCII-safe filename for the downloaded export.
+
+    The report's ``title`` is preferred but fallback to a generic name
+    so the export still has a sensible default.
+    """
+    raw = getattr(report, "title", None) or getattr(report, "name", None)
+    if not raw:
+        raw = f"reporte_{report.id}"
+    safe = "".join(
+        c if (c.isalnum() or c in ("-", "_")) else "_"
+        for c in str(raw).strip()
+    )[:80] or f"reporte_{report.id}"
+    return f"{safe}.{extension}"
+
+
 @router.get("/matters/{matter_id}/status")
 def get_matter_analysis_status(
     matter_id: int,

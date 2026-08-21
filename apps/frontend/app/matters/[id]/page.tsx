@@ -1109,6 +1109,33 @@ export default function MatterDetailPage() {
                 )}
               </button>
 
+              {/* S1.6: Exporta el reporte a PDF (o Markdown si el backend
+                  no tiene weasyprint disponible). Disponible solo cuando
+                  hay un análisis cargado en pantalla. */}
+              {analysis && analysis.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `/api/v1/analysis/reports/${analysis.id}/export/pdf`;
+                    // Use a hidden anchor click to force a real download
+                    // through the BFF proxy so the cookie travels.
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.setAttribute("download", "");
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                  aria-label="Exportar reporte a PDF"
+                >
+                  <svg aria-hidden="true" className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v12m-4-4 4 4 4-4M4 20h16" />
+                  </svg>
+                  Exportar PDF
+                </button>
+              )}
+
               <span className="text-xs text-gray-500">
                 Procesa tus documentos y genera un informe ejecutivo
               </span>
