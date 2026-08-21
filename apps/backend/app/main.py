@@ -86,6 +86,18 @@ def _run_startup_migrations() -> None:
             exc,
         )
 
+    # S1.1: email_verified / verification_token columns on users.
+    # Without these the /auth/login endpoint raises UndefinedColumn and
+    # 500s for every user. Idempotent (ADD COLUMN IF NOT EXISTS).
+    try:
+        from migrations.add_email_verification import main as _email_verify_heal
+        _email_verify_heal()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning(
+            "startup migration add_email_verification failed (continuing): %s",
+            exc,
+        )
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
