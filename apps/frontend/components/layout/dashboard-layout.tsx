@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChatWidget } from "@/components/chat";
 import { clearLegacyTokens } from "@/lib/auth-cookie";
+import { WelcomeTourOverlay, useWelcomeTour } from "@/components/onboarding/welcome-tour";
 
 interface User {
   id: number;
@@ -99,6 +100,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // S1.2: 3-step first-run overlay. localStorage-backed so it never
+  // reappears once dismissed.
+  const tour = useWelcomeTour();
 
   useEffect(() => {
     // La cookie `lilian_auth_token` es HttpOnly, así que no se puede leer
@@ -185,11 +189,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="nav-label">Navegación</div>
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            // S1.2: tour step 2 anchors to the Casos nav item.
+            const tourProps = item.href === "/matters" ? { "data-tour-target": "matters-list" } : {};
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={isActive ? "page" : undefined}
+                {...tourProps}
                 aria-label={
                   item.count !== undefined
                     ? `${item.label}, ${item.count} ${item.count === 1 ? "elemento" : "elementos"}`
@@ -249,6 +256,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Chat Widget */}
       <ChatWidget />
+
+      {/* S1.2 welcome tour — must be the last sibling so its portal
+          renders on top of any other fixed-positioned element. */}
+      <WelcomeTourOverlay state={tour} />
     </div>
   );
 }

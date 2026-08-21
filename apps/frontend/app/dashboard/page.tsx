@@ -114,7 +114,7 @@ export default function DashboardPage() {
             Gestiona tus casos legales y documentos
           </p>
         </div>
-        <Link href="/matters/new">
+        <Link href="/matters/new" data-tour-target="new-matter">
           <Button variant="primary" size="lg">
             <PlusIcon />
             Nuevo caso

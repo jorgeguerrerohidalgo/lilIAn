@@ -1043,6 +1043,7 @@ export default function MatterDetailPage() {
           id="tabpanel-analysis"
           role="tabpanel"
           aria-labelledby="tab-analysis"
+          data-tour-target="report-area"
           className="space-y-6"
         >
           {/* Request Analysis */}
