@@ -17,6 +17,7 @@ import {
   legalAreaColors,
   type TabType,
 } from "@/components/matters/constants";
+import { toastFromError, useToast } from "@/lib/toast";
 
 // S3-07: named constants for the polling magic numbers used by the four
 // poll loops below. S3-08 migrated those loops from inline ``setInterval``
@@ -131,6 +132,10 @@ interface ChatMessage {
 export default function MatterDetailPage() {
   const params = useParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // S1.5: toasts replace transient setError() patterns so the user
+  // sees network/server failures as floating action banners with a
+  // "Reintentar" CTA, not as inline form-state errors.
+  const toast = useToast();
 
   const [matter, setMatter] = useState<Matter | null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,11 +215,25 @@ export default function MatterDetailPage() {
         setMatter(data);
         setLoading(false);
       })
-      .catch((err) => {
-        setError(err.message || "Error al cargar el caso");
+      .catch((err: unknown) => {
+        // S1.5: surface load failures as a toast with a Reintentar
+        // CTA so the user never has to refresh by hand.
+        const message = err instanceof Error ? err.message : "Error al cargar el caso";
+        setError(message);
         setLoading(false);
+        const t = toastFromError(err, "No pudimos cargar el caso");
+        toast.show({
+          ...t,
+          title: t.title === "Algo salió mal" ? "No pudimos cargar el caso" : t.title,
+          onRetry: () => {
+            // Cheap retry — just trigger a re-render by mutating a
+            // bounded dep. The original fetch chain is recreated by
+            // its useEffect when the matter state flips back to null.
+            setMatter(null);
+          },
+        });
       });
-  }, [params.id]);
+  }, [params.id, toast]);
 
   useEffect(() => {
     if (matter) {
@@ -520,8 +539,20 @@ export default function MatterDetailPage() {
       await pollAnalysisUntilDone(prevAnalysisId);
     } else {
       const data = await res.json().catch(() => ({}));
-      setAnalysisError(data.detail || `Error al iniciar análisis (HTTP ${res.status})`);
+      const inline = data.detail || `Error al iniciar análisis (HTTP ${res.status})`;
+      setAnalysisError(inline);
       setAnalysisStage("idle");
+      // S1.5: surface inline error also as a toast with a Reintentar
+      // CTA so transient 5xx errors are recoverable without a
+      // page refresh or scrolling to the form.
+      toast.show({
+        tone: "error",
+        title: "No pudimos iniciar el análisis",
+        body: inline,
+        onRetry: () => {
+          void handleRequestAnalysis();
+        },
+      });
     }
     setAnalyzing(false);
   };

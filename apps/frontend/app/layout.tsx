@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ToastProvider } from "@/lib/toast";
 
 export const metadata: Metadata = {
   title: "lilIAn",
@@ -22,7 +23,10 @@ export default function RootLayout({
         >
           Saltar al contenido principal
         </a>
-        {children}
+        {/* S1.5: toast provider wraps the entire app so any client
+            component can fire notifications (replaces ad-hoc
+            setError patterns). */}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

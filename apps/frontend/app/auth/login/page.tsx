@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 import { Input } from "@/components/ui";
 import { Card } from "@/components/ui";
 import { safeRedirect } from "@/lib/validators";
+import { useToast } from "@/lib/toast";
 
 function LoginForm() {
   const router = useRouter();
@@ -18,6 +19,8 @@ function LoginForm() {
   // S1.1: support `?verify=<email>` so the link in the verification
   // email can land here with a one-click resend already primed.
   const verifyEmail = searchParams.get("verify");
+  // S1.5: error toasts (Spanish, with Reintentar where it makes sense).
+  const toast = useToast();
   const [email, setEmail] = useState(verifyEmail ?? "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
@@ -70,6 +73,18 @@ function LoginForm() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al iniciar sesión";
       setErrors({ form: message });
+      // S1.5: fire a toast (Spanish) with a Reintentar CTA so transient
+      // backend failures are recoverable without a page refresh.
+      toast.show({
+        tone: "error",
+        title: "No pudimos iniciar sesión",
+        body: message,
+        onRetry: () => {
+          void handleSubmit({
+            preventDefault: () => {},
+          } as React.FormEvent);
+        },
+      });
     } finally {
       setLoading(false);
     }
