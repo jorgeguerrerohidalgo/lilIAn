@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
 import { MatterStatusBadge, UrgencyBadge } from "@/components/ui";
@@ -60,9 +61,15 @@ function ChevronRightIcon() {
 }
 
 export default function MattersPage() {
+  const router = useRouter();
   const [matters, setMatters] = useState<Matter[]>([]);
   const [clients, setClients] = useState<Record<number, Client>>({});
   const [loading, setLoading] = useState(true);
+  // S1.3: tracks the sample contract seed request so we can disable
+  // the button + show "Creando…" while the backend provisions the
+  // matter and kicks off background processing.
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/v1/matters`)
@@ -83,6 +90,31 @@ export default function MattersPage() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  const handleSeedSample = async () => {
+    setSeeding(true);
+    setSeedError(null);
+    try {
+      const res = await fetch("/api/v1/matters/sample-contract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || "No pudimos crear el contrato de ejemplo");
+      }
+      const data = await res.json();
+      // Refresh the list, then route the user straight into the
+      // seeded matter. The analysis takes ~30-60s — the matter page
+      // already has the progress stepper in place so the user can
+      // watch the analysis boot.
+      router.push(`/matters/${data.matter_id}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "No pudimos crear el contrato de ejemplo";
+      setSeedError(message);
+      setSeeding(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -111,22 +143,52 @@ export default function MattersPage() {
             <div className="w-8 h-8 border-4 border-border border-t-coral rounded-full animate-spin" />
           </div>
         ) : matters.length === 0 ? (
-          <div className="px-6 py-16 text-center">
+          <div className="px-6 py-16 text-center max-w-lg mx-auto" data-tour-target="empty-matters">
             <div className="w-16 h-16 bg-soft rounded-2xl flex items-center justify-center mx-auto mb-4 text-ink/30">
               <BriefcaseIcon className="w-8 h-8" />
             </div>
             <h2 className="text-lg font-medium text-ink mb-2">
-              No tienes casos aún
+              Aún no tienes casos
             </h2>
             <p className="text-ink/60 mb-6 max-w-sm mx-auto">
-              Comienza creando tu primer caso legal para gestionar documentos y análisis
+              Comienza creando tu primer caso legal o, si solo quieres ver
+              cómo funciona Lilian, prueba con un contrato de ejemplo
+              pre-cargado.
             </p>
-            <Link href="/matters/new">
-              <Button variant="primary">
-                <PlusIcon />
-                Crear primer caso
+
+            <div className="space-y-3">
+              <Button
+                type="button"
+                variant="primary"
+                size="lg"
+                loading={seeding}
+                disabled={seeding}
+                onClick={handleSeedSample}
+                className="w-full"
+              >
+                {seeding ? "Creando contrato de ejemplo…" : "Probar con un contrato de ejemplo"}
               </Button>
-            </Link>
+              <Link href="/matters/new">
+                <Button variant="outline" className="w-full">
+                  Crear mi primer caso
+                </Button>
+              </Link>
+            </div>
+
+            {seedError && (
+              <p
+                role="alert"
+                aria-live="assertive"
+                className="mt-4 text-sm text-coral-dark"
+              >
+                {seedError}
+              </p>
+            )}
+
+            <p className="text-xs text-ink/40 mt-6">
+              El contrato de ejemplo se queda en tu organización — puedes
+              eliminarlo en cualquier momento.
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-border">

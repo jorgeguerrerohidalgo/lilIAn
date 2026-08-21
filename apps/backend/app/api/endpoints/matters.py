@@ -121,6 +121,28 @@ def get_matter(
     return matter
 
 
+@router.post("/sample-contract", status_code=status.HTTP_201_CREATED)
+def create_sample_contract(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """S1.3 — non-admin convenience endpoint that calls the same shared
+    seed implementation behind ``POST /admin/seed-sample``.
+
+    This is the entry point the empty-state CTA on ``/matters`` posts to:
+    a brand-new user with no cases can click "Probar con un contrato de
+    ejemplo" without needing to be a platform admin.
+    """
+    from app.api.endpoints.admin import _seed_sample_matter_impl
+
+    return _seed_sample_matter_impl(
+        current_user=current_user,
+        organization_id=membership.organization_id,
+        db=db,
+    )
+
+
 @router.patch("/{matter_id}", response_model=MatterResponse)
 def update_matter(
     matter_id: int,

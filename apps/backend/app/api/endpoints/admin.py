@@ -209,3 +209,225 @@ def activate_organization(
     db.commit()
 
     return {"message": "Organización activada", "org_id": org_id}
+
+
+@router.get("/embedding-status")
+def embedding_status(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+):
+    """S3.1: report the active embedding provider/model/dimensions and
+    the timestamp of the most recently indexed document chunk.
+    """
+    from app.services.embeddings import get_embedding_status
+    return get_embedding_status()
+
+
+@router.get("/cache-stats")
+def cache_stats(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+):
+    """S3.5: report Redis cache health and keyspace hit/miss counters.
+    """
+    from app.services.cache import cache_stats as _cache_stats
+    return _cache_stats()
+
+
+@router.post("/cache-invalidate")
+def cache_invalidate(
+    matter_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+):
+    """S3.5: manually invalidate the cached ``latest`` analysis for a
+    specific matter (e.g. after editing a risk review).
+    """
+    from app.services.cache import invalidate
+
+    key = f"analysis:matter:{membership.organization_id}:{matter_id}:latest"
+    deleted = invalidate(key)
+    return {"key": key, "deleted": deleted}
+
+
+# ---------------------------------------------------------------------------
+# S1.3 — sample contract seed
+# ---------------------------------------------------------------------------
+
+
+class SeedSampleResponse(BaseModel):
+    matter_id: int
+    document_id: int
+    analysis_status: str
+    message: str
+
+
+@router.post("/seed-sample", response_model=SeedSampleResponse)
+def seed_sample_matter(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+    db: Session = Depends(get_db),
+):
+    """S1.3 — admin-only variant of the sample contract seed.
+
+    Idempotent — returns the same response if a "Contrato de Ejemplo"
+    matter already exists for the admin's organization. The non-admin
+    user-facing variant lives at ``POST /sample-contract`` and is what
+    the empty-state CTA on ``/matters`` calls.
+    """
+    return _seed_sample_matter_impl(
+        current_user=current_user,
+        organization_id=membership.organization_id,
+        db=db,
+    )
+
+
+def _seed_sample_matter_impl(
+    current_user: User,
+    organization_id: int,
+    db: Session,
+) -> SeedSampleResponse:
+    """Shared implementation for both admin and user-facing seed endpoints.
+
+    Steps:
+      1. Find an existing demo matter for this org (idempotent), or
+         create a new one (``CONTRACT_REVIEW`` / "Contrato de Ejemplo").
+      2. Read ``apps/backend/laws/ley_proteccion_consumidor.pdf`` and
+         persist it as the matter's first Document (skip upload if a
+         Document already exists for this matter).
+      3. Kick off background processing + analysis using the same
+         helpers the user-upload path uses.
+
+    Note: per the task description the file is a mislabeled test file
+    (it's actually Código Aeronáutico). We still upload it — the
+    downstream analysis pipeline accepts any PDF.
+    """
+    import logging
+    import os
+
+    from app.models.matter import MatterStatus, MatterType, MatterUrgency
+
+    log = logging.getLogger("lilian.sample_seed")
+    demo_title = "Contrato de Ejemplo"
+
+    existing = (
+        db.query(Matter)
+        .filter(
+            Matter.organization_id == organization_id,
+            Matter.title == demo_title,
+        )
+        .order_by(Matter.id.asc())
+        .first()
+    )
+
+    if existing is not None:
+        # The matter exists — but we still want to make sure a document
+        # is attached, so check that too. If we already have both, just
+        # report and bail.
+        from app.models.document import Document
+
+        existing_doc = (
+            db.query(Document)
+            .filter(Document.matter_id == existing.id)
+            .order_by(Document.id.asc())
+            .first()
+        )
+        if existing_doc is not None:
+            return SeedSampleResponse(
+                matter_id=existing.id,
+                document_id=existing_doc.id,
+                analysis_status="already_present",
+                message=(
+                    "Ya existe el contrato de ejemplo en tu organización. "
+                    f"Ábrelo en /matters/{existing.id}."
+                ),
+            )
+
+    matter = existing
+    if matter is None:
+        matter = Matter(
+            organization_id=organization_id,
+            created_by_user_id=current_user.id,
+            title=demo_title,
+            matter_type=MatterType.CONTRACT_REVIEW,
+            description=(
+                "Contrato de ejemplo cargado automáticamente para que "
+                "puedas explorar un análisis real sin subir tus propios "
+                "documentos."
+            ),
+            status=MatterStatus.NEW,
+            urgency=MatterUrgency.LOW,
+            source_channel="sample_seed",
+        )
+        db.add(matter)
+        db.commit()
+        db.refresh(matter)
+
+    # ---- upload the demo file ------------------------------------------------
+    pdf_path = os.path.join(
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        ),
+        "laws",
+        "ley_proteccion_consumidor.pdf",
+    )
+    if not os.path.exists(pdf_path):
+        raise HTTPException(
+            status_code=503,
+            detail="No se encontró el archivo de ejemplo en el backend.",
+        )
+
+    with open(pdf_path, "rb") as fh:
+        content = fh.read()
+
+    from app.models.document import Document
+    from app.services import storage
+
+    storage_path, file_hash, file_size = storage.save_file(
+        content=content,
+        original_filename="contrato_de_ejemplo.pdf",
+        organization_id=organization_id,
+        matter_id=matter.id,
+    )
+    document = Document(
+        organization_id=organization_id,
+        matter_id=matter.id,
+        uploaded_by_user_id=current_user.id,
+        original_filename="contrato_de_ejemplo.pdf",
+        storage_path=storage_path,
+        mime_type="application/pdf",
+        file_size=file_size,
+        file_hash=file_hash,
+        status="uploaded",
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    # ---- kick off background processing + analysis --------------------------
+    # The user waits ~30-60s for the analysis to complete. We rely on
+    # the standard pipeline so subsequent API calls see the same data
+    # the user-uploaded code path produces.
+    try:
+        from app.services.document_processor import process_document
+
+        process_document(document.id)
+    except Exception as exc:  # pragma: no cover - best effort
+        log.warning("seed-sample document processing failed: %s", exc)
+
+    try:
+        from app.api.endpoints.analysis import run_analysis_task
+
+        run_analysis_task(matter.id, organization_id, current_user.id)
+    except Exception as exc:  # pragma: no cover - best effort
+        log.warning("seed-sample analysis dispatch failed: %s", exc)
+
+    return SeedSampleResponse(
+        matter_id=matter.id,
+        document_id=document.id,
+        analysis_status="processing",
+        message=(
+            f"Contrato de ejemplo creado. Te llevamos al análisis en "
+            f"/matters/{matter.id}."
+        ),
+    )
