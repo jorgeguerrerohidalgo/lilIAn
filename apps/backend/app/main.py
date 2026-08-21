@@ -73,6 +73,16 @@ def _run_startup_migrations() -> None:
             exc,
         )
 
+    # S6.3: invitations table for the team-invite CTA in the sidebar.
+    try:
+        from migrations.add_invitations_table import main as _invite_heal
+        _invite_heal()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning(
+            "startup migration add_invitations_table failed (continuing): %s",
+            exc,
+        )
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):

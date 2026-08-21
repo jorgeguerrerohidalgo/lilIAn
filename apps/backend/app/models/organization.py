@@ -42,3 +42,4 @@ class Organization(Base):
     clients = relationship("Client", back_populates="organization")
     precedents = relationship("Precedent", back_populates="organization")
     reviews = relationship("Review", back_populates="organization")
+    invitations = relationship("Invitation", back_populates="organization")

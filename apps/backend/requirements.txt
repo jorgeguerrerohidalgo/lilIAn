@@ -21,3 +21,5 @@ redis>=5.0.0  # S1-16: required for token blacklist
 slowapi==0.1.9  # S1-03: rate limit on /register and /login
 stripe>=10.0.0  # S2-01: Stripe Checkout + subscriptions for paid plans
 resend>=0.7.0  # S2-07: transactional email service
+sentry-sdk[fastapi]>=2.10.0  # S4.7: error tracking + perf monitoring
+itsdangerous>=2.1.2  # S4.5: signed token serializer for share links

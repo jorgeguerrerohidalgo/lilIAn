@@ -9,6 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.agents.registry import (
+    get_agent_by_slug,
+    get_agent_library,
+    list_library_categories,
+)
 from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import SessionLocal, get_db
 from app.models.document import Document
@@ -120,3 +125,35 @@ def run_agent_endpoint(
         started_at=run.started_at.isoformat() if run.started_at else "",
         completed_at=run.completed_at.isoformat() if run.completed_at else None,
     )
+
+
+@router.get("/library", response_model=AgentListResponse)
+def list_agent_library() -> dict:
+    """S5.1: catálogo público de agentes de dominio chileno.
+
+    No requiere autenticación: la galería ``/agents`` del frontend la
+    muestra a usuarios anónimos (landing). Cada agente incluye
+    ``name``, ``slug``, ``description``, ``category``, ``tool_ids``,
+    ``typical_matter_type``, ``legal_areas`` y ``estimated_minutes``.
+    """
+    return AgentListResponse(agents=[dict(a) for a in get_agent_library()])
+
+
+@router.get("/library/categories")
+def list_agent_library_categories() -> dict:
+    """S5.1: categorías de la biblioteca (``civil``, ``laboral``, ``comercial``)."""
+    return {"categories": list_library_categories()}
+
+
+@router.get("/library/{slug}")
+def get_agent_library_item(slug: str) -> dict:
+    """S5.1: detalle de un agente por slug.
+
+    Devuelve el ``system_prompt`` completo, pensado para que el
+    frontend muestre un modal de "qué hace este agente" y permita
+    elegirlo como punto de partida para un caso nuevo.
+    """
+    agent = get_agent_by_slug(slug)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Agente no encontrado: {slug}")
+    return dict(agent)

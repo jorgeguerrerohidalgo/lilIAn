@@ -27,6 +27,7 @@ export default function NewMatterPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const clientIdFromUrl = searchParams.get("client_id");
+  const agentSlugFromUrl = searchParams.get("agent");
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{
@@ -46,6 +47,35 @@ export default function NewMatterPage() {
     counterparty_name: "",
     client_id: clientIdFromUrl ? parseInt(clientIdFromUrl) : undefined,
   });
+
+  useEffect(() => {
+    if (agentSlugFromUrl) {
+      // S5.1: pre-load the agent library entry so the form can pre-fill
+      // the matter_type and title suggestions.
+      fetch(`/api/v1/agents/library/${agentSlugFromUrl}`)
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => {
+          if (data) {
+            setForm((prev) => {
+              const next = { ...prev };
+              if (data.typical_matter_type) {
+                next.matter_type = data.typical_matter_type;
+              }
+              if (!prev.title && data.name) {
+                next.title = data.name;
+              }
+              if (data.description && !prev.description) {
+                next.description = data.description;
+              }
+              return next;
+            });
+          }
+        })
+        .catch(() => {
+          // Silently degrade: the agent library is best-effort.
+        });
+    }
+  }, [agentSlugFromUrl]);
 
   useEffect(() => {
     if (clientIdFromUrl) {

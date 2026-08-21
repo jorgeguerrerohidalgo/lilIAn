@@ -90,6 +90,14 @@ class Settings(BaseSettings):
     EMAIL_FROM_ADDRESS: str = "noreply@lilian.cl"
     EMAIL_FROM_NAME: str = "Lilian"
 
+    # S4.7: Sentry observability. Optional — when SENTRY_DSN is unset
+    # the SDK is not initialized and ``capture_exception_with_context``
+    # is a no-op. This keeps local dev and CI cost-free.
+    SENTRY_DSN: str | None = None
+    SENTRY_ENVIRONMENT: str = "development"
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_RELEASE: str | None = None
+
     # S2-05: where the user lands after a successful Stripe Checkout and
     # where they go when they cancel. Surfaced in the response from
     # ``POST /api/v1/saas/checkout`` so the frontend can just redirect.
