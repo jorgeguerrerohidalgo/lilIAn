@@ -1,4 +1,7 @@
 from datetime import datetime
+from secrets import token_urlsafe
+
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -13,7 +16,12 @@ from app.models.organization import Organization
 from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
 from app.schemas.token import Token
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import (
+    EmailVerificationRequest,
+    ResendVerificationRequest,
+    UserCreate,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -41,6 +49,49 @@ def _set_auth_cookie(response: Response, token: str) -> None:
     )
 
 
+def _generate_verification_token() -> str:
+    """URL-safe token of ~32 bytes of entropy.
+
+    The token is opaque (not derivable from the user id) so it cannot be
+    guessed. ``token_urlsafe(32)`` produces 43 base64-url chars which
+    comfortably fits the 128-char column.
+    """
+    return token_urlsafe(32)
+
+
+def _send_verification_email(user: User, frontend_base_url: str | None = None) -> None:
+    """Render + dispatch (or stub-log) the verification email.
+
+    The endpoint layer is responsible for the user lookup and token
+    issuance; this helper only formats the email and hands it off to
+    ``send_email``. Failures are swallowed with a log line so the
+    /register endpoint never bubbles a 500 because of an upstream
+    email provider being unavailable — the user can always use the
+    resend endpoint.
+    """
+    import logging
+
+    logger = logging.getLogger("lilian.auth")
+
+    base = frontend_base_url or os.environ.get(
+        "FRONTEND_BASE_URL",
+        "https://lil-i-5tz56uhov-jorgeguerrerohidalgo710.vercel.app",
+    )
+    verify_url = f"{base.rstrip('/')}/auth/verify-email?token={user.verification_token}"
+
+    try:
+        from app.services.email import send_email
+
+        send_email(
+            to=user.email,
+            template="email_verification",
+            data={"full_name": user.full_name, "verify_url": verify_url},
+        )
+        user.verification_sent_at = datetime.utcnow()
+    except Exception as exc:  # pragma: no cover - never block signup
+        logger.warning("verification email send failed for user_id=%s: %s", user.id, exc)
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")  # S1-05: prevent mass account creation
 def register(
@@ -51,8 +102,11 @@ def register(
     """Registra un nuevo usuario y crea su organización personal.
 
     Verifica que el email no esté ya registrado, hashea la contraseña,
-    crea el usuario, le asocia una ``Organization`` tipo ``individual``
-    y un ``OrganizationMember`` con rol ``OWNER``.
+    crea el usuario (con ``email_verified=False`` y un ``verification_token``
+    nuevo), le asocia una ``Organization`` tipo ``individual`` y un
+    ``OrganizationMember`` con rol ``OWNER``, y por último envía el
+    email de verificación (con fallback a log-stub si Resend no está
+    configurado).
 
     Args:
         request: Request de FastAPI (requerido por ``limiter.limit``).
@@ -77,6 +131,9 @@ def register(
         email=user_data.email,
         password_hash=get_password_hash(user_data.password),
         full_name=user_data.full_name,
+        email_verified=False,
+        verification_token=_generate_verification_token(),
+        verification_sent_at=datetime.utcnow(),
     )
     db.add(user)
     db.commit()
@@ -98,7 +155,65 @@ def register(
     db.add(membership)
     db.commit()
 
+    _send_verification_email(user)
+
     return user
+
+
+@router.post("/verify-email", response_model=UserResponse)
+def verify_email(
+    payload: EmailVerificationRequest,
+    db: Session = Depends(get_db),
+):
+    """S1.1 — confirma un ``verification_token`` y activa la cuenta.
+
+    Devuelve el ``UserResponse`` para que el frontend pueda mostrar un
+    mensaje y redirigir a ``/auth/login``.
+
+    Returns:
+        ``UserResponse`` con ``email_verified=True``.
+
+    Raises:
+        HTTPException 400 si el token no existe o ya fue consumido.
+    """
+    user = db.query(User).filter(
+        User.verification_token == payload.token,
+    ).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de verificación no es válido o ya fue usado",
+        )
+
+    user.email_verified = True
+    user.verification_token = None  # one-shot: prevents replay
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+def resend_verification(
+    payload: ResendVerificationRequest,
+    db: Session = Depends(get_db),
+):
+    """S1.1 — regenera y reenvía el ``verification_token``.
+
+    Siempre responde 202 aunque el email no esté registrado: este
+    endpoint no debe usarse para enumerar cuentas.
+
+    Si la cuenta ya está verificada, respondemos 202 igual sin hacer
+    nada — la idempotencia es importante para tolerar dobles clics en
+    el botón "Reenviar" del frontend.
+    """
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user is not None and not user.email_verified:
+        user.verification_token = _generate_verification_token()
+        user.verification_sent_at = datetime.utcnow()
+        db.commit()
+        db.refresh(user)
+        _send_verification_email(user)
+    return {"status": "queued"}
 
 
 @router.post("/login", response_model=Token)
@@ -112,22 +227,10 @@ def login(
     """Autentica al usuario y emite un token JWT de acceso.
 
     Verifica credenciales contra ``User.password_hash`` (bcrypt),
-    actualiza ``last_login_at``, genera el JWT con ``create_access_token``
-    y lo deposita en la cookie ``lilian_auth_token`` para uso por el
+    rechaza el login si el email no está verificado, actualiza
+    ``last_login_at``, genera el JWT con ``create_access_token`` y lo
+    deposita en la cookie ``lilian_auth_token`` para uso por el
     frontend.
-
-    Args:
-        request: Request de FastAPI (requerido por ``limiter.limit``).
-        response: Response de FastAPI donde se setea la cookie de auth.
-        form_data: Form OAuth2 con ``username`` (email) y ``password``.
-        db: Sesión de SQLAlchemy inyectada por dependencia.
-
-    Returns:
-        ``Token`` con ``access_token`` y ``token_type="bearer"``.
-
-    Raises:
-        HTTPException: 401 con header ``WWW-Authenticate: Bearer`` si
-            las credenciales son inválidas.
     """
     user = db.query(User).filter(User.email == form_data.username).first()
 
@@ -136,6 +239,16 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña incorrectos",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # S1.1: block login until the user has confirmed ownership of
+    # the email address. ``get_current_user`` would happily hand out
+    # a JWT for an unverified account otherwise — that's the bug
+    # S1.1 is here to fix.
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debes verificar tu correo antes de iniciar sesión. Revisa tu bandeja de entrada o reenvía la verificación desde la pantalla de registro.",
         )
 
     user.last_login_at = datetime.utcnow()

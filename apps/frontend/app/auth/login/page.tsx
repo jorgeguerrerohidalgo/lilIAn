@@ -15,14 +15,23 @@ function LoginForm() {
   // attaches when redirecting unauthenticated users. Falls back to
   // /dashboard. safeRedirect() rejects open-redirect attempts.
   const nextPath = safeRedirect(searchParams.get("next"), "/dashboard");
-  const [email, setEmail] = useState("");
+  // S1.1: support `?verify=<email>` so the link in the verification
+  // email can land here with a one-click resend already primed.
+  const verifyEmail = searchParams.get("verify");
+  const [email, setEmail] = useState(verifyEmail ?? "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
   const [loading, setLoading] = useState(false);
+  // S1.1: when the backend returns 403 "verify your email", we show
+  // a resend CTA inline so the user doesn't have to remember their
+  // email to start the recovery flow.
+  const [pendingVerification, setPendingVerification] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
+    setPendingVerification(false);
     setLoading(true);
 
     try {
@@ -45,6 +54,14 @@ function LoginForm() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 403) {
+          // S1.1: backend refused because the email isn't verified.
+          setPendingVerification(true);
+          throw new Error(
+            data.detail ||
+              "Debes verificar tu correo antes de iniciar sesión.",
+          );
+        }
         throw new Error(data.detail || "Error al iniciar sesión");
       }
 
@@ -55,6 +72,20 @@ function LoginForm() {
       setErrors({ form: message });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResendState("sending");
+    try {
+      await fetch("/api/v1/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      setResendState("sent");
+    } catch {
+      setResendState("error");
     }
   };
 
@@ -86,6 +117,40 @@ function LoginForm() {
             className="bg-coral-pale border border-coral/20 text-coral-dark px-4 py-3 rounded-xl mb-6 text-sm"
           >
             {errors.form}
+          </div>
+        )}
+
+        {/* S1.1: when the user is blocked at login because their email
+            is not verified, surface a "resend verification" CTA right
+            under the form so recovery is one click. */}
+        {pendingVerification && (
+          <div
+            role="region"
+            aria-label="Recuperar verificación de correo"
+            className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-4 rounded-xl mb-6 text-sm space-y-3"
+          >
+            <p>
+              ¿No recibiste el correo o se perdió? Te lo reenviamos a{" "}
+              <strong>{email}</strong>.
+            </p>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              loading={resendState === "sending"}
+              disabled={resendState === "sent"}
+              onClick={handleResend}
+              className="w-full"
+            >
+              {resendState === "sent"
+                ? "Enlace reenviado"
+                : "Reenviar enlace de verificación"}
+            </Button>
+            {resendState === "error" && (
+              <p role="alert" className="text-xs text-coral-dark">
+                No pudimos reenviar el correo. Inténtalo nuevamente.
+              </p>
+            )}
           </div>
         )}
 

@@ -58,9 +58,31 @@ class UserResponse(UserBase):
     status: str
     created_at: datetime
     last_login_at: datetime | None = None
+    email_verified: bool = False
 
     class Config:
         from_attributes = True
+
+
+class EmailVerificationRequest(BaseModel):
+    """S1.1 — body of ``POST /auth/verify-email``.
+
+    The token comes from the email link the user clicked. It is opaque
+    and short-lived (24 h); see ``app.api.endpoints.auth``.
+    """
+
+    token: str = Field(min_length=8, max_length=128)
+
+
+class ResendVerificationRequest(BaseModel):
+    """S1.1 — body of ``POST /auth/resend-verification``.
+
+    We send the verification email to the email address in the body.
+    The endpoint always responds 202 (never 404) to avoid leaking
+    which emails are registered.
+    """
+
+    email: EmailStr
 
 
 class UserInDB(UserBase):

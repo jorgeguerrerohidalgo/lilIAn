@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -25,6 +25,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
+    # S1.1: self-service signup requires email verification before login.
+    # `verification_token` is opaque, cleared on success — see auth.py.
+    email_verified = Column(Boolean, nullable=False, default=False)
+    verification_token = Column(String(128), nullable=True, index=True)
+    verification_sent_at = Column(DateTime, nullable=True)
 
     memberships = relationship("OrganizationMember", back_populates="user")
     matters = relationship("Matter", back_populates="created_by", foreign_keys="Matter.created_by_user_id")
