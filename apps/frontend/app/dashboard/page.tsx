@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui";
 import { MatterStatusBadge, UrgencyBadge, Tooltip } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
 import { TOOLTIPS } from "@/lib/tooltips";
+import { OnboardingChecklist } from "@/components/onboarding/checklist";
 
 interface Matter {
   id: number;
@@ -105,6 +106,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      {/* S6.4: onboarding checklist — pinned to the very top so it stays
+          visible while the user explores the dashboard for the first time. */}
+      <OnboardingChecklist />
+
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
