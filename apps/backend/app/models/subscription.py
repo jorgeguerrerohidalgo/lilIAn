@@ -20,6 +20,17 @@ class Subscription(Base):
     renews_at = Column(DateTime)
     cancelled_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # S2-01 / S2-04: Stripe linkage. Nullable so existing rows keep working.
+    # ``stripe_customer_id`` is the ``cus_…`` of the paying customer;
+    # ``stripe_subscription_id`` is the ``sub_…`` for the active recurring
+    # subscription. We persist both so the webhook can reconcile even if
+    # the metadata on the Stripe side is missing (e.g. older events).
+    stripe_customer_id = Column(String(255), nullable=True, index=True)
+    stripe_subscription_id = Column(String(255), nullable=True, index=True)
+    stripe_status = Column(String(50), nullable=True)
+    cancel_at_period_end = Column(Boolean, default=False)
+    trial_ends_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class UsageEvent(Base):

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_organization
 from app.core.database import get_db
+from app.core.plan_limits import enforce_document_limit
 from app.models.document import Document
 from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
@@ -83,7 +84,11 @@ async def upload_document(
     matter_id: int,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
+    # S2-03: plan-limit guard — returns 402 Payment Required when the
+    # org has hit its documents_limit. ``require_organization`` is still
+    # the source of the membership dependency; the limit check runs
+    # after auth so unauthenticated requests still get 401.
+    membership: OrganizationMember = Depends(enforce_document_limit),
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = None
 ):
@@ -145,6 +150,23 @@ async def upload_document(
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # S2-06: usage event for analytics + future usage-based billing.
+    # The service swallows errors so a failed write never blocks the
+    # user-visible upload that already returned a 201.
+    from app.services.usage import EVENT_DOCUMENT_UPLOADED, record_event
+    record_event(
+        organization_id=membership.organization_id,
+        event_type=EVENT_DOCUMENT_UPLOADED,
+        quantity=1,
+        user_id=current_user.id,
+        metadata={
+            "matter_id": matter_id,
+            "document_id": document.id,
+            "mime_type": detected_mime,
+            "size_bytes": file_size,
+        },
+    )
 
     # NOTE: Background processing removed - user must click "Procesar" manually
     # background_tasks.add_task(process_document_background, document.id)

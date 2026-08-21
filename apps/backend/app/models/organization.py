@@ -29,6 +29,10 @@ class Organization(Base):
     rut = Column(String(50), nullable=True)
     billing_email = Column(String(255), nullable=True)
     plan_id = Column(String(100), nullable=True)
+    # S2-01: persisted the first time the tenant starts a Checkout so we
+    # can show "Manage subscription" without hitting Stripe on every page
+    # load. Nullable for legacy tenants (free signups without Stripe).
+    stripe_customer_id = Column(String(255), nullable=True, index=True)
     status = Column(Enum(OrganizationStatus), default=OrganizationStatus.ACTIVE)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

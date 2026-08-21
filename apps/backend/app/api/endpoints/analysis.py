@@ -4,10 +4,13 @@ import threading
 from contextlib import suppress
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps.auth import get_current_user, require_organization
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
+from app.core.plan_limits import enforce_analysis_limit
 from app.models.analysis_report import AnalysisReport
 from app.models.matter import Matter
 from app.models.organization_member import OrganizationMember
@@ -80,7 +83,10 @@ def generate_analysis(
     analysis_request: GenerateAnalysisRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    membership: OrganizationMember = Depends(require_organization),
+    # S2-03: plan-limit guard — 402 Payment Required when the org has hit
+    # its analyses_limit. Runs after auth so unauthenticated requests
+    # still get 401.
+    membership: OrganizationMember = Depends(enforce_analysis_limit),
     db: Session = Depends(get_db)
 ):
     matter = db.query(Matter).filter(
@@ -119,12 +125,182 @@ def generate_analysis(
         current_user.id
     )
 
+    # S2-06: usage event for analytics + future usage-based billing.
+    # The service swallows errors so a failed write never blocks the
+    # 202 we are about to return to the user.
+    from app.services.usage import EVENT_ANALYSIS_RUN, record_event
+
+    record_event(
+        organization_id=membership.organization_id,
+        event_type=EVENT_ANALYSIS_RUN,
+        quantity=1,
+        user_id=current_user.id,
+        metadata={
+            "matter_id": analysis_request.matter_id,
+            "documents_to_analyze": doc_count,
+        },
+    )
+
     return {
         "message": "Análisis iniciado en segundo plano",
         "matter_id": analysis_request.matter_id,
         "status": "processing",
         "documents_to_analyze": doc_count,
     }
+
+
+@router.post("/stream")
+async def generate_analysis_stream(
+    analysis_request: GenerateAnalysisRequest,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+):
+    """S3.4: streaming analysis endpoint.
+
+    Returns a Server-Sent Events stream of the same structured analysis
+    that ``POST /analysis`` would generate, but with the LLM response
+    streamed token-by-token so the frontend can render the report
+    progressively instead of waiting for the full call to finish.
+
+    Wire format (text/event-stream):
+
+        data: {"type":"start","matter_id":42}
+        data: {"type":"delta","content":"..."}    # repeated as tokens arrive
+        data: {"type":"done","report_id":123,"status":"analysis_ready"}
+
+    The existing ``POST /analysis`` endpoint (background task) is left
+    untouched — this is a parallel path for clients that want lower
+    time-to-first-token. The full structured result is NOT persisted
+    on the streaming path; callers should continue to use ``POST
+    /analysis`` to write to the DB. ``POST /analysis/stream`` is best
+    for live preview / interactive exploration.
+    """
+    import json
+
+    from app.models.document import Document
+
+    # Synchronous pre-flight: matter lookup + document count. Use a
+    # short-lived session so the streaming generator does not hold a
+    # long-lived ORM session.
+    def preflight() -> tuple[int, str]:
+        sync_db = SessionLocal()
+        try:
+            matter = (
+                sync_db.query(Matter)
+                .filter(
+                    Matter.id == analysis_request.matter_id,
+                    Matter.organization_id == membership.organization_id,
+                )
+                .first()
+            )
+            if not matter:
+                raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+            doc_count = (
+                sync_db.query(Document)
+                .filter(
+                    Document.matter_id == analysis_request.matter_id,
+                    Document.organization_id == membership.organization_id,
+                    Document.status.in_(["processed", "analyzed"]),
+                )
+                .count()
+            )
+            if doc_count == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "No hay documentos procesados para analizar. "
+                        "Sube al menos un PDF/DOCX, espera a que se "
+                        "procese y vuelve a intentar."
+                    ),
+                )
+
+            matter_type_value = (
+                matter.matter_type.value
+                if hasattr(matter.matter_type, "value")
+                else matter.matter_type
+            )
+            return analysis_request.matter_id, matter_type_value
+        finally:
+            sync_db.close()
+
+    try:
+        matter_id, matter_type_value = await run_in_threadpool(preflight)
+    except HTTPException:
+        raise
+
+    async def event_generator():
+        from app.services.analysis import (
+            analyze_contract,
+            get_chunks_text_for_analysis,
+        )
+        from app.services.llm import get_llm_provider
+
+        yield f"data: {json.dumps({'type': 'start', 'matter_id': matter_id})}\n\n"
+
+        def prep() -> str:
+            return get_chunks_text_for_analysis(
+                matter_id, membership.organization_id
+            )
+
+        documents_text = await run_in_threadpool(prep)
+        if not documents_text or len(documents_text.strip()) < 100:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'No hay texto suficiente para analizar'})}\n\n"
+            return
+
+        # Build the same prompt the blocking path would build. We do not
+        # have streaming JSON-mode, so we stream the LLM's free-text
+        # continuation after the ``{`` prefill and let the frontend
+        # render it as it arrives.
+        from app.services.analysis import (
+            SECTION_TIMELINE_CITAS,
+            get_system_prompt_for_matter_type,
+        )
+
+        def build_prompt() -> tuple[str, str]:
+            system_prompt = get_system_prompt_for_matter_type(matter_type_value)
+            system_prompt += SECTION_TIMELINE_CITAS
+
+            prompt = (
+                "Analiza el siguiente documento legal y proporciona un "
+                "informe estructurado en JSON.\n\n"
+                f"DOCUMENTO:\n{documents_text[:80000]}\n\n"
+                "Responde SOLO con el JSON solicitado."
+            )
+            return system_prompt, prompt
+
+        system_prompt, prompt = await run_in_threadpool(build_prompt)
+
+        provider = get_llm_provider()
+        full_content_parts: list[str] = []
+        try:
+            async for chunk in provider.generate_stream(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                task_complexity="complex",
+                max_tokens=8192,
+                temperature=0.3,
+            ):
+                if not chunk:
+                    continue
+                full_content_parts.append(chunk)
+                yield f"data: {json.dumps({'type': 'delta', 'content': chunk})}\n\n"
+        except Exception as exc:
+            _logger.exception("streaming analysis failed: %s", exc)
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+            return
+
+        full_content = "".join(full_content_parts)
+        yield f"data: {json.dumps({'type': 'done', 'status': 'analysis_ready', 'content': full_content})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/matters/{matter_id}", response_model=list[AnalysisReportResponse])
@@ -214,6 +390,16 @@ def get_latest_analysis(
     membership: OrganizationMember = Depends(require_organization),
     db: Session = Depends(get_db)
 ):
+    # S3.5: read-through Redis cache. Cache key is scoped to the
+    # matter + organization so a tenant cannot read another tenant's
+    # cached analysis.
+    from app.services.cache import get_cached, set_cached
+
+    cache_key = f"analysis:matter:{membership.organization_id}:{matter_id}:latest"
+    cached = get_cached(cache_key)
+    if cached:
+        return AnalysisReportDetailResponse(**cached)
+
     matter = db.query(Matter).filter(
         Matter.id == matter_id,
         Matter.organization_id == membership.organization_id
@@ -247,6 +433,12 @@ def get_latest_analysis(
             response_data["validation_summary"] = None
 
     response_data["risks"] = risk_responses
+
+    # S3.5: 1-hour TTL — long enough for a single work session of
+    # re-opens, short enough that a freshly re-run analysis supersedes
+    # the cached value the next day. When the cache is unreachable the
+    # call below is a no-op (returns False) so the response still works.
+    set_cached(cache_key, response_data, ttl=3600)
 
     return AnalysisReportDetailResponse(**response_data)
 

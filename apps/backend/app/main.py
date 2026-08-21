@@ -61,6 +61,18 @@ def _run_startup_migrations() -> None:
             exc,
         )
 
+    # S2-01: add Stripe linkage columns to organizations + subscriptions.
+    # Done here (not Alembic) to match the rest of the lifespan heal —
+    # additive, idempotent, no backfill needed.
+    try:
+        from migrations.add_stripe_columns import main as _stripe_heal
+        _stripe_heal()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning(
+            "startup migration add_stripe_columns failed (continuing): %s",
+            exc,
+        )
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
@@ -69,6 +81,14 @@ async def _lifespan(_app: FastAPI):
         "e62134f-fix-migration-lifespan",
     )
     _run_startup_migrations()
+    # S3.1: log active embedding provider at boot so operators can
+    # confirm the right backend is wired up without hitting the
+    # ``/admin/embedding-status`` endpoint manually.
+    try:
+        from app.services.embeddings import log_startup_status
+        log_startup_status()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning("embedding startup status log failed: %s", exc)
     yield
 
 

@@ -28,6 +28,21 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_API_KEY: str | None = None
+    # S3.7: smaller embedding dimensionality for short documents (<2000 chars).
+    # OpenAI's text-embedding-3-* models support a `dimensions` parameter.
+    EMBEDDING_DIM_DEFAULT: int = 1536
+    EMBEDDING_DIM_SHORT: int = 512
+    SHORT_DOC_CHAR_THRESHOLD: int = 2000
+
+    # S3.3: routing of LLM tasks by complexity. JSON-encoded mapping
+    # {"simple":"haiku","complex":"sonnet"}. Default is Haiku for both
+    # to avoid surprise model upgrades. Set in production to flip
+    # complex-path models to Sonnet 4 once verified.
+    MODEL_ROUTING: str = '{"simple":"haiku","complex":"haiku"}'
+
+    # S3.2: Anthropic prompt caching. Defaults to enabled in production.
+    # Disable (e.g. for local debugging) by setting LLM_CACHE_PROMPTS=false.
+    LLM_CACHE_PROMPTS: bool = True
 
     @property
     def resolved_llm_api_key(self) -> str | None:
@@ -37,6 +52,18 @@ class Settings(BaseSettings):
     def resolved_embedding_api_key(self) -> str | None:
         return self.EMBEDDING_API_KEY or self.OPENAI_API_KEY
 
+    @property
+    def model_routing_map(self) -> dict[str, str]:
+        """Parse MODEL_ROUTING JSON into a dict. Falls back to haiku-on-both."""
+        import json
+        try:
+            parsed = json.loads(self.MODEL_ROUTING)
+            if isinstance(parsed, dict):
+                return {str(k): str(v) for k, v in parsed.items()}
+        except (ValueError, TypeError):
+            pass
+        return {"simple": "haiku", "complex": "haiku"}
+
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 
     RATE_LIMIT_PER_MINUTE: int = 60
@@ -45,6 +72,28 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 50 * 1024 * 1024
 
     LOG_LEVEL: str = "INFO"
+
+    # S2-01: Stripe self-service checkout. Optional in dev — endpoints
+    # return 503 "Stripe not configured" when STRIPE_SECRET_KEY is unset.
+    STRIPE_SECRET_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
+    STRIPE_PRICE_LAWYER: str | None = None
+    STRIPE_PRICE_LAW_FIRM: str | None = None
+    STRIPE_PRICE_COMPANY: str | None = None
+    STRIPE_PRICE_ENTERPRISE: str | None = None
+
+    # S2-07: transactional email via Resend. Optional in dev — when
+    # unset, ``app.services.email`` logs the rendered email and returns
+    # ``{"status": "stub"}`` so local development and CI never need a
+    # real key.
+    RESEND_API_KEY: str | None = None
+    EMAIL_FROM_ADDRESS: str = "noreply@lilian.cl"
+    EMAIL_FROM_NAME: str = "Lilian"
+
+    # S2-05: where the user lands after a successful Stripe Checkout and
+    # where they go when they cancel. Surfaced in the response from
+    # ``POST /api/v1/saas/checkout`` so the frontend can just redirect.
+    FRONTEND_BASE_URL: str = "https://lil-i-5tz56uhov-jorgeguerrerohidalgo710.vercel.app"
 
     class Config:
         env_file = ".env"
