@@ -20,7 +20,7 @@ import logging
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import Column, DateTime, Enum, Integer, String, Text
 from sqlalchemy.orm import Session
