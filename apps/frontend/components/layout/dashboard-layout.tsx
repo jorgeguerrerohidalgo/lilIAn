@@ -27,6 +27,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/clients", label: "Clientes", icon: <UsersIcon /> },
   { href: "/precedents", label: "Precedentes", icon: <GavelIcon /> },
   { href: "/documents", label: "Documentos", icon: <DocumentIcon /> },
+  // S2-05: billing surface — self-service plan / payment management.
+  { href: "/dashboard/billing", label: "Facturación", icon: <BillingIcon /> },
 ];
 
 // Icons
@@ -66,6 +68,15 @@ function DocumentIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
     <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.25a2.25 2.25 0 00-2.25-2.25H5a2.25 2.25 0 00-2.25 2.25v10.5a2.25 2.25 0 002.25 2.25h14.5a2.25 2.25 0 002.25-2.25v-2.25" />
+    </svg>
+  );
+}
+
+function BillingIcon({ className = "w-5 h-5" }: { className?: string }) {
+  // Credit-card / billing glyph.
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9V18a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V9m-19.5 0V6.75A2.25 2.25 0 016 4.5h12a2.25 2.25 0 012.25 2.25V9m-9 6h.008v.008H12V15z" />
     </svg>
   );
 }

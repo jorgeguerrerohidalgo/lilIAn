@@ -1,14 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui";
 import { Input } from "@/components/ui";
 import { Card } from "@/components/ui";
 
+// S2-02: a paying user lands here from the pricing page with a plan
+// already selected (e.g. /auth/register?plan=lawyer). We surface that
+// intent in the UI so they know what they signed up for, and stash it
+// in sessionStorage so the post-verification /dashboard/billing page
+// can offer them a one-click upgrade.
+const VALID_PLANS = new Set(["free", "lawyer", "law_firm", "company", "enterprise"]);
+const PLAN_LABEL: Record<string, string> = {
+  free: "Gratis",
+  lawyer: "Abogado",
+  law_firm: "Bufete",
+  company: "Empresa",
+  enterprise: "Corporativo",
+};
+
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const planFromQuery = searchParams.get("plan") || "";
+  const planName = VALID_PLANS.has(planFromQuery) ? planFromQuery : "";
+  const planLabel = planName ? PLAN_LABEL[planName] : null;
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,6 +87,19 @@ export default function RegisterPage() {
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.detail || "Error al registrar");
+      }
+
+      // S2-02: remember the chosen plan through the email-verification
+      // round-trip. After they click the email link and land in the
+      // dashboard, the billing page can offer a one-click upgrade to
+      // the same plan without asking them to pick again.
+      if (planName && typeof window !== "undefined") {
+        try {
+          window.sessionStorage.setItem("lilian_selected_plan", planName);
+        } catch {
+          // sessionStorage may be disabled (private mode). Not fatal —
+          // the user can re-pick on /pricing.
+        }
       }
 
       // S1.1: backend has created the user and dispatched (or stub-logged)
@@ -141,6 +181,19 @@ export default function RegisterPage() {
               </p>
             )}
 
+            {/* S2-02: after they verify their email we'll route them to
+                /dashboard/billing with a one-click upgrade. The link
+                below gets them there directly with the plan pre-selected
+                in sessionStorage so /dashboard/billing can pick it up. */}
+            {planName && planName !== "free" && (
+              <Link
+                href={`/pricing?resume=${encodeURIComponent(planName)}`}
+                className="block text-center text-sm text-coral hover:text-coral-dark font-semibold"
+              >
+                Ver planes de pago
+              </Link>
+            )}
+
             <Link
               href="/auth/login"
               className="block text-center text-sm text-ink/60 hover:text-ink"
@@ -173,7 +226,17 @@ export default function RegisterPage() {
             </div>
           </div>
           <h2 className="text-2xl font-heading font-bold text-ink">Crear cuenta</h2>
-          <p className="text-ink/60 mt-2">Regístrate en LILIAN</p>
+          <p className="text-ink/60 mt-2">
+            {planLabel
+              ? <>Vas a activar el plan <strong className="text-ink">{planLabel}</strong>.</>
+              : "Regístrate en LILIAN"}
+          </p>
+          {planName && planName !== "free" && (
+            <div className="mt-4 mx-auto inline-flex items-center gap-2 bg-coral-pale border border-coral/20 text-coral-dark px-3 py-1.5 rounded-full text-xs font-semibold">
+              <span aria-hidden="true">●</span>
+              Plan {planLabel} — pago después de verificar tu email
+            </div>
+          )}
         </div>
 
         {errors.form && (
