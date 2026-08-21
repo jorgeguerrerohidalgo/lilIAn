@@ -8,6 +8,7 @@ import {
   openPrintableReport,
   type AnalysisReportPayload,
 } from "@/lib/pdf-generator";
+import { ArticleReference, ArticleReferenceText } from "@/components/article-reference";
 
 interface Participant {
   company: string;
@@ -331,7 +332,9 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
                         </span>
                         <span className="text-sm font-medium text-slate-700">{risk.clause_type}</span>
                       </div>
-                      <p className="text-sm text-ink2 mt-2">{risk.explanation}</p>
+                      <p className="text-sm text-ink2 mt-2">
+                        <ArticleReferenceText text={risk.explanation} />
+                      </p>
                     </div>
                     <div className="text-right">
                       <span className="text-xl font-bold text-ink">{risk.risk_score}</span>
@@ -351,7 +354,9 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
                   {risk.recommendation && (
                     <div className="mt-3 p-2 bg-sky-50 rounded border border-sky-200">
                       <p className="text-xs text-sky-600 font-medium mb-1">Recomendación de negociación:</p>
-                      <p className="text-sm text-sky-800">{risk.recommendation}</p>
+                      <p className="text-sm text-sky-800">
+                        <ArticleReferenceText text={risk.recommendation} />
+                      </p>
                     </div>
                   )}
 
@@ -477,7 +482,16 @@ export function DocumentAnalysisView({ analysis }: DocumentAnalysisViewProps) {
           <div className="space-y-3">
             {analysis.legal_references.map((ref, idx) => (
               <div key={idx} className="p-4 bg-sky-50 rounded-lg border border-sky-200">
-                <p className="font-medium text-sky-900">{ref.article}</p>
+                {/* S4.3: wrap the article reference in a clickable chip
+                    that scrolls to the matching chunk in the document. */}
+                <p className="font-medium text-sky-900">
+                  <ArticleReference
+                    article={ref.article}
+                    chunkId={
+                      (ref as { chunk_id?: string }).chunk_id
+                    }
+                  />
+                </p>
                 <p className="text-sm text-sky-800 mt-1">{ref.description}</p>
                 {ref.relevance && (
                   <p className="text-xs text-sky-600 mt-1">Relevancia: {ref.relevance}</p>
