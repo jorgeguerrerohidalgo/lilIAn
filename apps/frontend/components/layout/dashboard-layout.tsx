@@ -9,6 +9,7 @@ import { clearLegacyTokens } from "@/lib/auth-cookie";
 import { WelcomeTourOverlay, useWelcomeTour } from "@/components/onboarding/welcome-tour";
 import { Tooltip } from "@/components/ui";
 import { TOOLTIPS } from "@/lib/tooltips";
+import { InviteTeamModal } from "@/components/modals/invite-team-modal";
 
 interface User {
   id: number;
@@ -91,6 +92,15 @@ function LogoutIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function PlusUserIcon({ className = "w-4 h-4" }: { className?: string }) {
+  // "Person with +" glyph for the invite CTA.
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+    </svg>
+  );
+}
+
 function ChevronIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -113,6 +123,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // S6.3: invite-team modal state.
+  const [inviteOpen, setInviteOpen] = useState(false);
   // S1.2: 3-step first-run overlay. localStorage-backed so it never
   // reappears once dismissed.
   const tour = useWelcomeTour();
@@ -240,7 +252,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-border space-y-1">
+          {/* S6.3: invite-CTA. Pinned above logout so it stays visible even
+              on short viewports without competing with the primary nav. */}
+          <Tooltip label={TOOLTIPS.inviteTeam} side="right">
+            <button
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-colors"
+            >
+              <PlusUserIcon />
+              Invitar a tu equipo
+            </button>
+          </Tooltip>
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold text-ink/60 hover:bg-soft hover:text-ink transition-colors"
@@ -283,6 +307,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Chat Widget */}
       <ChatWidget />
+
+      {/* S6.3: invite-team modal. Controlled from the sidebar button. */}
+      <InviteTeamModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        inviterName={user?.full_name}
+      />
 
       {/* S1.2 welcome tour — must be the last sibling so its portal
           renders on top of any other fixed-positioned element. */}

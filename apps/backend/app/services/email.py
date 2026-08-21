@@ -365,6 +365,39 @@ def _drip_trial_expiring_30d(data: dict[str, Any]) -> tuple[str, str, str]:
     return subject, html, text
 
 
+def _invitation_received(data: dict[str, Any]) -> tuple[str, str, str]:
+    """S6.3 — sent when an owner/admin invites a colleague."""
+    name = data.get("full_name") or "colega"
+    inviter = data.get("inviter_name") or "Un miembro"
+    org_name = data.get("organization_name") or "tu organización"
+    role = (data.get("role") or "LAWYER").lower()
+    accept_url = data.get("accept_url") or "https://lil-i-5tz56uhov-jorgeguerrerohidalgo710.vercel.app/auth/login"
+    subject = f"{inviter} te invitó a {org_name} en Lilian"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Te invitaron a Lilian</h1>
+      <p style="color: #334155; font-size: 16px; line-height: 1.5;">Hola {name},</p>
+      <p style="color: #334155; font-size: 16px; line-height: 1.5;">
+        {inviter} te invitó a unirte a <strong>{org_name}</strong> en Lilian con el rol de <strong>{role}</strong>.
+      </p>
+      <p style="margin: 24px 0;">
+        <a href="{accept_url}" style="background: #0f172a; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          Aceptar invitación
+        </a>
+      </p>
+      <p style="color: #64748b; font-size: 14px;">
+        El enlace vence en 14 días. Si no esperabas este correo, puedes ignorarlo.
+      </p>
+    </div>
+    """.strip()
+    text = (
+        f"Hola {name},\n\n"
+        f"{inviter} te invitó a {org_name} en Lilian.\n"
+        f"Acepta aquí: {accept_url}\n"
+    )
+    return subject, html, text
+
+
 _TEMPLATES: dict[str, TemplateFn] = {
     "welcome": _welcome,
     "email_verification": _email_verification,
@@ -376,6 +409,7 @@ _TEMPLATES: dict[str, TemplateFn] = {
     "drip_no_analysis": _drip_no_analysis,
     "drip_success_story": _drip_success_story,
     "drip_trial_expiring_30d": _drip_trial_expiring_30d,
+    "invitation_received": _invitation_received,
 }
 
 

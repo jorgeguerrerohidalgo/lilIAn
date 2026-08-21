@@ -572,3 +572,96 @@ def _seed_sample_matter_impl(
             f"/matters/{matter.id}."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# S5.2 — corpus legal chileno
+# ---------------------------------------------------------------------------
+
+
+class SeedLawsResponse(BaseModel):
+    """Resumen sincrónico del seed; si dry_run=False incluye chunks insertados."""
+
+    dry_run: bool
+    laws_found: list[str]
+    laws_skipped: list[str]
+    chunks_inserted: int
+    chunks_skipped_existing: int
+    chunks_failed: int
+    errors: list[str]
+    started_at: str
+    finished_at: str
+
+
+class SeedLawsStatusResponse(BaseModel):
+    total_laws: int
+    total_chunks: int
+    laws: list[dict]
+
+
+@router.post("/seed-laws", response_model=SeedLawsResponse)
+def seed_laws_endpoint(
+    only: str | None = None,
+    dry_run: bool = False,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+):
+    """S5.2 — sembrar el corpus legal chileno en ``law_chunks``.
+
+    Idempotente: si un ``(law_code, chunk_index)`` ya existe, lo cuenta
+    como ``chunks_skipped_existing`` y no lo duplica. Útil como operación
+    inicial en una DB fresca y como re-seed cuando se agregan PDFs.
+
+    Args:
+        ``only``: slug de una ley (``codigo_trabajo``, ``codigo_civil``,
+            etc.). Si se omite, procesa todos los PDFs.
+        ``dry_run``: si es ``True``, no escribe en la DB y sólo reporta.
+    """
+    import logging as _logging
+    from datetime import datetime
+
+    from scripts.seed_chilean_laws import seed_all
+
+    log = _logging.getLogger("lilian.admin.seed_laws")
+    started_at = datetime.utcnow()
+    log.info(
+        "seed-laws invoked by user=%s only=%s dry_run=%s",
+        current_user.id, only, dry_run,
+    )
+    report = seed_all(only=only, dry_run=dry_run)
+    finished_at = datetime.utcnow()
+
+    payload = SeedLawsResponse(
+        dry_run=report.dry_run,
+        laws_found=report.laws_found,
+        laws_skipped=report.laws_skipped,
+        chunks_inserted=report.chunks_inserted,
+        chunks_skipped_existing=report.chunks_skipped_existing,
+        chunks_failed=report.chunks_failed,
+        errors=report.errors,
+        started_at=started_at.isoformat(),
+        finished_at=finished_at.isoformat(),
+    )
+    log.info(
+        "seed-laws finished: laws=%s inserted=%s skipped=%s failed=%s",
+        len(report.laws_found),
+        report.chunks_inserted,
+        report.chunks_skipped_existing,
+        report.chunks_failed,
+    )
+    return payload
+
+
+@router.get("/seed-laws/status", response_model=SeedLawsStatusResponse)
+def seed_laws_status(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+):
+    """S5.2 — ver cuántas leyes hay indexadas y cuántos chunks cada una."""
+    from scripts.seed_chilean_laws import get_seed_status
+    status = get_seed_status()
+    return SeedLawsStatusResponse(
+        total_laws=status["total_laws"],
+        total_chunks=status["total_chunks"],
+        laws=status["laws"],
+    )

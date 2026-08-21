@@ -90,6 +90,14 @@ async def _lifespan(_app: FastAPI):
         "lilian api starting — build marker commit=%s",
         "e62134f-fix-migration-lifespan",
     )
+    # S4.7: initialize Sentry as early as possible so the integration
+    # captures the lifespan migrations + any startup errors. No-op when
+    # SENTRY_DSN is unset so dev/CI never pays for SDK init.
+    try:
+        from app.core.sentry import init_sentry
+        init_sentry()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning("sentry init failed (continuing): %s", exc)
     _run_startup_migrations()
     # S3.1: log active embedding provider at boot so operators can
     # confirm the right backend is wired up without hitting the
@@ -175,6 +183,20 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         "unhandled exception on %s %s (request_id=%s)",
         request.method, request.url.path, request_id,
     )
+    # S4.7: forward to Sentry with request context. Falls back to a
+    # structured log when SENTRY_DSN is unset.
+    try:
+        from app.core.sentry import capture_exception_with_context
+        tenant_id = getattr(request.state, "tenant_id", None)
+        user_id = getattr(request.state, "user_id", None)
+        capture_exception_with_context(
+            exc,
+            request=request,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+    except Exception as sentry_exc:  # pragma: no cover - never fail the request
+        _app_logger.warning("sentry capture failed: %s", sentry_exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=_error_envelope(
