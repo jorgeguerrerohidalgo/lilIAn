@@ -16,6 +16,9 @@ interface User {
   id: number;
   email: string;
   full_name: string;
+  // S4.6: list of role names pulled from the backend /me endpoint.
+  // Used to gate the Admin nav section.
+  roles?: string[];
 }
 
 interface NavItem {
@@ -33,6 +36,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/documents", label: "Documentos", icon: <DocumentIcon /> },
   // S2-05: billing surface — self-service plan / payment management.
   { href: "/dashboard/billing", label: "Facturación", icon: <BillingIcon /> },
+];
+
+// S4.6: admin section shown only for PLATFORM_ADMIN. The endpoint
+// itself enforces the role server-side; this is purely a UI gate so
+// non-admins don't see the link.
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard/admin/audit-logs", label: "Auditoría", icon: <ShieldIcon /> },
 ];
 
 // Icons
@@ -98,6 +108,15 @@ function PlusUserIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+    </svg>
+  );
+}
+
+function ShieldIcon({ className = "w-5 h-5" }: { className?: string }) {
+  // Shield glyph for the admin section.
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.063 2.522-.187 3.757a48.32 48.32 0 01-3.387 13.094c-.18.452-.665.74-1.146.74H7.72c-.48 0-.965-.288-1.146-.74A48.32 48.32 0 013.187 15.757 48.696 48.696 0 013 12c0-2.357.24-4.66.69-6.879.132-.65.612-1.187 1.243-1.392A48.146 48.146 0 0112 3a48.146 48.146 0 017.067.729c.63.205 1.11.742 1.243 1.392C20.76 7.34 21 9.643 21 12z" />
     </svg>
   );
 }
@@ -250,6 +269,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               link
             );
           })}
+
+          {/* S4.6: Admin section. Only visible for PLATFORM_ADMIN. The
+              underlying endpoints enforce the same gate server-side, so
+              this is purely a UI gatekeeper. */}
+          {user?.roles?.includes("PLATFORM_ADMIN") && (
+            <>
+              <div className="nav-label mt-4">Administración</div>
+              {ADMIN_NAV_ITEMS.map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    aria-label={item.label}
+                    className={`nav-btn ${isActive ? 'nav-btn-active' : ''}`}
+                  >
+                    <span aria-hidden="true" className="text-ink/50">{item.icon}</span>
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         {/* Footer */}

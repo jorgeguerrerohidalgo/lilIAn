@@ -301,5 +301,34 @@ def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Return the authenticated user plus their role list.
+
+    S4.6: the dashboard sidebar uses ``roles`` to gate the Admin
+    section. We pull every membership the user has across all
+    organizations and surface the role names so the frontend can
+    decide which links to render.
+    """
+    from app.models.organization_member import OrganizationMember
+
+    memberships = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.user_id == current_user.id)
+        .all()
+    )
+    roles = sorted({m.role.value for m in memberships if m.role})
+
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        last_login_at=current_user.last_login_at,
+        email_verified=current_user.email_verified,
+        roles=roles,
+    )

@@ -59,6 +59,12 @@ class UserResponse(UserBase):
     created_at: datetime
     last_login_at: datetime | None = None
     email_verified: bool = False
+    # S4.6: list of all role names the user has across their
+    # organization memberships. Used by the frontend to gate the
+    # Admin nav and any other role-aware UI. ``PLATFORM_ADMIN`` is a
+    # global role added by ``get_platform_admin_membership`` on the
+    # admin routes.
+    roles: list[str] = []
 
     class Config:
         from_attributes = True
