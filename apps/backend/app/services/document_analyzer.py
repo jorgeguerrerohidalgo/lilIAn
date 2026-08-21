@@ -106,64 +106,21 @@ DOCUMENT_ANALYSIS_SCHEMA = {
 }
 
 
-PROMPT_ANALYSIS = """Eres un asistente legal chileno especializado en análisis documental estilo Harvey.ai.
-
-Tu función es ANALIZAR y ESTRUCTURAR el documento, NO resumirlo.
-Todo el contenido relevante debe permanecer, organizado por categorías.
+PROMPT_ANALYSIS = """Eres un asistente legal chileno. Analiza y ESTRUCTURA el documento (no resumas).
 
 INSTRUCCIONES:
-1. IDENTIFICA a todos los participantes del contrato:
-   - IMPORTANTE: El campo "company" es la RAZÓN SOCIAL de la empresa (ej: "Agrícola Ariztía Ltda"), NO el nombre de una persona
-   - El campo "representative" es el NOMBRE de la persona que representa a la empresa
-   - Si el contrato dice "entre [Empresa A] y [Empresa B]", cada una tiene su propia entrada con company=razón social
-   - Si aparece "Representante: Juan Pérez", esa persona es el representative de la empresa mencionada
-   - Para CADA parte del contrato extraer OBLIGATORIAMENTE estos campos:
-     * "company": Nombre de la empresa (razón social completa, ej: "Agrícola Ariztía Ltda" o "Servicios ABC SpA")
-     * "rut": RUT de la empresa (ej: "76.123.456-7")
-     * "representative": Nombre de la persona representante (ej: "Cristian Guerra") - DEJAR VACÍO "" si no hay
-     * "representative_rut": RUT de la persona (ej: "12.345.678-9") - DEJAR VACÍO "" si no hay
-     * "role": "contratante" o "contratista" (basado en quién paga o quién provee el servicio)
-   - NO pongas el nombre de la empresa en el campo "representative"
-   - NO mezcles roles: si alguien es "Representante del Contratista", el role="contratista" y company es la empresa que representa
-2. EXTRAE términos financieros (fechas, montos, plazos)
-3. CATALOGA las cláusulas por tipo (penales, terminación, garantías, confidencialidad, etc.)
-4. EVALUA cada cláusula importante con SCORING DE RIESGO (0-100):
-   - HIGH (70-100): Cláusula muy desfavorable, requiere atención inmediata
-   - MEDIUM (40-69): Cláusula riesgosa, debería negociarse
-   - LOW (0-39): Cláusula razonable o favorable
-5. COMPARA con estándares del sector en Chile
-6. PROPORCIONA recomendación concreta de negociación
-7. SUGIERE texto alternativo cuando sea posible
-8. LISTA las referencias legales citadas en el texto
-9. IDENTIFICA fechas clave del contrato (inicio, término, plazos de aviso, renovaciones, pagos, límites para firma)
-   - IMPORTANTE: Detecta TODAS las fechas límite aunque NO tengan penalización contractual explícita
-   - Si el contrato dice "debe firmarse antes del [fecha]" sin consecuencias, igual incluye la alerta
-   - Usa type="firma" para límites de firma sin penalidad
-   - Usa type="plazo_sin_penalidad" para plazos que vencen sin penalización
-   - En consequence, indica "Sin penalidad contractual" si no hay castigo definido
-10. GENERA un resumen ejecutivo BREVE (max 200 palabras)
+1. PARTICIPANTES (cada parte: company=razón social, rut, representative=nombre, representative_rut, role=contratante|contratista). NO mezcles roles.
+2. TÉRMINOS FINANCIEROS (fechas, montos, plazos).
+3. CLÁUSULAS INUSUALES (clause, risk_level=low|medium|high|critical, explanation, recommendation).
+4. REFERENCIAS LEGALES (article, context) — solo artículos presentes en el texto.
+5. RIESGO POR CATEGORÍA (category, level=low|medium|high, explanation).
+6. SCORING: HIGH 70-100, MEDIUM 40-69, LOW 0-39.
+7. CRITERIOS CHILE: laboral (CT, fuero, jornada), comercial (CCom, penalidades 1-5%), arriendo (Ley 18.101), consumo (Ley 19.496).
+8. RESUMEN BREVE (max 200 palabras).
 
-CRITERIOS DE EVALUACIÓN EN CHILE:
-- Contratos laborales: Código del Trabajo Chile, fuero maternal, jornada, remuneration
-- Contratos comerciales: Código de Comercio, responsabilidad, penalidades usuales 1-5%
-- Contratos de arriendo: Ley 18.101, plazos mínimos, incremento máximo
-- Contratos de consumo: Ley 19.496, cláusulas abusivas, derecho a retracto
+JSON REQUERIDO: document_type, summary, participants[], financial_terms{{dates,amounts,terms}}, unusual_clauses[], legal_references[], risk_assessment[].
 
-FORMATO JSON:
-- participants: Array con las empresas del contrato
-  EJEMPLO CORRECTO:
-  [{"company": "Agrícola Ariztía Ltda", "rut": "76.123.456-7", "representative": "", "representative_rut": "", "role": "contratante"},
-   {"company": "Servicios ABC SpA", "rut": "77.987.654-3", "representative": "Cristian Guerra", "representative_rut": "76.324.018-5", "role": "contratista"}]
-- financial_terms: {dates: [], amounts: [], terms: []}
-- obligations: [{party, type, description}]
-- clauses_by_type: {penalidades: [], terminacion: [], garantias: [], confidencialidad: [], etc.}
-- unusual_clauses: [{clause, risk_level, explanation, risk_score, recommendation}]
-- legal_references: [{article, context}]
-- summary: resumen breve
-- risk_assessment: [{clause_type, clause_text, risk_level, risk_score, explanation, industry_standard, recommendation, suggested_clause}]
-- contract_timeline: [{event, date, days_from_signing, type, description, consequence, legal_reference}]
-
-El texto del documento es:
+DOCUMENTO:
 {text}
 
 Responde SOLO con JSON válido."""
@@ -343,7 +300,13 @@ def _call_llm_with_fallback(document: Document, prompt: str) -> dict:
 
     try:
         provider = get_llm_provider()
-        return provider.generate_structured(prompt, "", DOCUMENT_ANALYSIS_SCHEMA)
+        # S3.3: deep analysis path. Flip to the "complex" model alias
+        # (e.g. Sonnet 4) for this call. Falls back to the configured
+        # default when routing is unset.
+        return provider.generate_structured(
+            prompt, "", DOCUMENT_ANALYSIS_SCHEMA,
+            task_complexity="complex",
+        )
     except Exception as exc:
         logger.warning(
             f"LLM analysis failed for doc {document.id}: {exc}; "

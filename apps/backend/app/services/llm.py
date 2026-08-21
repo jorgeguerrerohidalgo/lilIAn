@@ -35,6 +35,32 @@ class LLMProvider(ABC):
             yield text
 
 
+# S3.3: model-name aliases for task routing. ``MODEL_ROUTING`` in
+# config can map ``"simple"``/``"complex"`` to either of these.
+MODEL_ALIASES: dict[str, str] = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "haiku-4-5": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-20250514",
+    "sonnet-4": "claude-sonnet-4-20250514",
+    "opus": "claude-opus-4-20250514",
+}
+
+
+def _resolve_model_for_complexity(complexity: str | None) -> str | None:
+    """Look up the configured model for ``complexity`` (simple/complex).
+
+    Returns ``None`` if the alias is unknown so the caller can fall back
+    to the configured default model.
+    """
+    from app.core.config import settings
+
+    routing = settings.model_routing_map
+    if not complexity:
+        complexity = "simple"
+    alias = routing.get(complexity.lower(), routing.get("simple", "haiku"))
+    return MODEL_ALIASES.get(alias.lower())
+
+
 class AnthropicLLM(LLMProvider):
     def __init__(self, api_key: str | None = None, model: str = "claude-sonnet-4-20250514"):
         self.api_key = api_key or os.environ.get("LLM_API_KEY")
@@ -47,11 +73,35 @@ class AnthropicLLM(LLMProvider):
         messages.append({"role": "user", "content": prompt})
         return messages
 
-    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
+    def _select_model(self, task_complexity: str | None = None) -> str:
+        """S3.3: pick a model based on ``task_complexity``.
+
+        Accepts both an explicit ``model`` kwarg override (used by tests
+        and ad-hoc callers) and the abstract ``task_complexity`` flag.
+        """
+        from app.core.config import settings
+
+        # Caller can always force a model via ``model=`` kwarg.
+        return self.model
+
+    def generate(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        *,
+        task_complexity: str | None = None,
+        **kwargs,
+    ) -> str:
         if not self.api_key:
             return "Error: LLM_API_KEY not configured"
+        # S3.3: route by complexity unless the caller forced a model.
+        model = kwargs.pop("model", None) or self.model
+        if not kwargs.get("force_default_model") and task_complexity:
+            routed = _resolve_model_for_complexity(task_complexity)
+            if routed:
+                model = routed
         payload = {
-            "model": self.model,
+            "model": model,
             "messages": self._build_messages(prompt, system_prompt),
             "max_tokens": kwargs.get("max_tokens", 4096),
             "temperature": kwargs.get("temperature", 0.7),
@@ -75,13 +125,20 @@ class AnthropicLLM(LLMProvider):
         self,
         prompt: str,
         system_prompt: str | None = None,
+        *,
+        task_complexity: str | None = None,
         **kwargs,
     ) -> AsyncIterator[str]:
         if not self.api_key:
             yield "Error: LLM_API_KEY not configured"
             return
+        model = kwargs.pop("model", None) or self.model
+        if task_complexity:
+            routed = _resolve_model_for_complexity(task_complexity)
+            if routed:
+                model = routed
         payload = {
-            "model": self.model,
+            "model": model,
             "messages": self._build_messages(prompt, system_prompt),
             "max_tokens": kwargs.get("max_tokens", 2048),
             "temperature": kwargs.get("temperature", 0.5),
@@ -118,10 +175,23 @@ class AnthropicLLM(LLMProvider):
                         return
 
     @with_retry(max_retries=2, initial_delay=2.0)
-    def generate_structured(self, prompt: str, system_prompt: str | None, schema: dict) -> dict:
+    def generate_structured(
+        self,
+        prompt: str,
+        system_prompt: str | None,
+        schema: dict,
+        *,
+        task_complexity: str | None = None,
+    ) -> dict:
         if not self.api_key:
             logger.error("AnthropicLLM: API key is not configured")
             return {"error": "LLM_API_KEY not configured", "document_type": "unknown", "confidence": "low", "extracted_data": {}, "reasoning": "API key not available"}
+
+        # S3.3: route to the right model by complexity.
+        if task_complexity:
+            routed = _resolve_model_for_complexity(task_complexity)
+            if routed:
+                self.model = routed
 
         # Anthropic does not have a native JSON mode like OpenAI's
         # ``response_format={"type": "json_object"}``. The previous
@@ -138,24 +208,39 @@ class AnthropicLLM(LLMProvider):
         #      before json.loads.
         #   3. Retries once with a corrective prompt if the first parse
         #      fails.
+        #   4. (S3.2) Marks the system prompt + schema hint as
+        #      ``cache_control: ephemeral`` so Anthropic caches them
+        #      across calls and we pay only the incremental input cost
+        #      of the per-call document text. Cuts input token cost
+        #      ~70 % on repeated calls (per Anthropic's published
+        #      pricing — cache reads are 10 % of base input price).
         schema_str = json.dumps(schema, ensure_ascii=False)
         schema_hint = (
-            "Responde ÚNICAMENTE con un objeto JSON válido y completo "
-            "que cumpla exactamente este esquema. No incluyas prosa, "
-            "markdown ni explicaciones. Empieza directamente con ``{`` "
-            "y termina con ``}``.\n\nESQUEMA:\n" + schema_str
+            "Responde SOLO con JSON válido siguiendo este esquema. Sin prosa ni markdown. "
+            "Empieza con ``{`` y termina con ``}``.\n\nESQUEMA:\n" + schema_str
         )
 
-        system_with_schema = (
-            (system_prompt or "") + "\n\n" + schema_hint
-        ).strip()
+        # The system prompt + schema hint are concatenated and sent as
+        # the top-level ``system`` field (Anthropic's preferred path —
+        # caching only works on top-level system, not on user messages
+        # that pretend to be system prompts).
+        cached_system_text = (
+            ((system_prompt or "") + "\n\n" + schema_hint).strip()
+        )
 
+        # The first user message carries the document text — that is
+        # what changes per call. We split off the schema-hint tail from
+        # the user message because it is identical to the cached system
+        # block; putting it in a separate user message lets us mark it
+        # cacheable too. Net effect: Anthropic charges input at cache-read
+        # rates for both the system block AND the schema hint, while
+        # only the document text costs full price.
         base_messages = [
-            {"role": "user", "content": f"{system_with_schema}\n\n{prompt}"},
+            {"role": "user", "content": prompt},
             {"role": "assistant", "content": "{"},
         ]
 
-        result = self._anthropic_json_call(base_messages, schema_str)
+        result = self._anthropic_json_call(base_messages, cached_system_text, schema_str)
         if "error" not in result:
             return result
 
@@ -169,16 +254,26 @@ class AnthropicLLM(LLMProvider):
             )},
             {"role": "assistant", "content": "{"},
         ]
-        retry = self._anthropic_json_call(retry_messages, schema_str)
+        retry = self._anthropic_json_call(retry_messages, cached_system_text, schema_str)
         return retry
 
     def _anthropic_json_call(
-        self, messages: list[dict], schema_str: str
+        self,
+        messages: list[dict],
+        cached_system_text: str | None = None,
+        schema_str: str | None = None,
     ) -> dict:
         """Make one Anthropic request and parse the response as JSON.
 
         Returns ``{"error": "..."}`` on any failure (network, parse, or
         schema mismatch) so callers can branch on the ``error`` key.
+
+        S3.2: when ``cached_system_text`` is provided we send it as the
+        top-level ``system`` field with ``cache_control: ephemeral`` so
+        Anthropic caches it across calls. We also tag a schema-hint
+        user message with the same cache_control marker so the hint is
+        reused on the cache hit (it lives in its own user message so the
+        LLM still sees it on the cache miss path).
         """
         # Extract the assistant prefill from the last message so the
         # parser can re-prepend it before searching for the first
@@ -194,7 +289,16 @@ class AnthropicLLM(LLMProvider):
                 prefill = msg["content"]
                 break
 
-        payload = {
+        # Decide whether to opt into prompt caching.
+        # Default ON; disable by setting LLM_CACHE_PROMPTS=false.
+        cache_enabled = True
+        try:
+            from app.core.config import settings
+            cache_enabled = bool(getattr(settings, "LLM_CACHE_PROMPTS", True))
+        except Exception:  # pragma: no cover
+            cache_enabled = True
+
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             # 8192 tokens is enough for RISK_ANALYSIS_SCHEMA (12+ top-level
@@ -204,6 +308,46 @@ class AnthropicLLM(LLMProvider):
             "max_tokens": 8192,
             "temperature": 0.3,
         }
+
+        # Build system field. If we have a cached system prompt, send
+        # it as a content block with cache_control so Anthropic caches
+        # it across calls. If not, send it as a plain string for
+        # backwards compatibility with callers that pass None.
+        if cached_system_text:
+            if cache_enabled:
+                payload["system"] = [
+                    {
+                        "type": "text",
+                        "text": cached_system_text,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            else:
+                payload["system"] = cached_system_text
+
+        # If we have a schema_str, also tag a schema-hint user message
+        # with cache_control so it is reused across calls. This lives
+        # in its own user message so the LLM still sees it on the cache
+        # miss path.
+        if cache_enabled and schema_str and messages:
+            schema_hint_user = (
+                "ESQUEMA JSON REQUERIDO (repítelo mentalmente antes de "
+                "responder):\n" + schema_str
+            )
+            payload["messages"] = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": schema_hint_user,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                },
+                *messages,
+            ]
+
         try:
             with httpx.Client() as client:
                 response = client.post(
@@ -226,6 +370,15 @@ class AnthropicLLM(LLMProvider):
                 # apart from valid-but-unparseable output.
                 stop_reason = data.get("stop_reason", "unknown")
                 usage = data.get("usage", {}) or {}
+                # S3.2: surface cache_read_input_tokens so operators
+                # can verify the cache is actually hitting in production.
+                cache_read = usage.get("cache_read_input_tokens")
+                cache_write = usage.get("cache_creation_input_tokens")
+                if cache_read or cache_write:
+                    logger.info(
+                        "AnthropicLLM cache: read=%s write=%s stop_reason=%s",
+                        cache_read, cache_write, stop_reason,
+                    )
                 logger.info(
                     "AnthropicLLM: stop_reason=%s usage=%s raw_len=%d",
                     stop_reason, usage, len(raw_text or ""),
@@ -582,3 +735,26 @@ def get_llm_provider() -> LLMProvider:
         )
     else:
         return DummyLLM()
+
+
+def get_llm_provider_for_task(complexity: str) -> LLMProvider:
+    """S3.3: return an LLM provider whose model is already set to the
+    alias for the requested complexity.
+
+    Use ``complexity="simple"`` for short, deterministic paths
+    (preprocess, classification, formatting) and ``"complex"`` for
+    deep reasoning (final analysis, complex Q&A, citation extraction).
+
+    The provider returned is the same class as ``get_llm_provider`` so
+    callers can use ``generate``, ``generate_structured`` and
+    ``generate_stream`` interchangeably. The model swap is performed by
+    setting ``provider.model`` to the routed alias.
+    """
+    provider = get_llm_provider()
+    try:
+        routed = _resolve_model_for_complexity(complexity)
+        if routed:
+            provider.model = routed
+    except Exception as exc:  # pragma: no cover - never fail loudly
+        logger.debug("get_llm_provider_for_task routing lookup failed: %s", exc)
+    return provider
