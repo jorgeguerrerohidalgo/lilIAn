@@ -10,6 +10,7 @@ import { WelcomeTourOverlay, useWelcomeTour } from "@/components/onboarding/welc
 import { Tooltip } from "@/components/ui";
 import { TOOLTIPS } from "@/lib/tooltips";
 import { InviteTeamModal } from "@/components/modals/invite-team-modal";
+import { SupportWidget } from "@/components/support-widget";
 
 interface User {
   id: number;
@@ -307,6 +308,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Chat Widget */}
       <ChatWidget />
+
+      {/* S6.5: support widget (bottom-right). Floats above content and
+          renders inside the dashboard so it survives navigation. */}
+      <SupportWidget defaultEmail={user?.email ?? ""} />
 
       {/* S6.3: invite-team modal. Controlled from the sidebar button. */}
       <InviteTeamModal

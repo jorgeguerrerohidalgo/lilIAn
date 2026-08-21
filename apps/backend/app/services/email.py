@@ -398,6 +398,33 @@ def _invitation_received(data: dict[str, Any]) -> tuple[str, str, str]:
     return subject, html, text
 
 
+def _support_ticket_received(data: dict[str, Any]) -> tuple[str, str, str]:
+    """S6.5 — internal notification sent to the support inbox when a user
+    files a ticket from the floating widget."""
+    ticket_id = data.get("ticket_id", "—")
+    subject = data.get("subject") or "(sin asunto)"
+    body = data.get("body") or ""
+    user_email = data.get("user_email") or "(no email)"
+    user_id = data.get("user_id") or "(invitado)"
+    subject_line = f"[Soporte #{ticket_id}] {subject}"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h1 style="color: #0f172a; font-size: 22px; margin-bottom: 12px;">Nuevo ticket de soporte</h1>
+      <p style="color: #334155; font-size: 14px; line-height: 1.5;"><strong>De:</strong> {user_email} (id={user_id})</p>
+      <p style="color: #334155; font-size: 14px; line-height: 1.5;"><strong>Asunto:</strong> {subject}</p>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+      <pre style="white-space: pre-wrap; font-family: inherit; color: #334155; font-size: 14px; line-height: 1.5;">{body}</pre>
+    </div>
+    """.strip()
+    text = (
+        f"Nuevo ticket #{ticket_id}\n"
+        f"De: {user_email} (id={user_id})\n"
+        f"Asunto: {subject}\n\n"
+        f"{body}\n"
+    )
+    return subject_line, html, text
+
+
 _TEMPLATES: dict[str, TemplateFn] = {
     "welcome": _welcome,
     "email_verification": _email_verification,
@@ -410,6 +437,7 @@ _TEMPLATES: dict[str, TemplateFn] = {
     "drip_success_story": _drip_success_story,
     "drip_trial_expiring_30d": _drip_trial_expiring_30d,
     "invitation_received": _invitation_received,
+    "support_ticket_received": _support_ticket_received,
 }
 
 
