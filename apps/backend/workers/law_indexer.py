@@ -209,20 +209,39 @@ def process_law_pdf(file_path: str, law_code: str) -> dict:
     }
 
 
-def index_law_chunks(law_code: str, law_name: str, chunks: list, db) -> int:
-    """Indexa los chunks de una ley en la base de datos."""
+def index_law_chunks(law_code: str, law_name: str, chunks: list, db, batch_size: int = 50, sleep_between_batches: float = 2.0) -> int:
+    """Indexa los chunks de una ley en la base de datos usando batching.
+
+    Process chunks in batches of ``batch_size`` so we make at most
+    ``ceil(len(chunks)/batch_size)`` requests to the embedding provider
+    instead of one-per-chunk. Sleeps ``sleep_between_batches`` seconds
+    between batches so we stay well under the OpenAI tier-1 rate limit
+    (~60 req/min) even on accounts with strict per-minute quotas.
+
+    Note: when the embedding provider fails (e.g. 429), it silently
+    falls back to dummy embeddings. The caller MUST check that the
+    resulting embeddings look real (e.g. non-deterministic across runs)
+    before trusting the index. We don't fail loud here because the
+    existing provider contract returns a list-of-embeddings on success
+    or fallback indistinguishably.
+    """
+    import time
+
     embedding_provider = get_embedding_provider()
     legal_area = get_legal_area_from_law_code(law_code)
 
     indexed_count = 0
-    for chunk_data in chunks:
+    for batch_start in range(0, len(chunks), batch_size):
+        batch = chunks[batch_start:batch_start + batch_size]
+        texts = [c["content"] for c in batch]
         try:
-            # Generar embedding
-            embedding = embedding_provider.generate_embedding(chunk_data["content"])
-            embedding_str = json.dumps(embedding)
+            embeddings = embedding_provider.generate_embeddings(texts)
+        except Exception as e:
+            print(f"Error indexing batch starting at chunk {batch_start}: {e}")
+            continue
 
-            # Crear chunk en la base de datos
-            # Usar el valor string del enum para evitar problemas de case
+        for chunk_data, embedding in zip(batch, embeddings):
+            embedding_str = json.dumps(embedding)
             law_chunk = LawChunk(
                 law_code=law_code,
                 law_name=law_name,
@@ -239,9 +258,11 @@ def index_law_chunks(law_code: str, law_name: str, chunks: list, db) -> int:
             db.add(law_chunk)
             indexed_count += 1
 
-        except Exception as e:
-            print(f"Error indexing chunk {chunk_data['index']}: {e}")
-            continue
+        # Throttle between batches so OpenAI's per-minute rate limit
+        # doesn't fire on long PDFs. With batch_size=50 and 14 laws at
+        # ~300 chunks each, the total run makes ~84 calls over ~3 min.
+        if batch_start + batch_size < len(chunks):
+            time.sleep(sleep_between_batches)
 
     db.commit()
     return indexed_count

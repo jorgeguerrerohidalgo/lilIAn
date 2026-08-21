@@ -7,11 +7,15 @@ from app.models.deadline_alert import DeadlineAlert
 from app.models.document import Document
 from app.models.document_analysis import DocumentAnalysis
 from app.models.document_chunk import DocumentChunk
+from app.models.invitation import Invitation
+from app.models.law_chunk import LawChunk
+from app.models.legal_area import LegalArea
 from app.models.legal_source import LegalSource, LegalSourceVersion
 from app.models.matter import Matter
 from app.models.memory import CaseContextSnapshot, FeedbackSignal, UserFact
 from app.models.organization import Organization
 from app.models.organization_member import OrganizationMember
+from app.models.precedent import Precedent
 from app.models.review import Review
 from app.models.risk_item import RiskItem
 from app.models.subscription import Plan, Subscription, UsageEvent
@@ -42,6 +46,10 @@ __all__ = [
     "Client",
     "DeadlineAlert",
     "Review",
+    "Precedent",
+    "Invitation",
+    "LawChunk",
+    "LegalArea",
     "UserFact",
     "CaseContextSnapshot",
     "FeedbackSignal",
