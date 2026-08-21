@@ -586,6 +586,21 @@ def _handle_checkout_completed(event: dict, db: Session) -> None:
 
     db.commit()
 
+    # S4.2: seed onboarding sample data for paid plans so the user
+    # can explore the platform without uploading anything. The free
+    # plan is intentionally skipped — empty-state guidance (the
+    # welcome tour) is the right surface there.
+    if plan.name and plan.name.lower() not in {"free", "trial"}:
+        try:
+            from app.services.seed import seed_demo_data
+            seed_demo_data(db, org_id, user_id=None)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("seed_demo_data failed for org=%s: %s", org_id, exc)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
     # Fire-and-forget receipt email (stub when no Resend key).
     try:
         from app.services.email import send_email

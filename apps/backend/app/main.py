@@ -25,11 +25,13 @@ from app.api.endpoints import (
     legal_areas,
     matters,
     metrics,
+    onboarding,
     organizations,
     precedents,
     saas,
     search,
     share_links,
+    support,
     templates,
 )
 from app.core.config import settings
@@ -276,6 +278,7 @@ app.include_router(agents.router, prefix="/api/v1")
 app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(share_links.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
+app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(metrics.router)
 
 

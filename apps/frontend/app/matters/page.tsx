@@ -8,6 +8,7 @@ import { Card } from "@/components/ui";
 import { MatterStatusBadge, UrgencyBadge, Tooltip } from "@/components/ui";
 import type { MatterStatus, UrgencyLevel } from "@/components/ui";
 import { TOOLTIPS } from "@/lib/tooltips";
+import { SampleDataBanner } from "@/components/onboarding/sample-data-banner";
 
 
 interface Matter {
@@ -138,6 +139,15 @@ export default function MattersPage() {
       </div>
 
       {/* Cases List */}
+      {/* S4.2: sample-data banner for tenants who haven't uploaded
+          anything yet. Auto-hides after the first seed or 24h. */}
+      <SampleDataBanner
+        hasNoMatters={!loading && matters.length === 0}
+        onSeeded={() => {
+          // Refetch the matters list to surface the seeded rows.
+          void fetchMatters();
+        }}
+      />
       <Card padding="none" aria-live="polite">
         {loading ? (
           <div className="flex items-center justify-center py-16">

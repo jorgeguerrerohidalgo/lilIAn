@@ -664,3 +664,84 @@ def seed_laws_status(
         total_chunks=status["total_chunks"],
         laws=status["laws"],
     )
+
+
+# ---------------------------------------------------------------------------
+# S5.3 — precedentes de la Corte Suprema
+# ---------------------------------------------------------------------------
+
+
+class SeedPrecedentsResponse(BaseModel):
+    dry_run: bool
+    inserted: int
+    skipped_existing: int
+    failed: int
+    errors: list[str]
+    total_in_catalog: int
+    started_at: str
+    finished_at: str
+
+
+class SeedPrecedentsStatusResponse(BaseModel):
+    total_precedents: int
+    by_legal_area: dict[str, int]
+    catalog_size: int
+
+
+@router.post("/seed-precedents", response_model=SeedPrecedentsResponse)
+def seed_precedents_endpoint(
+    only: str | None = None,
+    dry_run: bool = False,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+):
+    """S5.3 — sembrar sentencias SCJ curadas en la tabla ``precedents``.
+
+    Idempotente: deduplica por ``full_citation``. Útil como carga
+    inicial cuando la tabla ``precedents`` está vacía y como re-seed
+    cuando se amplía el catálogo.
+    """
+    import logging as _logging
+    from datetime import datetime as _dt
+
+    from scripts.seed_synth_precedents import seed_precedents as _seed
+
+    log = _logging.getLogger("lilian.admin.seed_precedents")
+    started_at = _dt.utcnow()
+    log.info(
+        "seed-precedents invoked by user=%s only=%s dry_run=%s",
+        current_user.id, only, dry_run,
+    )
+    report = _seed(only=only, dry_run=dry_run)
+    finished_at = _dt.utcnow()
+
+    payload = SeedPrecedentsResponse(
+        dry_run=report.dry_run,
+        inserted=report.inserted,
+        skipped_existing=report.skipped_existing,
+        failed=report.failed,
+        errors=report.errors,
+        total_in_catalog=len(report.errors) + report.inserted + report.skipped_existing,
+        started_at=started_at.isoformat(),
+        finished_at=finished_at.isoformat(),
+    )
+    log.info(
+        "seed-precedents finished: inserted=%s skipped=%s failed=%s",
+        report.inserted, report.skipped_existing, report.failed,
+    )
+    return payload
+
+
+@router.get("/seed-precedents/status", response_model=SeedPrecedentsStatusResponse)
+def seed_precedents_status(
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+):
+    """S5.3 — ver cuántos precedentes hay indexados por área legal."""
+    from scripts.seed_synth_precedents import seed_status as _status
+    status = _status()
+    return SeedPrecedentsStatusResponse(
+        total_precedents=status["total_precedents"],
+        by_legal_area=status["by_legal_area"],
+        catalog_size=status["catalog_size"],
+    )
