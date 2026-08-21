@@ -161,8 +161,13 @@ export function DeadlineAlertsList({ matterId }: Props) {
 
       {/* Alerts list */}
       {filteredAlerts.length === 0 ? (
-        <div className="text-center py-8 text-ink/60">
-          <p>No hay alertas que mostrar</p>
+        <div className="text-center py-10 text-ink/60">
+          <p className="font-medium text-ink/80">Sin alertas</p>
+          <p className="mt-1 text-sm">
+            {filter === "all"
+              ? "Cuando el análisis detecte plazos o vencimientos, aparecerán aquí."
+              : "No hay alertas en este filtro. Prueba con «Todos» o vuelve después de un nuevo análisis."}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">

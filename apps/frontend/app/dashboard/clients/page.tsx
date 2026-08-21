@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { EmptyState, Button } from "@/components/ui";
 
 
 interface Client {
@@ -370,32 +371,51 @@ export default function ClientsPage() {
           {loading ? (
             <div className="p-8 text-center text-gray-500">Cargando clientes...</div>
           ) : clients.length === 0 ? (
-            <div className="p-8 text-center">
-              <svg aria-hidden="true"
-                className="w-16 h-16 mx-auto text-gray-300 mb-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
-              <p className="text-gray-500">
-                {search ? "No se encontraron clientes" : "No hay clientes registrados"}
-              </p>
-              {!search && (
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="mt-4 text-primary-600 hover:text-primary-700"
+            <EmptyState
+              icon={
+                <svg
+                  aria-hidden="true"
+                  className="w-8 h-8"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
                 >
-                  Crear el primer cliente
-                </button>
-              )}
-            </div>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 19.128a9.38 9.38 0 002.342-.121l1.731-1.731A9.37 9.37 0 0021.212 15.5H3.788a9.37 9.37 0 00.129-.371l1.731-1.731A9.38 9.38 0 0012 4.872V4.5a2.25 2.25 0 012.25-2.25h1.5a2.25 2.25 0 012.25 2.25v15.75a2.25 2.25 0 01-2.25 2.25h-1.5a2.25 2.25 0 01-2.25-2.25V8.122"
+                  />
+                </svg>
+              }
+              title={
+                search
+                  ? "No encontramos coincidencias"
+                  : "Aún no tienes clientes"
+              }
+              description={
+                search
+                  ? `No hay clientes que coincidan con «${search}». Prueba con otro nombre, RUT o email.`
+                  : "Registra tu primer cliente para poder adjuntarlo a un caso y mantener todos sus datos en un solo lugar."
+              }
+              action={
+                search ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => setSearch("")}
+                  >
+                    Limpiar búsqueda
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    onClick={() => setShowForm(true)}
+                  >
+                    Crear el primer cliente
+                  </Button>
+                )
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full" aria-label="Lista de clientes">
