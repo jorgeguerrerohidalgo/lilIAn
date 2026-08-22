@@ -212,20 +212,19 @@ def search_laws_by_embedding(
     similarity_threshold: float = 0.5,
     legal_area: LegalArea | None = None,
     candidate_limit: int = 4000,
+    query_text: str | None = None,
 ) -> list[dict]:
     """Busca en chunks de leyes chilenas por embedding.
 
-    S5.1 — pragmatic implementation: load at most ``candidate_limit``
-    chunks and score them in Python. The proper long-term fix is to
-    migrate ``law_chunks.embedding`` to a real pgvector column and use
-    the ``<=>`` operator with an IVFFlat / HNSW index. See
-    ROADMAP_HARVEY_FEATURES.md → "Real embeddings" follow-ups.
+    S5.1 — pragmatic implementation: keyword pre-filter narrows the
+    candidate set to chunks whose ``content`` contains at least one
+    token from the user query, then embedding cosine ranks them. If
+    the keyword filter returns nothing, fall back to a pure-semantic
+    scan over ``candidate_limit`` chunks.
 
-    The ``candidate_limit`` cap protects against Supabase statement
-    timeouts when the corpus grows past a few thousand chunks: the
-    query below loads every embedding column into Python memory, which
-    is ``O(N * 1536 * 8 bytes)`` — ~110 MB for 17K chunks — and is the
-    bottleneck, not the cosine math.
+    The proper long-term fix is to migrate ``law_chunks.embedding`` to
+    a real pgvector column and use the ``<=>`` operator with an
+    IVFFlat / HNSW index. See ROADMAP_HARVEY_FEATURES.md.
     """
     if not LAW_CHUNKS_AVAILABLE:
         return []
@@ -238,9 +237,40 @@ def search_laws_by_embedding(
         if legal_area is not None:
             query = query.filter(LawChunk.legal_area == legal_area)
 
-        # Order by id so the candidate window is stable across calls;
-        # the random sample alternative would skew results.
-        chunks = query.order_by(LawChunk.id).limit(candidate_limit).all()
+        # Token pre-filter: keep only chunks whose content contains at
+        # least one substantive token from the user query (length >= 4
+        # to skip Spanish stopwords like de, el, la, en, …). This is
+        # what stops the "causales de despido" query from returning
+        # Código Penal art.1 chunks — those don't contain any of those
+        # tokens.
+        tokens = []
+        if query_text:
+            tokens = [
+                t for t in query_text.lower().split()
+                if len(t) >= 4 and t.isalpha()
+            ]
+
+        if tokens:
+            from sqlalchemy import or_
+            keyword_filters = [
+                LawChunk.content.ilike(f"%{tok}%") for tok in tokens
+            ]
+            keyword_candidates = (
+                query.filter(or_(*keyword_filters))
+                .order_by(LawChunk.id)
+                .limit(candidate_limit)
+                .all()
+            )
+            if keyword_candidates:
+                chunks = keyword_candidates
+            else:
+                # No keyword match → fall back to pure semantic scan so
+                # the user always gets an answer, even on a phrased
+                # question whose tokens don't appear verbatim in the
+                # corpus.
+                chunks = query.order_by(LawChunk.id).limit(candidate_limit).all()
+        else:
+            chunks = query.order_by(LawChunk.id).limit(candidate_limit).all()
 
         results = []
         skipped_dim_mismatch = 0

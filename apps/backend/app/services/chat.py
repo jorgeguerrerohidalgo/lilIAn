@@ -158,8 +158,9 @@ def get_relevant_context(
             try:
                 law_results = search_laws_by_embedding(
                     query_embedding=query_embedding,
+                    query_text=query,
                     top_k=4,
-                    similarity_threshold=0.4,
+                    similarity_threshold=0.3,
                     legal_area=legal_area,
                 )
                 if law_results:
