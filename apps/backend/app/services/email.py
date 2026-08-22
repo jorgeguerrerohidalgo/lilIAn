@@ -446,9 +446,75 @@ _TEMPLATES: dict[str, TemplateFn] = {
 # ---------------------------------------------------------------------------
 
 class EmailNotConfigured(RuntimeError):
-    """Raised when ``RESEND_API_KEY`` is missing and the caller demanded a
-    real send (i.e. did not pass ``allow_stub=True``).
+    """Raised when no transactional email provider is configured and the
+    caller demanded a real send (i.e. did not pass ``allow_stub=True``).
     """
+
+
+def _send_via_resend(
+    recipients: list[str],
+    subject: str,
+    html: str,
+    text: str,
+    from_addr: str,
+    from_label: str,
+) -> str | None:
+    """Dispatch through Resend's HTTP API. Returns the message id."""
+    api_key = os.environ.get("RESEND_API_KEY")
+    body = {
+        "from": f"{from_label} <{from_addr}>",
+        "to": recipients,
+        "subject": subject,
+        "html": html,
+        "text": text,
+    }
+    resp = httpx.post(
+        "https://api.resend.com/emails",
+        json=body,
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    result = resp.json() if resp.content else {}
+    return result.get("id")
+
+
+def _send_via_mailgun(
+    recipients: list[str],
+    subject: str,
+    html: str,
+    text: str,
+    from_addr: str,
+    from_label: str,
+) -> str | None:
+    """Dispatch through Mailgun's HTTP API. Returns the message id.
+
+    Uses the sandbox domain by default (``MAILGUN_DOMAIN`` env var);
+    the sandbox only delivers to recipients whitelisted in the
+    Mailgun dashboard, which is fine for beta. To send to arbitrary
+    recipients, verify a real domain in Mailgun and update the env var.
+    """
+    api_key = os.environ.get("MAILGUN_API_KEY")
+    domain = os.environ.get("MAILGUN_DOMAIN")
+    if not api_key or not domain:
+        raise EmailNotConfigured(
+            "MAILGUN_API_KEY / MAILGUN_DOMAIN not configured."
+        )
+    resp = httpx.post(
+        f"https://api.mailgun.net/v3/{domain}/messages",
+        auth=("api", api_key),
+        data={
+            "from": f"{from_label} <{from_addr}>",
+            "to": recipients,
+            "subject": subject,
+            "html": html,
+            "text": text,
+        },
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    result = resp.json() if resp.content else {}
+    return result.get("id")
 
 
 def send_email(
@@ -462,24 +528,28 @@ def send_email(
 ) -> dict[str, Any]:
     """Send a transactional email by template name.
 
+    Provider is selected by env vars:
+      - ``MAILGUN_API_KEY`` + ``MAILGUN_DOMAIN`` → Mailgun (sandbox-friendly)
+      - ``RESEND_API_KEY`` → Resend (legacy)
+      - neither → stub (logs the email, returns ``{"status": "stub"}``)
+
     Args:
         to: Recipient email or list of emails.
         template: One of the keys in ``_TEMPLATES`` (e.g. ``"welcome"``).
         data: Dict passed to the template renderer.
         from_email: Override ``EMAIL_FROM_ADDRESS`` for this call only.
         from_name: Override ``EMAIL_FROM_NAME`` for this call only.
-        allow_stub: If True (default) and ``RESEND_API_KEY`` is unset, the
-            email is logged instead of sent and ``{"status": "stub"}`` is
-            returned. If False, ``EmailNotConfigured`` is raised.
+        allow_stub: If True (default) and no provider is configured, the
+            email is logged instead of sent.
 
     Returns:
         A dict with at least ``status`` (``"sent"`` or ``"stub"``) and the
-        Resend message id when applicable.
+        provider message id when applicable.
 
     Raises:
-        EmailNotConfigured: when ``allow_stub=False`` and no API key is set.
+        EmailNotConfigured: when ``allow_stub=False`` and no provider is set.
         ValueError: when ``template`` is unknown.
-        httpx.HTTPError: when the upstream Resend call fails.
+        httpx.HTTPError: when the upstream provider call fails.
     """
     if template not in _TEMPLATES:
         raise ValueError(f"Unknown email template: {template!r}")
@@ -489,15 +559,20 @@ def send_email(
 
     recipients = [to] if isinstance(to, str) else list(to)
 
-    api_key = os.getenv("RESEND_API_KEY")
     from_addr = from_email or os.getenv("EMAIL_FROM_ADDRESS", "noreply@lilian.cl")
     from_label = from_name or os.getenv("EMAIL_FROM_NAME", "Lilian")
 
-    if not api_key:
+    # Mailgun takes precedence — its sandbox domain lets us send to
+    # whitelisted recipients without verifying a custom domain, which is
+    # exactly what beta testing needs.
+    use_mailgun = bool(os.getenv("MAILGUN_API_KEY") and os.getenv("MAILGUN_DOMAIN"))
+    use_resend = bool(os.getenv("RESEND_API_KEY"))
+
+    if not (use_mailgun or use_resend):
         if not allow_stub:
             raise EmailNotConfigured(
-                "RESEND_API_KEY is not set; cannot send real email. "
-                "Set the env var or pass allow_stub=True to log instead."
+                "No transactional email provider configured "
+                "(set MAILGUN_API_KEY+MAILGUN_DOMAIN or RESEND_API_KEY)."
             )
         logger.info(
             "[email-stub] to=%s template=%s subject=%r",
@@ -508,44 +583,43 @@ def send_email(
         logger.debug("[email-stub] body text=\n%s", text)
         return {"status": "stub", "to": recipients, "subject": subject}
 
-    body = {
-        "from": f"{from_label} <{from_addr}>",
-        "to": recipients,
-        "subject": subject,
-        "html": html,
-        "text": text,
-    }
+    provider_name = "mailgun" if use_mailgun else "resend"
+    dispatch = _send_via_mailgun if use_mailgun else _send_via_resend
     try:
-        resp = httpx.post(
-            "https://api.resend.com/emails",
-            json=body,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=10.0,
+        message_id = dispatch(
+            recipients=recipients,
+            subject=subject,
+            html=html,
+            text=text,
+            from_addr=from_addr,
+            from_label=from_label,
         )
-        resp.raise_for_status()
     except httpx.HTTPError as exc:
         logger.error(
-            "Resend send failed to=%s template=%s error=%s",
-            recipients,
-            template,
-            exc,
+            "%s send failed to=%s template=%s error=%s",
+            provider_name.title(), recipients, template, exc,
         )
         raise
 
-    result = resp.json() if resp.content else {}
-    message_id = result.get("id")
     logger.info(
-        "email sent to=%s template=%s message_id=%s",
-        recipients,
-        template,
-        message_id,
+        "email sent provider=%s to=%s template=%s message_id=%s",
+        provider_name, recipients, template, message_id,
     )
-    return {"status": "sent", "id": message_id, "to": recipients, "subject": subject}
+    return {
+        "status": "sent",
+        "id": message_id,
+        "provider": provider_name,
+        "to": recipients,
+        "subject": subject,
+    }
 
 
 def is_configured() -> bool:
-    """Return True if a real email backend (Resend) is configured."""
-    return bool(os.getenv("RESEND_API_KEY"))
+    """Return True if any real email backend (Resend or Mailgun) is configured."""
+    return bool(
+        os.getenv("RESEND_API_KEY")
+        or (os.getenv("MAILGUN_API_KEY") and os.getenv("MAILGUN_DOMAIN"))
+    )
 
 
 # ---------------------------------------------------------------------------

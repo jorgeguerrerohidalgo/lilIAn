@@ -82,11 +82,15 @@ class Settings(BaseSettings):
     STRIPE_PRICE_COMPANY: str | None = None
     STRIPE_PRICE_ENTERPRISE: str | None = None
 
-    # S2-07: transactional email via Resend. Optional in dev — when
-    # unset, ``app.services.email`` logs the rendered email and returns
+    # S2-07: transactional email. Provider is selected by what env vars
+    # are set: Mailgun (sandbox-friendly for beta) takes precedence over
+    # Resend. Optional in dev — when neither is configured,
+    # ``app.services.email`` logs the rendered email and returns
     # ``{"status": "stub"}`` so local development and CI never need a
     # real key.
     RESEND_API_KEY: str | None = None
+    MAILGUN_API_KEY: str | None = None
+    MAILGUN_DOMAIN: str | None = None
     EMAIL_FROM_ADDRESS: str = "noreply@lilian.cl"
     EMAIL_FROM_NAME: str = "Lilian"
 
