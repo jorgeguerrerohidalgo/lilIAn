@@ -154,6 +154,12 @@ def get_relevant_context(
         # indexadas con embeddings reales). Habilita preguntas jurídicas
         # generales (e.g. causales de despido) que no aparecen en los
         # documentos del caso actual.
+        #
+        # Note: we pass ``legal_area=None`` on purpose — the matter's
+        # legal_area is too narrow for general legal questions (a civil
+        # matter can still ask about labour law). The keyword pre-filter
+        # inside search_laws_by_embedding narrows the corpus by the
+        # query tokens, which is the right scope signal for laws.
         if include_laws:
             try:
                 law_results = search_laws_by_embedding(
@@ -161,7 +167,7 @@ def get_relevant_context(
                     query_text=query,
                     top_k=4,
                     similarity_threshold=0.3,
-                    legal_area=legal_area,
+                    legal_area=None,
                 )
                 if law_results:
                     law_lines = []
