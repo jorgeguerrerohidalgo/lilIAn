@@ -218,6 +218,12 @@ def index_law_chunks(law_code: str, law_name: str, chunks: list, db, batch_size:
     between batches so we stay well under the OpenAI tier-1 rate limit
     (~60 req/min) even on accounts with strict per-minute quotas.
 
+    Chunks are padded to >=2000 chars before being sent to OpenAI so
+    the embeddings always come back at 1536 dims. The padding trick
+    matches what chat queries already do — without it, a batch of
+    short articles silently returns 512-dim vectors that don't fit
+    the law_chunks.embedding_vec vector(1536) column.
+
     Note: when the embedding provider fails (e.g. 429), it silently
     falls back to dummy embeddings. The caller MUST check that the
     resulting embeddings look real (e.g. non-deterministic across runs)
@@ -230,10 +236,17 @@ def index_law_chunks(law_code: str, law_name: str, chunks: list, db, batch_size:
     embedding_provider = get_embedding_provider()
     legal_area = get_legal_area_from_law_code(law_code)
 
+    SHORT_PAD_THRESHOLD = 2000
+
+    def _pad_for_1536(text: str) -> str:
+        if len(text) >= SHORT_PAD_THRESHOLD:
+            return text
+        return text + " " * (SHORT_PAD_THRESHOLD - len(text))
+
     indexed_count = 0
     for batch_start in range(0, len(chunks), batch_size):
         batch = chunks[batch_start:batch_start + batch_size]
-        texts = [c["content"] for c in batch]
+        texts = [_pad_for_1536(c["content"]) for c in batch]
         try:
             embeddings = embedding_provider.generate_embeddings(texts)
         except Exception as e:
@@ -241,14 +254,13 @@ def index_law_chunks(law_code: str, law_name: str, chunks: list, db, batch_size:
             continue
 
         for chunk_data, embedding in zip(batch, embeddings):
-            embedding_str = json.dumps(embedding)
             law_chunk = LawChunk(
                 law_code=law_code,
                 law_name=law_name,
                 article_number=chunk_data.get("article_number"),
                 chunk_index=chunk_data["index"],
                 content=chunk_data["content"],
-                embedding=embedding_str,
+                embedding_vec=embedding,
                 legal_area=legal_area.value if hasattr(legal_area, 'value') else legal_area,
                 chunk_metadata={
                     "indexed_from": "law_indexer",

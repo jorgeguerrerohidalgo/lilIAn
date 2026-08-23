@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
 
 from app.core.database import Base
@@ -16,7 +17,10 @@ class LawChunk(Base):
     section_title = Column(String(500))
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
-    embedding = Column(Text)
+    # pgvector column — ANN-searchable via the <=> operator with the
+    # HNSW index ``ix_law_chunks_embedding_vec_hnsw``. Replaces the
+    # earlier JSON-as-text ``embedding`` column (see migration 033).
+    embedding_vec = Column(Vector(1536), nullable=True)
     legal_area = Column(String(50), nullable=False, index=True)
     chunk_metadata = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)

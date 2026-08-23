@@ -2,6 +2,7 @@ import json
 import logging
 
 import numpy as np
+from sqlalchemy import text
 
 from app.core.database import SessionLocal
 from app.models.document_chunk import DocumentChunk
@@ -209,111 +210,99 @@ def search_laws_by_embedding(
     query_embedding: list[float],
     law_code: str = None,
     top_k: int = 5,
-    similarity_threshold: float = 0.5,
+    similarity_threshold: float = 0.3,
     legal_area: LegalArea | None = None,
-    candidate_limit: int = 4000,
     query_text: str | None = None,
 ) -> list[dict]:
-    """Busca en chunks de leyes chilenas por embedding.
+    """Busca en chunks de leyes chilenas por embedding con pgvector.
 
-    S5.1 — pragmatic implementation: keyword pre-filter narrows the
-    candidate set to chunks whose ``content`` contains at least one
-    token from the user query, then embedding cosine ranks them. If
-    the keyword filter returns nothing, fall back to a pure-semantic
-    scan over ``candidate_limit`` chunks.
+    S5.1 — uses the pgvector ``<=>`` operator against the HNSW index
+    on ``law_chunks.embedding_vec`` for ANN search in SQL. Returns
+    top-k most similar chunks in O(log N) instead of the O(N) Python
+    loop we used before.
 
-    The proper long-term fix is to migrate ``law_chunks.embedding`` to
-    a real pgvector column and use the ``<=>`` operator with an
-    IVFFlat / HNSW index. See ROADMAP_HARVEY_FEATURES.md.
+    A keyword pre-filter (``ILIKE`` on ``content``) narrows the
+    candidate set when ``query_text`` is supplied. This is what stops
+    "causales de despido" from returning unrelated general-intro
+    articles — those don't contain any of the substantive tokens.
+
+    The ``<=>`` operator returns *distance* (0 = identical, 2 =
+    opposite). We convert to cosine *similarity* as ``1 - distance/2``
+    so callers can keep using a 0..1 scale they understand.
     """
     if not LAW_CHUNKS_AVAILABLE:
         return []
 
+    # pgvector cosine distance is 0 (identical) → 2 (opposite). Convert
+    # to a 0..1 similarity scale that matches the threshold semantics.
+    if similarity_threshold < 0 or similarity_threshold > 1:
+        raise ValueError("similarity_threshold must be in [0, 1]")
+    max_distance = 2.0 * (1.0 - similarity_threshold)
+
+    from sqlalchemy import bindparam, or_
+
     db = SessionLocal()
     try:
-        query = db.query(LawChunk)
-        if law_code:
-            query = query.filter(LawChunk.law_code == law_code)
-        if legal_area is not None:
-            query = query.filter(LawChunk.legal_area == legal_area)
-
-        # Token pre-filter: keep only chunks whose content contains at
-        # least one substantive token from the user query (length >= 4
-        # to skip Spanish stopwords like de, el, la, en, …). This is
-        # what stops the "causales de despido" query from returning
-        # Código Penal art.1 chunks — those don't contain any of those
-        # tokens.
-        tokens = []
+        # Optional keyword pre-filter: cheap ILIKE clauses against the
+        # same column. If the query has no substantive tokens we skip
+        # this and let pgvector rank over the whole corpus.
+        tokens: list[str] = []
         if query_text:
-            tokens = [
-                t for t in query_text.lower().split()
-                if len(t) >= 4 and t.isalpha()
-            ]
+            tokens = [t for t in query_text.lower().split() if len(t) >= 4 and t.isalpha()]
 
+        # SQL: ORDER BY embedding_vec <=> :q LIMIT :k. pgvector's
+        # ``<=>`` operator uses the HNSW index.
+        sql = """
+            SELECT id, content, law_code, law_name, article_number,
+                   (embedding_vec <=> CAST(:q AS vector)) AS distance
+              FROM law_chunks
+             WHERE embedding_vec IS NOT NULL
+               {law_code_clause}
+               {legal_area_clause}
+               {keyword_clause}
+             ORDER BY embedding_vec <=> CAST(:q AS vector)
+             LIMIT :k
+        """
+
+        law_code_clause = "AND law_code = :law_code" if law_code else ""
+        legal_area_clause = (
+            "AND legal_area = :legal_area" if legal_area is not None else ""
+        )
+        keyword_clause = ""
+        params: dict = {"q": query_embedding, "k": top_k}
         if tokens:
-            from sqlalchemy import or_
-            keyword_filters = [
-                LawChunk.content.ilike(f"%{tok}%") for tok in tokens
-            ]
-            keyword_candidates = (
-                query.filter(or_(*keyword_filters))
-                .order_by(LawChunk.id)
-                .limit(candidate_limit)
-                .all()
-            )
-            if keyword_candidates:
-                chunks = keyword_candidates
-            else:
-                # No keyword match → fall back to pure semantic scan so
-                # the user always gets an answer, even on a phrased
-                # question whose tokens don't appear verbatim in the
-                # corpus.
-                chunks = query.order_by(LawChunk.id).limit(candidate_limit).all()
-        else:
-            chunks = query.order_by(LawChunk.id).limit(candidate_limit).all()
+            keyword_clause = "AND (" + " OR ".join(
+                f"content ILIKE :kw{i}" for i in range(len(tokens))
+            ) + ")"
+            for i, tok in enumerate(tokens):
+                params[f"kw{i}"] = f"%{tok}%"
 
-        results = []
-        skipped_dim_mismatch = 0
-        query_dim = len(query_embedding)
-        for chunk in chunks:
-            if not chunk.embedding:
-                continue
-
-            try:
-                stored_embedding = json.loads(chunk.embedding)
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-            # S5.1 — law_indexer used EMBEDDING_DIM_SHORT (512) for chunks
-            # shorter than SHORT_DOC_CHAR_THRESHOLD and 1536 otherwise, so
-            # the corpus has mixed dimensions. Cosine requires matching
-            # dims; skip (don't error) and count. TODO: reindex all
-            # law_chunks at 1536 dims to drop the 512-dim branch entirely.
-            if len(stored_embedding) != query_dim:
-                skipped_dim_mismatch += 1
-                continue
-
-            similarity = cosine_similarity(query_embedding, stored_embedding)
-
-            if similarity >= similarity_threshold:
-                results.append({
-                    "chunk_id": chunk.id,
-                    "content": chunk.content,
-                    "law_code": chunk.law_code,
-                    "law_name": chunk.law_name,
-                    "article_number": chunk.article_number,
-                    "similarity": similarity
-                })
-
-        if skipped_dim_mismatch:
-            logger.debug(
-                "search_laws_by_embedding skipped %d chunks (dim %d != query dim %d)",
-                skipped_dim_mismatch, len(stored_embedding) if chunks else -1, query_dim,
+        if law_code:
+            params["law_code"] = law_code
+        if legal_area is not None:
+            params["legal_area"] = (
+                legal_area.value if hasattr(legal_area, "value") else legal_area
             )
 
-        results.sort(key=lambda x: x["similarity"], reverse=True)
-        return results[:top_k]
+        sql = sql.format(
+            law_code_clause=law_code_clause,
+            legal_area_clause=legal_area_clause,
+            keyword_clause=keyword_clause,
+        )
 
+        rows = db.execute(text(sql), params).fetchall()
+        return [
+            {
+                "chunk_id": row[0],
+                "content": row[1],
+                "law_code": row[2],
+                "law_name": row[3],
+                "article_number": row[4],
+                "similarity": 1.0 - row[5] / 2.0,  # distance → similarity
+            }
+            for row in rows
+            if (1.0 - row[5] / 2.0) >= similarity_threshold
+        ]
     finally:
         db.close()
 
