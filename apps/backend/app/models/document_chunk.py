@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
@@ -17,7 +18,10 @@ class DocumentChunk(Base):
     content = Column(Text, nullable=False)
     page_number = Column(Integer)
     section_title = Column(String(500))
-    embedding = Column(Text)
+    # pgvector column — ANN-searchable via <=> with the HNSW index
+    # ix_document_chunks_embedding_vec_hnsw. Replaces the legacy
+    # JSON-as-text ``embedding`` column (see migration 034).
+    embedding_vec = Column(Vector(1536), nullable=True)
     legal_area = Column(String(50), nullable=True, index=True)
     chunk_metadata = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow)

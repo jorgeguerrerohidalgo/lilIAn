@@ -272,8 +272,16 @@ def _persist_chunks(
         )
         if embedding_provider:
             try:
-                embedding = embedding_provider.generate_embedding(raw_chunk["content"])
-                chunk.embedding = json.dumps(embedding)
+                # Pad short chunks to >=2000 chars so OpenAI returns a
+                # 1536-dim vector (the embedding service switches to
+                # EMBEDDING_DIM_SHORT=512 otherwise, which doesn't fit
+                # the document_chunks.embedding_vec vector(1536) column
+                # and was the source of the silent dim-mismatch failures
+                # in chat).
+                text = raw_chunk["content"]
+                if len(text) < 2000:
+                    text = text + " " * (2000 - len(text))
+                chunk.embedding_vec = embedding_provider.generate_embedding(text)
             except Exception:
                 pass
         db.add(chunk)
