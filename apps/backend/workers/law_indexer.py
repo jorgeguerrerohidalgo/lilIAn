@@ -111,35 +111,81 @@ LAWS_METADATA = {
 
 
 def clean_text(text: str) -> str:
-    """Limpia texto extraído de PDF."""
-    # Remover múltiples espacios
-    text = re.sub(r'\s+', ' ', text)
-    # Remover líneas vacías múltiples
-    text = re.sub(r'\n\s*\n', '\n\n', text)
+    """Limpia texto extraído de PDF preservando saltos de línea e indents.
+
+    S5.1: replaces the old version that collapsed all whitespace via
+    ``\\s+`` (which also matched newlines). ``split_into_articles``
+    relies on the short-indent header pattern ``\\n {5}Art\\.\\s+\\d``
+    that the PDF extractor emits — the leading spaces on the line
+    after a newline ARE the article-header indent and must survive
+    cleanup, otherwise everything collapses into one line.
+    """
+    # Collapse runs of 10+ spaces/tabs (long indents that aren't
+    # meaningful for the header pattern). Keep runs of 1-9.
+    text = re.sub(r"[ \t]{10,}", " ", text)
+    # Trim spaces BEFORE newlines only — leave the leading indent
+    # of the next line alone so the header regex can see it.
+    text = re.sub(r" +\n", "\n", text)
+    # Collapse blank lines.
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
 def split_into_articles(text: str) -> list:
-    """Intenta dividir el texto en artículos."""
-    articles = []
+    """Divide el texto en artículos completos, sin cortar sub-ítems.
 
-    # Patrones comunes para artículos en leyes chilenas
-    patterns = [
-        r'Artículo\s+(\d+[A-Z]?)\s*[-–—]?\s*(.*?)(?=Artículo\s+\d|$)',
-        r'Art\.\s*(\d+[A-Z]?)\s*[-–—]?\s*(.*?)(?=Art\.\s*\d|$)',
-        r'^(\d+)\.\s+(.*?)(?=^\d+\.\s+|$)',
-    ]
+    S5.1: replaces the previous lazy-match approach that captured only
+    the article header (the typical PDF rendering leaves the
+    article body indented at a different column width). The new
+    approach anchors on **header positions**, not on lazy content
+    capture:
 
-    for pattern in patterns:
-        matches = re.finditer(pattern, text, re.MULTILINE | re.DOTALL)
-        for match in matches:
-            article_num = match.group(1)
-            content = match.group(2).strip()
-            if len(content) > 20:  # Filtrar artículos muy cortos
-                articles.append({
-                    "number": article_num,
-                    "content": content
-                })
+      1. Find every ``Art. N`` / ``Artículo N`` whose preceding
+         whitespace is the short "column" indent used by the article
+         header (5 spaces in our PDF extracts — sub-ítems like
+         ``Art. 1, N° 1 a)`` live at 30+ spaces, way past the header
+         column, so we skip them).
+      2. Slice the text between consecutive headers. Each slice
+         becomes one chunk containing header + body.
+      3. Dedup by canonical article number: ``Art. 159`` and
+         ``Artículo 159`` in the same text collapse to one chunk.
+
+    Why this matters: the old regex returned chunks like
+    ``"Artículo 159: . El contrato de trabajo terminará..."`` (83
+    chars — just the header). The RAG couldn't actually answer
+    anything because the body lived in a sibling chunk. With position
+    slicing, each chunk has the full article text.
+    """
+    # Match both ``Artículo N`` and ``Art. N`` followed by an optional
+    # suffix (``.o``, ``º``, ``bis``, ``N° X``), anchored at the
+    # short-indent column (5 spaces, no tab/newline inside).
+    header_re = re.compile(
+        r"\n[ ]{5}"
+        r"Art(?:[ií]culo|\.)\s+"
+        r"(\d+)"                # canonical article number
+        r"(?:[\.º°][a-zñ]*)?"
+        r"(?:\s+(?:bis|ter|quater))?"
+        r"(?:\s+N[°ºo]?\s*\d+(?:\s*[a-z])?)?"
+    )
+    matches = list(header_re.finditer(text))
+
+    articles: list[dict] = []
+    seen_numbers: set[str] = set()
+    for i, m in enumerate(matches):
+        number = m.group(1)
+        if number in seen_numbers:
+            # Same canonical number already chunked — skip duplicate.
+            # Happens when both ``Artículo N`` and ``Art. N`` appear.
+            continue
+        start = m.start() + 1  # drop the leading ``\n`` so the chunk
+                                # starts cleanly with the header
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        chunk_text = text[start:end].strip()
+        if len(chunk_text) < 100:
+            # Probably a TOC entry or a cross-reference — skip.
+            continue
+        seen_numbers.add(number)
+        articles.append({"number": number, "content": chunk_text})
 
     return articles
 
@@ -184,7 +230,25 @@ def process_law_pdf(file_path: str, law_code: str) -> dict:
     # Intentar dividir en artículos
     articles = split_into_articles(cleaned_text)
 
-    if articles:
+    # Heuristic: if split_into_articles found very few articles
+    # (suggesting header recognition failed) OR every article is huge
+    # (the header regex merged the whole document into one or two
+    # mega-chunks that won't fit an LLM context window), fall back to
+    # the generic chunker. Empirically: PDFs whose article headers
+    # match the 5-space ``Art. N.o`` indent return ~hundreds of
+    # medium-sized chunks; PDFs whose layout differs return 1–5 chunks
+    # that are tens of thousands of characters long.
+    avg_article_size = (
+        sum(len(a["content"]) for a in articles) / len(articles)
+        if articles else 0
+    )
+    use_article_chunks = (
+        articles
+        and len(articles) >= 10
+        and avg_article_size <= 20_000
+    )
+
+    if use_article_chunks:
         # Usar artículos como chunks
         chunks = []
         for i, article in enumerate(articles):
@@ -194,7 +258,7 @@ def process_law_pdf(file_path: str, law_code: str) -> dict:
                 "article_number": article['number']
             })
     else:
-        # Usar chunks genéricos
+        # Usar chunks genéricos (fallback)
         text_chunks = chunk_text(cleaned_text)
         chunks = [{
             "index": i,
