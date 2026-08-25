@@ -1,20 +1,25 @@
 "use client";
 
 /**
- * InviteTeamModal — S6.3.
+ * InviteTeamModal — S6.3 / Phase 2a (multi-invite).
  *
- * Modal launched from the sidebar "Invitar a tu equipo" button. Collects
- * an email + role, POSTs to ``/api/v1/organizations/me/invitations``,
- * shows a success toast, and closes. On failure shows an error toast
- * with the human message.
+ * Modal launched from the sidebar "Invitar a tu equipo" button (single
+ * email) and from the ``/dashboard/team`` page header (multi-email,
+ * comma-separated).
+ *
+ * Behaviour:
+ *   - Collects one or more emails + a role.
+ *   - POSTs each to ``/api/v1/organizations/me/invitations`` in sequence
+ *     (the backend is single-row; we keep it that way to avoid changing
+ *     the contract). Already-existing pending invites for an email
+ *     de-dupe on the server, so a second click is harmless.
+ *   - Shows a success toast summarising how many went through.
+ *   - On per-email failure, surfaces the error inline so the user can
+ *     re-submit only the failed rows.
  *
  * Why a portal: same reason as the welcome tour — the modal needs to
  * escape any parent stacking / overflow context and render on top of
  * the chat widget.
- *
- * Why controlled form: the form has three pieces of state (email,
- * role, submit-pending). Local ``useState`` is the simplest fit; no
- * React-Hook-Form dep needed.
  */
 
 import { useEffect, useId, useState } from "react";
@@ -26,6 +31,12 @@ export interface InviteTeamModalProps {
   onClose: () => void;
   /** Optional inviter display name (otherwise pulled from /me). */
   inviterName?: string;
+  /**
+   * Phase 2a — allow comma/newline separated lists of emails in the
+   * single email field. Default false so the sidebar CTA stays
+   * single-shot.
+   */
+  multipleEmails?: boolean;
 }
 
 const ROLE_OPTIONS: { value: string; label: string; description: string }[] = [
@@ -35,7 +46,12 @@ const ROLE_OPTIONS: { value: string; label: string; description: string }[] = [
   { value: "VIEWER", label: "Solo lectura", description: "Puede revisar pero no modificar." },
 ];
 
-export function InviteTeamModal({ open, onClose, inviterName }: InviteTeamModalProps) {
+export function InviteTeamModal({
+  open,
+  onClose,
+  inviterName,
+  multipleEmails = false,
+}: InviteTeamModalProps) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("LAWYER");
   const [submitting, setSubmitting] = useState(false);
@@ -63,31 +79,71 @@ export function InviteTeamModal({ open, onClose, inviterName }: InviteTeamModalP
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!email.trim()) {
+    const raw = email.trim();
+    if (!raw) {
+      setError("Ingresa el correo de tu colega.");
+      return;
+    }
+    // Phase 2a — split comma / semicolon / newline separated lists.
+    const list = multipleEmails
+      ? raw
+          .split(/[\s,;]+/)
+          .map((e) => e.trim())
+          .filter((e) => e.length > 0)
+      : [raw];
+    if (list.length === 0) {
       setError("Ingresa el correo de tu colega.");
       return;
     }
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/v1/organizations/me/invitations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), role }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        const detail = (data && (data.detail || data.message)) || "No pudimos enviar la invitación.";
-        throw new Error(typeof detail === "string" ? detail : "No pudimos enviar la invitación.");
+      let succeeded = 0;
+      const failures: string[] = [];
+      for (const addr of list) {
+        try {
+          const res = await fetch("/api/v1/organizations/me/invitations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: addr, role }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            const detail =
+              (data && (data.detail || data.message)) ||
+              "No pudimos enviar la invitación.";
+            throw new Error(typeof detail === "string" ? detail : "No pudimos enviar la invitación.");
+          }
+          succeeded += 1;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Error desconocido";
+          failures.push(`${addr}: ${message}`);
+        }
       }
-      showToast({
-        tone: "success",
-        title: "Invitación enviada",
-        body: `Le avisaremos a ${email} por correo.`,
-      });
-      setEmail("");
-      setRole("LAWYER");
-      onClose();
+
+      if (failures.length === 0) {
+        showToast({
+          tone: "success",
+          title: list.length === 1 ? "Invitación enviada" : "Invitaciones enviadas",
+          body:
+            list.length === 1
+              ? `Le avisaremos a ${list[0]} por correo.`
+              : `Enviamos ${succeeded} invitaciones.`,
+        });
+        setEmail("");
+        setRole("LAWYER");
+        onClose();
+      } else if (succeeded > 0) {
+        // Partial success — surface the failures inline but still toast.
+        setError(failures.join("\n"));
+        showToast({
+          tone: "warning",
+          title: "Algunas invitaciones fallaron",
+          body: `Enviamos ${succeeded}, fallaron ${failures.length}.`,
+        });
+      } else {
+        throw new Error(failures.join("\n"));
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "No pudimos enviar la invitación.";
       setError(message);
@@ -135,20 +191,29 @@ export function InviteTeamModal({ open, onClose, inviterName }: InviteTeamModalP
         <form onSubmit={handleSubmit} className="space-y-4 px-6 pb-6 pt-2">
           <div>
             <label htmlFor="invite-email" className="block text-sm font-medium text-slate-700 mb-1">
-              Correo electrónico
+              {multipleEmails ? "Correos electrónicos" : "Correo electrónico"}
             </label>
-            <input
+            <textarea
               id="invite-email"
-              type="email"
               required
               autoComplete="email"
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="colega@bufete.cl"
+              placeholder={
+                multipleEmails
+                  ? "colega1@bufete.cl, colega2@bufete.cl"
+                  : "colega@bufete.cl"
+              }
               disabled={submitting}
+              rows={multipleEmails ? 3 : 1}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none"
             />
+            {multipleEmails && (
+              <p className="mt-1 text-xs text-slate-500">
+                Separa los correos con comas, saltos de línea o puntos y coma.
+              </p>
+            )}
           </div>
 
           <div>
