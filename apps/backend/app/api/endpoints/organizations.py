@@ -283,3 +283,166 @@ def list_invitations(
         )
         for row in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# S6.3 — accept invitation (Phase 0 of multi-tenant work)
+# ---------------------------------------------------------------------------
+#
+# Routes under ``/organizations/invitations/accept`` — NOT
+# ``/organizations/me/invitations/accept`` — because the receiver may
+# not be authenticated yet. The token alone authorizes the call.
+
+
+@router.post("/invitations/accept")
+def accept_invitation(
+    payload: "app.schemas.invitation.InvitationAcceptRequest",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """S6.3 — consume a pending invitation token.
+
+    Marks the row ``ACCEPTED`` and inserts (or upserts) an
+    ``OrganizationMember`` row. Idempotent: replaying with the same
+    token returns the same payload instead of erroring, so the
+    frontend can safely retry on transient network failures.
+
+    Cases:
+      - Existing user (email already in ``users``) — just add the
+        membership; user is already authenticated.
+      - New user — we do **not** auto-create the account here. The
+        user must register first (the invite email links to
+        ``/auth/register?invite=<token>`` so we capture the token
+        across the signup boundary) and re-call accept after
+        authenticating. The frontend uses ``requires_verification``
+        to decide whether to skip the verify-email step.
+
+    Errors:
+      - 404: token unknown.
+      - 410: invitation is no longer pending (accepted/expired/revoked).
+      - 400: invitation expired by date.
+    """
+    from app.schemas.invitation import InvitationAcceptRequest, InvitationAcceptResponse
+
+    # Pydantic coercion — let FastAPI validate the payload shape.
+    if not isinstance(payload, InvitationAcceptRequest):
+        payload = InvitationAcceptRequest.model_validate(payload)
+
+    token = payload.token
+    now = datetime.utcnow()
+
+    invite = (
+        db.query(Invitation)
+        .filter(Invitation.token == token)
+        .first()
+    )
+    if invite is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitación no encontrada",
+        )
+
+    # Idempotency: an already-accepted invitation returns the same
+    # payload so the frontend can retry safely.
+    if invite.status == InvitationStatus.ACCEPTED:
+        org = (
+            db.query(Organization)
+            .filter(Organization.id == invite.organization_id)
+            .first()
+        )
+        existing_member = (
+            db.query(OrganizationMember)
+            .filter(
+                OrganizationMember.organization_id == invite.organization_id,
+                OrganizationMember.user_id == current_user.id,
+            )
+            .first()
+        )
+        return InvitationAcceptResponse(
+            invitation_id=invite.id,
+            organization_id=invite.organization_id,
+            organization_name=org.name if org else "",
+            role=existing_member.role.value if existing_member and hasattr(existing_member.role, "value") else invite.role,
+            user_id=current_user.id,
+            email=current_user.email,
+            email_already_registered=True,
+            requires_verification=not current_user.email_verified,
+        )
+
+    if invite.status in {InvitationStatus.REVOKED, InvitationStatus.EXPIRED}:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Esta invitación ya no es válida",
+        )
+
+    if invite.expires_at < now:
+        # Best-effort: flip status so subsequent calls don't repeat the
+        # date math. Failure to update is non-fatal — we still raise.
+        try:
+            invite.status = InvitationStatus.EXPIRED
+            db.commit()
+        except Exception:
+            db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La invitación ha expirado",
+        )
+
+    # Email match: only the person invited may accept. If the
+    # authenticated email doesn't match the invite email, refuse —
+    # this prevents a logged-in user from consuming someone else's
+    # token.
+    if current_user.email.lower() != invite.email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta invitación fue enviada a otro correo",
+        )
+
+    # Upsert membership: if the user was already a member (e.g.
+    # re-accept after role change), keep the existing role.
+    existing_member = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.organization_id == invite.organization_id,
+            OrganizationMember.user_id == current_user.id,
+        )
+        .first()
+    )
+    if existing_member is None:
+        member_role = (
+            MemberRole(invite.role)
+            if invite.role in {r.value for r in MemberRole}
+            else MemberRole.LAWYER
+        )
+        member = OrganizationMember(
+            organization_id=invite.organization_id,
+            user_id=current_user.id,
+            role=member_role,
+        )
+        db.add(member)
+    else:
+        # Optional: update the role to whatever the invite says.
+        # Most SaaS treats re-accepting as "no-op for existing members".
+        pass
+
+    invite.status = InvitationStatus.ACCEPTED
+    invite.accepted_at = now
+
+    db.commit()
+
+    org = (
+        db.query(Organization)
+        .filter(Organization.id == invite.organization_id)
+        .first()
+    )
+
+    return InvitationAcceptResponse(
+        invitation_id=invite.id,
+        organization_id=invite.organization_id,
+        organization_name=org.name if org else "",
+        role=invite.role,
+        user_id=current_user.id,
+        email=current_user.email,
+        email_already_registered=True,
+        requires_verification=not current_user.email_verified,
+    )
