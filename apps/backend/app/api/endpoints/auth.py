@@ -1,7 +1,6 @@
-from datetime import datetime
-from secrets import token_urlsafe
-
 import os
+from datetime import datetime, timedelta
+from secrets import token_urlsafe
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -15,6 +14,12 @@ from app.core.security import create_access_token, get_password_hash, verify_pas
 from app.models.organization import Organization
 from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    UserUpdate,
+)
 from app.schemas.token import Token
 from app.schemas.user import (
     EmailVerificationRequest,
@@ -332,3 +337,204 @@ def get_me(
         email_verified=current_user.email_verified,
         roles=roles,
     )
+
+
+def _send_password_reset_email(user: User, frontend_base_url: str | None = None) -> None:
+    """Render + dispatch (or stub-log) the password-reset email.
+
+    Mirrors ``_send_verification_email``: the endpoint layer owns the
+    token issuance, this helper only formats the email and hands it off
+    to ``send_email``. Failures are swallowed with a log line so the
+    /auth/forgot-password endpoint never bubbles a 500 because of an
+    upstream email provider being unavailable — the user simply won't
+    get an email, which matches the always-202 contract on that endpoint.
+    """
+    import logging
+
+    logger = logging.getLogger("lilian.auth")
+
+    base = frontend_base_url or os.environ.get(
+        "FRONTEND_BASE_URL",
+        "https://lil-i-5tz56uhov-jorgeguerrerohidalgo710.vercel.app",
+    )
+    reset_url = f"{base.rstrip('/')}/auth/reset-password?token={user.password_reset_token}"
+
+    try:
+        from app.services.email import send_email
+
+        send_email(
+            to=user.email,
+            template="password_reset",
+            data={"full_name": user.full_name, "reset_url": reset_url},
+        )
+    except Exception as exc:  # pragma: no cover - never block forgot-password
+        logger.warning("password reset email send failed for user_id=%s: %s", user.id, exc)
+
+
+def _revoke_active_session_for_user(user: User, request: Request) -> None:
+    """Best-effort JWT blacklist for the request that triggered the reset.
+
+    The user just rotated their credentials, so the JWT they currently
+    hold should no longer be valid: an attacker who previously captured
+    it would otherwise remain authenticated for up to ``ACCESS_TOKEN_EXPIRE_MINUTES``.
+
+    We do NOT fail the request if this step errors: the password has
+    already been rotated, which is the security-relevant event.
+    """
+    try:
+        from app.core.security import decode_access_token
+        from app.core.token_blacklist import revoke_token, ttl_for_token
+
+        authorization = request.headers.get("authorization", "")
+        token: str | None = None
+        if authorization.lower().startswith("bearer "):
+            token = authorization[7:].strip()
+        else:
+            cookie_token = request.cookies.get(AUTH_COOKIE_NAME)
+            if cookie_token:
+                token = cookie_token
+
+        if not token:
+            return
+
+        payload = decode_access_token(token)
+        ttl = ttl_for_token(payload.get("exp") if payload else None)
+        revoke_token(token, ttl)
+    except Exception:  # pragma: no cover - defensive, never block reset
+        pass
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_me(
+    payload: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Phase 1b — editar el perfil del usuario autenticado.
+
+    Solo actualiza los campos provistos (``full_name``, ``phone``).
+    El email está excluido a propósito: cambiar el email requiere
+    re-verificación, fuera del scope de esta fase.
+
+    Devuelve el ``UserResponse`` (igual que ``GET /me``) para que el
+    frontend pueda refrescar su estado local con la respuesta.
+    """
+    data = payload.model_dump(exclude_unset=True)
+    for field, value in data.items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
+
+    # Re-pull memberships so the response carries the role list (mirrors
+    # GET /me exactly).
+    memberships = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.user_id == current_user.id)
+        .all()
+    )
+    roles = sorted({m.role.value for m in memberships if m.role})
+
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        last_login_at=current_user.last_login_at,
+        email_verified=current_user.email_verified,
+        roles=roles,
+    )
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")  # S1-05 parity with /login
+def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Phase 1b — cambiar la contraseña del usuario autenticado.
+
+    Verifica la contraseña actual (``HTTPException 400`` si no
+    coincide), valida la nueva con la misma política de fortaleza que
+    usa ``/register``, hashea con ``get_password_hash`` y persiste.
+    """
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contraseña actual incorrecta",
+        )
+
+    current_user.password_hash = get_password_hash(payload.new_password)
+    db.commit()
+
+    # Rotate out any active JWT the user might be holding. Defensive
+    # best-effort — the password is already rotated, so the request
+    # must not 500 on this step.
+    _revoke_active_session_for_user(current_user, request)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("5/minute")  # stricter than /change-password — abuse vector
+def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Phase 1b — solicitar reset de contraseña por email.
+
+    Genera un ``password_reset_token`` opaco (1 h de TTL), lo persiste
+    en el ``User`` y dispara el email con el template ``password_reset``.
+    **Siempre responde 202**, exista o no el email: este endpoint no
+    debe usarse para enumerar cuentas.
+
+    Si la cuenta está ``SUSPENDED``, igual generamos el token (no
+    queremos filtrar el estado de la cuenta via response shape).
+    """
+    user = db.query(User).filter(User.email == payload.email).first()
+    if user is not None:
+        user.password_reset_token = token_urlsafe(32)
+        user.password_reset_expires_at = datetime.utcnow() + timedelta(hours=1)
+        db.commit()
+        db.refresh(user)
+        _send_password_reset_email(user)
+
+    return {"status": "queued"}
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(
+    request: Request,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Phase 1b — completar un reset de contraseña con un token.
+
+    Busca el ``User`` por ``password_reset_token``; si no existe o el
+    token expiró, devuelve 400 con mensaje neutro (no revelamos si el
+    token es inválido o expirado por separado). Hashea la nueva
+    contraseña, limpia el token, y revoca el JWT activo si está
+    presente en el request.
+    """
+    now = datetime.utcnow()
+    user = db.query(User).filter(User.password_reset_token == payload.token).first()
+    if user is None or user.password_reset_expires_at is None or user.password_reset_expires_at < now:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token inválido o expirado",
+        )
+
+    user.password_hash = get_password_hash(payload.new_password)
+    # One-shot: clear the token immediately so a leaked token cannot
+    # be replayed even within the 1h window.
+    user.password_reset_token = None
+    user.password_reset_expires_at = None
+    db.commit()
+
+    _revoke_active_session_for_user(user, request)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

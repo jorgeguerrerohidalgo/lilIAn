@@ -425,6 +425,48 @@ def _support_ticket_received(data: dict[str, Any]) -> tuple[str, str, str]:
     return subject_line, html, text
 
 
+def _password_reset(data: dict[str, Any]) -> tuple[str, str, str]:
+    """Phase 1b — self-service password recovery.
+
+    The ``reset_url`` is the link rendered into the email. The frontend
+    route ``/auth/reset-password?token=…`` immediately POSTs
+    ``/api/v1/auth/reset-password`` with the new password and redirects
+    to ``/auth/login``. The token is one-shot and expires in 1 hour
+    (see ``app.api.endpoints.auth.forgot_password``).
+    """
+    name = data.get("full_name") or "abogado/a"
+    reset_url = data.get(
+        "reset_url",
+        "https://lil-i-5tz56uhov-jorgeguerrerohidalgo710.vercel.app/auth/login",
+    )
+    subject = "Restablece tu contraseña en Lilian"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
+      <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Restablece tu contraseña</h1>
+      <p style="color: #334155; font-size: 16px; line-height: 1.5;">Hola {name},</p>
+      <p style="color: #334155; font-size: 16px; line-height: 1.5;">
+        Recibimos una solicitud para restablecer la contraseña de tu cuenta en Lilian.
+        Si la solicitaste tú, haz clic en el botón para elegir una nueva contraseña.
+      </p>
+      <p style="margin: 24px 0;">
+        <a href="{reset_url}" style="background: #0f172a; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          Restablecer contraseña
+        </a>
+      </p>
+      <p style="color: #64748b; font-size: 14px;">
+        Este enlace vence en 1 hora. Si no solicitaste este cambio, puedes ignorar este mensaje —
+        tu contraseña seguirá siendo la misma.
+      </p>
+    </div>
+    """.strip()
+    text = (
+        f"Hola {name},\n\n"
+        f"Restablece tu contraseña en Lilian aquí (vence en 1 hora):\n{reset_url}\n"
+        f"Si no solicitaste este cambio, ignora este mensaje.\n"
+    )
+    return subject, html, text
+
+
 _TEMPLATES: dict[str, TemplateFn] = {
     "welcome": _welcome,
     "email_verification": _email_verification,
@@ -438,6 +480,7 @@ _TEMPLATES: dict[str, TemplateFn] = {
     "drip_trial_expiring_30d": _drip_trial_expiring_30d,
     "invitation_received": _invitation_received,
     "support_ticket_received": _support_ticket_received,
+    "password_reset": _password_reset,
 }
 
 

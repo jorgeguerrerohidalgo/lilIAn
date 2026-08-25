@@ -30,6 +30,12 @@ class User(Base):
     email_verified = Column(Boolean, nullable=False, default=False)
     verification_token = Column(String(128), nullable=True, index=True)
     verification_sent_at = Column(DateTime, nullable=True)
+    # Phase 1b: self-service password recovery.
+    # ``password_reset_token`` is opaque (token_urlsafe(32)), one-shot,
+    # and cleared on use. ``password_reset_expires_at`` is the hard TTL
+    # (1h). See auth.forgot_password / auth.reset_password.
+    password_reset_token = Column(String(128), nullable=True, index=True)
+    password_reset_expires_at = Column(DateTime, nullable=True)
 
     memberships = relationship("OrganizationMember", back_populates="user")
     matters = relationship("Matter", back_populates="created_by", foreign_keys="Matter.created_by_user_id")
