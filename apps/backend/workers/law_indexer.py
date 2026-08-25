@@ -135,18 +135,18 @@ def split_into_articles(text: str) -> list:
     """Divide el texto en artículos completos, sin cortar sub-ítems.
 
     S5.1: replaces the previous lazy-match approach that captured only
-    the article header (the typical PDF rendering leaves the
-    article body indented at a different column width). The new
-    approach anchors on **header positions**, not on lazy content
-    capture:
+    the article header. Anchors on header **positions** instead:
 
       1. Find every ``Art. N`` / ``Artículo N`` whose preceding
-         whitespace is the short "column" indent used by the article
-         header (5 spaces in our PDF extracts — sub-ítems like
-         ``Art. 1, N° 1 a)`` live at 30+ spaces, way past the header
-         column, so we skip them).
+         indent is the article-header column. Different PDFs use
+         different column widths: the Código del Trabajo emits 5
+         spaces; most of the other PDFs (Código de Aguas, Ley de
+         Bancos, ...) emit 4. Sub-ítems like ``Art. 1, N° 1 a)``
+         live at 30+ spaces and so are filtered out.
+
       2. Slice the text between consecutive headers. Each slice
          becomes one chunk containing header + body.
+
       3. Dedup by canonical article number: ``Art. 159`` and
          ``Artículo 159`` in the same text collapse to one chunk.
 
@@ -156,11 +156,11 @@ def split_into_articles(text: str) -> list:
     anything because the body lived in a sibling chunk. With position
     slicing, each chunk has the full article text.
     """
-    # Match both ``Artículo N`` and ``Art. N`` followed by an optional
-    # suffix (``.o``, ``º``, ``bis``, ``N° X``), anchored at the
-    # short-indent column (5 spaces, no tab/newline inside).
+    # 4 OR 5 spaces — different PDFs use different column widths.
+    # The Código del Trabajo uses 5; most others use 4. Sub-ítems
+    # at 30+ spaces are filtered by the {4,5} cap.
     header_re = re.compile(
-        r"\n[ ]{5}"
+        r"\n[ ]{4,5}"
         r"Art(?:[ií]culo|\.)\s+"
         r"(\d+)"                # canonical article number
         r"(?:[\.º°][a-zñ]*)?"
@@ -174,15 +174,11 @@ def split_into_articles(text: str) -> list:
     for i, m in enumerate(matches):
         number = m.group(1)
         if number in seen_numbers:
-            # Same canonical number already chunked — skip duplicate.
-            # Happens when both ``Artículo N`` and ``Art. N`` appear.
             continue
-        start = m.start() + 1  # drop the leading ``\n`` so the chunk
-                                # starts cleanly with the header
+        start = m.start() + 1
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         chunk_text = text[start:end].strip()
         if len(chunk_text) < 100:
-            # Probably a TOC entry or a cross-reference — skip.
             continue
         seen_numbers.add(number)
         articles.append({"number": number, "content": chunk_text})
