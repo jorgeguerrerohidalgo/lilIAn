@@ -13,6 +13,7 @@ from app.models.organization import Organization
 from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
 from app.schemas.organization import OrganizationCreate, OrganizationResponse
+from app.services.audit import record_audit_log
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
@@ -446,3 +447,336 @@ def accept_invitation(
         email_already_registered=True,
         requires_verification=not current_user.email_verified,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1a — membership management (PATCH member, DELETE member, DELETE invitation)
+# ---------------------------------------------------------------------------
+#
+# These three endpoints close the team-management loop so the OWNER/ADMIN
+# can change roles, remove members, and revoke pending invites without
+# dropping down to the DB. PLATFORM_ADMIN can do everything across any
+# organization.
+
+# Roles the PATCH endpoint is allowed to set (mirrors INVITE_ALLOWED_ROLES —
+# PLATFORM_ADMIN can only be assigned via the dedicated admin endpoint).
+PATCH_ALLOWED_ROLES = {
+    MemberRole.LAWYER,
+    MemberRole.ADMIN,
+    MemberRole.COMPANY_USER,
+    MemberRole.VIEWER,
+}
+
+
+class MemberRoleUpdateRequest(BaseModel):
+    """Body for ``PATCH /organizations/me/members/{user_id}``."""
+
+    role: MemberRole
+
+    @field_validator("role")
+    @classmethod
+    def _validate_role(cls, value: MemberRole) -> MemberRole:
+        if value not in PATCH_ALLOWED_ROLES:
+            raise ValueError("Rol no permitido")
+        return value
+
+
+class MemberUserPayload(BaseModel):
+    """Inner ``user`` block on member responses (omits sensitive fields)."""
+
+    id: int
+    full_name: str | None = None
+    email: str | None = None
+
+
+class MemberResponse(BaseModel):
+    """Response for member endpoints.
+
+    Same shape the list endpoint already returns so the frontend can reuse
+    its existing row component after a PATCH.
+    """
+
+    id: int
+    user_id: int
+    role: str
+    user: MemberUserPayload
+
+
+def _serialize_member(member: OrganizationMember, user: User) -> MemberResponse:
+    """Build a ``MemberResponse`` from a row + its user, matching the list endpoint."""
+    user_payload = MemberUserPayload(
+        id=user.id,
+        full_name=user.full_name,
+        email=user.email,
+    )
+    role_value = (
+        member.role.value if hasattr(member.role, "value") else str(member.role)
+    )
+    return MemberResponse(
+        id=member.id,
+        user_id=member.user_id,
+        role=role_value,
+        user=user_payload,
+    )
+
+
+@router.patch("/me/members/{user_id}", response_model=MemberResponse)
+def update_member_role(
+    user_id: int,
+    payload: MemberRoleUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """Phase 1a — change the role of an existing member.
+
+    Authorization:
+      * Caller must be ``OWNER``, ``ADMIN``, or ``PLATFORM_ADMIN``.
+      * ``OWNER`` cannot promote or demote another ``OWNER`` (locks the
+        other OWNER out of their own org and prevents accidental
+        demotions). ``PLATFORM_ADMIN`` bypasses this — they can move
+        ownership via support tooling.
+      * ``OWNER`` cannot change their own role (self-demote protection).
+      * ``PLATFORM_ADMIN`` cannot be assigned through this endpoint
+        (enforced by ``PATCH_ALLOWED_ROLES``); that's an admin-only
+        operation.
+
+    Errors:
+      - 403: caller is not OWNER/ADMIN/PLATFORM_ADMIN, or caller is
+        OWNER targeting another OWNER / themselves.
+      - 404: target ``user_id`` is not a member of the caller's
+        organization.
+    """
+    caller_role = membership.role
+
+    # Authorization gate.
+    if caller_role not in {MemberRole.OWNER, MemberRole.ADMIN, MemberRole.PLATFORM_ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para cambiar roles en esta organización",
+        )
+
+    target = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == membership.organization_id,
+        )
+        .first()
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El usuario no es miembro de esta organización",
+        )
+
+    # OWNER self-modification lockout guard.
+    if caller_role == MemberRole.OWNER and target.user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes cambiar tu propio rol",
+        )
+
+    # OWNER-cannot-touch-other-OWNER guard. PLATFORM_ADMIN is exempt so
+    # support tooling can rebalance ownership if an OWNER is locked out.
+    if (
+        caller_role == MemberRole.OWNER
+        and target.role == MemberRole.OWNER
+        and target.user_id != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes modificar el rol de otro OWNER",
+        )
+
+    old_role_value = (
+        target.role.value if hasattr(target.role, "value") else str(target.role)
+    )
+    new_role_value = (
+        payload.role.value if hasattr(payload.role, "value") else str(payload.role)
+    )
+
+    target.role = payload.role
+    db.commit()
+    db.refresh(target)
+
+    target_user = db.query(User).filter(User.id == target.user_id).first()
+    if target_user is None:
+        # Should not happen — FK enforces it — but guard so the response
+        # shape stays consistent.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario asociado al miembro no encontrado",
+        )
+
+    record_audit_log(
+        db=db,
+        organization_id=membership.organization_id,
+        user_id=current_user.id,
+        action="member.role_changed",
+        entity_type="organization_member",
+        entity_id=target.id,
+        metadata={
+            "target_user_id": target.user_id,
+            "old_role": old_role_value,
+            "new_role": new_role_value,
+        },
+    )
+
+    return _serialize_member(target, target_user)
+
+
+@router.delete("/me/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_member(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """Phase 1a — remove a member from the organization.
+
+    Authorization:
+      * Caller must be ``OWNER``, ``ADMIN``, or ``PLATFORM_ADMIN``.
+      * ``OWNER`` cannot remove themselves (lockout guard — ownership
+        transfer is out of scope for this phase).
+      * ``ADMIN`` cannot remove an ``OWNER`` (only another ``OWNER`` or
+        ``PLATFORM_ADMIN`` can remove an OWNER).
+
+    Errors:
+      - 403: caller lacks permission, self-removal by OWNER, or ADMIN
+        removing an OWNER.
+      - 404: target ``user_id`` is not a member of the caller's
+        organization.
+
+    Returns 204 on success.
+    """
+    caller_role = membership.role
+
+    if caller_role not in {MemberRole.OWNER, MemberRole.ADMIN, MemberRole.PLATFORM_ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para remover miembros de esta organización",
+        )
+
+    target = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.user_id == user_id,
+            OrganizationMember.organization_id == membership.organization_id,
+        )
+        .first()
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El usuario no es miembro de esta organización",
+        )
+
+    # OWNER self-removal lockout guard.
+    if caller_role == MemberRole.OWNER and target.user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes removerte a ti mismo; transfiere la propiedad primero",
+        )
+
+    # ADMIN cannot remove an OWNER. PLATFORM_ADMIN and OWNERs can.
+    if caller_role == MemberRole.ADMIN and target.role == MemberRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo un OWNER o PLATFORM_ADMIN puede remover a un OWNER",
+        )
+
+    old_role_value = (
+        target.role.value if hasattr(target.role, "value") else str(target.role)
+    )
+    target_user_id = target.user_id
+    target_id = target.id
+
+    db.delete(target)
+    db.commit()
+
+    record_audit_log(
+        db=db,
+        organization_id=membership.organization_id,
+        user_id=current_user.id,
+        action="member.removed",
+        entity_type="organization_member",
+        entity_id=target_id,
+        metadata={
+            "target_user_id": target_user_id,
+            "removed_role": old_role_value,
+        },
+    )
+
+    return None
+
+
+@router.delete("/me/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_invitation(
+    invitation_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """Phase 1a — revoke a pending invitation.
+
+    Authorization:
+      * Caller must be ``OWNER``, ``ADMIN``, or ``PLATFORM_ADMIN``.
+      * The invitation must belong to the caller's organization.
+      * The invitation must currently be ``PENDING``. Accepted/expired/
+        revoked invitations return 409 Conflict because the state
+        transition is meaningless (and reusing a consumed invite is
+        always a UX bug).
+
+    Errors:
+      - 403: caller lacks permission.
+      - 404: invitation does not exist.
+      - 409: invitation is no longer in PENDING status.
+
+    Returns 204 on success.
+    """
+    caller_role = membership.role
+
+    if caller_role not in {MemberRole.OWNER, MemberRole.ADMIN, MemberRole.PLATFORM_ADMIN}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para revocar invitaciones",
+        )
+
+    invite = (
+        db.query(Invitation)
+        .filter(
+            Invitation.id == invitation_id,
+            Invitation.organization_id == membership.organization_id,
+        )
+        .first()
+    )
+    if invite is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitación no encontrada",
+        )
+
+    if invite.status != InvitationStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se pueden revocar invitaciones pendientes",
+        )
+
+    invite.status = InvitationStatus.REVOKED
+    db.commit()
+
+    record_audit_log(
+        db=db,
+        organization_id=membership.organization_id,
+        user_id=current_user.id,
+        action="invitation.revoked",
+        entity_type="invitation",
+        entity_id=invite.id,
+        metadata={
+            "invited_email": invite.email,
+            "invited_role": invite.role,
+        },
+    )
+
+    return None
