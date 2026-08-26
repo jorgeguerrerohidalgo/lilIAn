@@ -48,6 +48,31 @@ class OrganizationAdminResponse(BaseModel):
         from_attributes = True
 
 
+class UserOrganizationMembershipResponse(BaseModel):
+    organization_id: int
+    organization_name: str
+    role: str
+
+
+class UserAdminResponse(BaseModel):
+    """Fase 3b — cross-tenant user detail for the PLATFORM_ADMIN UI.
+
+    Mirrors ``UserResponse`` plus a list of every organization the user
+    is a member of with the role they hold there. Used by
+    ``GET /admin/users/{user_id}``.
+    """
+
+    id: int
+    email: str
+    full_name: str
+    phone: str | None
+    status: str
+    email_verified: bool
+    created_at: str
+    last_login_at: str | None
+    organizations: list[UserOrganizationMembershipResponse]
+
+
 class DashboardStats(BaseModel):
     total_organizations: int
     total_users: int
@@ -1150,6 +1175,56 @@ def admin_reset_password(
     return PasswordResetResponse(
         reset_url=reset_url,
         expires_at=expires_at.isoformat(),
+    )
+
+
+@router.get("/users/{user_id}", response_model=UserAdminResponse)
+def get_user_admin(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+    db: Session = Depends(get_db),
+):
+    """Fase 3b — cross-tenant user detail for the PLATFORM_ADMIN UI.
+
+    Returns the same shape as ``/auth/me`` (so the frontend can reuse
+    its ``UserResponse`` parser) plus a ``organizations`` list — every
+    org the user is a member of with their role. Memberships are
+    eagerly joined to avoid a second round-trip from the client.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado",
+        )
+
+    memberships = (
+        db.query(OrganizationMember, Organization)
+        .join(Organization, OrganizationMember.organization_id == Organization.id)
+        .filter(OrganizationMember.user_id == user.id)
+        .all()
+    )
+
+    orgs = [
+        UserOrganizationMembershipResponse(
+            organization_id=org.id,
+            organization_name=org.name,
+            role=m.role.value if hasattr(m.role, "value") else str(m.role),
+        )
+        for m, org in memberships
+    ]
+
+    return UserAdminResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        phone=user.phone,
+        status=user.status.value if hasattr(user.status, "value") else str(user.status),
+        email_verified=user.email_verified,
+        created_at=user.created_at.isoformat() if user.created_at else "",
+        last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
+        organizations=orgs,
     )
 
 
