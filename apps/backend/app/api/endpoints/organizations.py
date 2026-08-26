@@ -163,7 +163,7 @@ def _invite_accept_url(token: str) -> str:
         "FRONTEND_BASE_URL",
         "https://lil-i-5tz56uhov-jorgeguerrerohidalgo710.vercel.app",
     )
-    return f"{base}/invitations/accept?token={token}"
+    return f"{base}/auth/accept-invitation?token={token}"
 
 
 @router.post("/me/invitations", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
