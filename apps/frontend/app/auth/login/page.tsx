@@ -203,7 +203,16 @@ function LoginForm() {
           </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-ink/60">
+        <p className="mt-4 text-center text-sm text-ink/60">
+          <Link
+            href="/auth/forgot-password"
+            className="text-ink/70 hover:text-ink underline-offset-2 hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
+
+        <p className="mt-4 text-center text-sm text-ink/60">
           ¿No tienes cuenta?{" "}
           <Link href="/auth/register" className="text-coral font-semibold hover:text-coral-dark">
             Regístrate
