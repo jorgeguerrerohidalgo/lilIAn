@@ -136,21 +136,21 @@ function RegisterForm() {
   // -----------------------------------------------------------------
   if (pendingEmail) {
     return (
-      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
-        <Card className="w-full max-w-md p-8">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
-                <span className="text-2xl font-heading font-bold text-white">L</span>
+      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4">
+        <Card className="w-full max-w-md p-5 md:p-8">
+          <div className="text-center mb-6 md:mb-8">
+            <div className="flex items-center justify-center gap-3 mb-5 md:mb-6">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
+                <span className="text-xl md:text-2xl font-heading font-bold text-white">L</span>
               </div>
               <div className="text-left">
-                <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+                <h1 className="text-xl md:text-2xl font-heading font-bold text-ink tracking-tight">
                   lil<span className="text-coral">I</span>An
                 </h1>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI</p>
               </div>
             </div>
-            <h2 className="text-2xl font-heading font-bold text-ink">Revisa tu email</h2>
+            <h2 className="text-xl md:text-2xl font-heading font-bold text-ink">Revisa tu email</h2>
             <p className="text-ink/60 mt-3">
               Te enviamos un enlace de confirmación a{" "}
               <strong className="text-ink">{pendingEmail}</strong>.
@@ -210,22 +210,22 @@ function RegisterForm() {
   // Registration form (initial state).
   // -----------------------------------------------------------------
   return (
-    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
-      <Card className="w-full max-w-md p-8">
-        <div className="text-center mb-8">
+    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4">
+      <Card className="w-full max-w-md p-5 md:p-8">
+        <div className="text-center mb-6 md:mb-8">
           {/* Logo */}
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
-              <span className="text-2xl font-heading font-bold text-white">L</span>
+          <div className="flex items-center justify-center gap-3 mb-5 md:mb-6">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
+              <span className="text-xl md:text-2xl font-heading font-bold text-white">L</span>
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+              <h1 className="text-xl md:text-2xl font-heading font-bold text-ink tracking-tight">
                 lil<span className="text-coral">I</span>An
               </h1>
               <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI</p>
             </div>
           </div>
-          <h2 className="text-2xl font-heading font-bold text-ink">Crear cuenta</h2>
+          <h2 className="text-xl md:text-2xl font-heading font-bold text-ink">Crear cuenta</h2>
           <p className="text-ink/60 mt-2">
             {planLabel
               ? <>Vas a activar el plan <strong className="text-ink">{planLabel}</strong>.</>

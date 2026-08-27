@@ -115,10 +115,10 @@ function ResetPasswordForm() {
   // -----------------------------------------------------------------
   if (!token) {
     return (
-      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
-        <Card className="w-full max-w-md p-8">
+      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4">
+        <Card className="w-full max-w-md p-5 md:p-8">
           <div className="text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-coral-pale border border-coral/20 flex items-center justify-center mb-5">
+            <div className="mx-auto w-10 h-10 md:w-12 md:h-12 rounded-full bg-coral-pale border border-coral/20 flex items-center justify-center mb-4 md:mb-5">
               <svg
                 aria-hidden="true"
                 className="w-6 h-6 text-coral-dark"
@@ -130,7 +130,7 @@ function ResetPasswordForm() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
               </svg>
             </div>
-            <h1 className="text-2xl font-heading font-bold text-ink">Link inválido</h1>
+            <h1 className="text-xl md:text-2xl font-heading font-bold text-ink">Link inválido</h1>
             <p className="text-ink/60 mt-3">
               Este enlace de recuperación no es válido. Pega la URL completa del correo o solicita uno nuevo.
             </p>
@@ -159,10 +159,10 @@ function ResetPasswordForm() {
   // -----------------------------------------------------------------
   if (completed) {
     return (
-      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
-        <Card className="w-full max-w-md p-8">
+      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4">
+        <Card className="w-full max-w-md p-5 md:p-8">
           <div className="text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-5">
+            <div className="mx-auto w-10 h-10 md:w-12 md:h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-4 md:mb-5">
               <svg
                 aria-hidden="true"
                 className="w-6 h-6 text-emerald-700"
@@ -174,7 +174,7 @@ function ResetPasswordForm() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>
             </div>
-            <h1 className="text-2xl font-heading font-bold text-ink">Contraseña restablecida</h1>
+            <h1 className="text-xl md:text-2xl font-heading font-bold text-ink">Contraseña restablecida</h1>
             <p className="text-ink/60 mt-3">
               Te estamos llevando al inicio de sesión para que entres con tu nueva contraseña.
             </p>
@@ -185,21 +185,21 @@ function ResetPasswordForm() {
   }
 
   return (
-    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
-      <Card className="w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
-              <span className="text-2xl font-heading font-bold text-white">L</span>
+    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4">
+      <Card className="w-full max-w-md p-5 md:p-8">
+        <div className="text-center mb-6 md:mb-8">
+          <div className="flex items-center justify-center gap-3 mb-5 md:mb-6">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
+              <span className="text-xl md:text-2xl font-heading font-bold text-white">L</span>
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+              <h1 className="text-xl md:text-2xl font-heading font-bold text-ink tracking-tight">
                 lil<span className="text-coral">I</span>An
               </h1>
               <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI</p>
             </div>
           </div>
-          <h2 className="text-2xl font-heading font-bold text-ink">Crear nueva contraseña</h2>
+          <h2 className="text-xl md:text-2xl font-heading font-bold text-ink">Crear nueva contraseña</h2>
           <p className="text-ink/60 mt-2">
             Elige una contraseña con al menos 12 caracteres, mayúscula, minúscula, número y símbolo.
           </p>
@@ -276,7 +276,7 @@ export default function ResetPasswordPage() {
       fallback={
         <main
           id="main-content"
-          className="min-h-screen bg-soft flex items-center justify-center p-4"
+          className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4"
         >
           <div className="text-ink/60">Cargando…</div>
         </main>

@@ -16,7 +16,10 @@ export default function AuthLayout({
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+        {/* Responsive: shrink / hide the outer brand block on mobile so the
+            inner card doesn't get pushed off-screen. On >=md we restore the
+            full desktop header with the LG mark + tagline. */}
+        <div className="hidden md:block text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-2xl">LG</span>

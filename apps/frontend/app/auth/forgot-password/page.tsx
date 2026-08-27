@@ -70,10 +70,10 @@ export default function ForgotPasswordPage() {
   // -----------------------------------------------------------------
   if (submitted) {
     return (
-      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
-        <Card className="w-full max-w-md p-8">
+      <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4">
+        <Card className="w-full max-w-md p-5 md:p-8">
           <div className="text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-5">
+            <div className="mx-auto w-10 h-10 md:w-12 md:h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mb-4 md:mb-5">
               <svg
                 aria-hidden="true"
                 className="w-6 h-6 text-emerald-700"
@@ -85,7 +85,7 @@ export default function ForgotPasswordPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </div>
-            <h1 className="text-2xl font-heading font-bold text-ink">Revisa tu correo</h1>
+            <h1 className="text-xl md:text-2xl font-heading font-bold text-ink">Revisa tu correo</h1>
             <p className="text-ink/60 mt-3">
               Si el email está registrado, recibirás un link en los próximos minutos.
             </p>
@@ -117,21 +117,21 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center p-4">
-      <Card className="w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
-              <span className="text-2xl font-heading font-bold text-white">L</span>
+    <main id="main-content" className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4">
+      <Card className="w-full max-w-md p-5 md:p-8">
+        <div className="text-center mb-6 md:mb-8">
+          <div className="flex items-center justify-center gap-3 mb-5 md:mb-6">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
+              <span className="text-xl md:text-2xl font-heading font-bold text-white">L</span>
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+              <h1 className="text-xl md:text-2xl font-heading font-bold text-ink tracking-tight">
                 lil<span className="text-coral">I</span>An
               </h1>
               <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI</p>
             </div>
           </div>
-          <h2 className="text-2xl font-heading font-bold text-ink">Recuperar contraseña</h2>
+          <h2 className="text-xl md:text-2xl font-heading font-bold text-ink">Recuperar contraseña</h2>
           <p className="text-ink/60 mt-2">
             Te enviaremos un link para restablecer tu contraseña
           </p>

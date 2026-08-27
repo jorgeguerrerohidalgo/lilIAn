@@ -61,16 +61,16 @@ function VerifyEmailInner() {
   return (
     <main
       id="main-content"
-      className="min-h-screen bg-soft flex items-center justify-center p-4"
+      className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4"
     >
-      <Card className="w-full max-w-md p-8">
+      <Card className="w-full max-w-md p-5 md:p-8">
         <div className="text-center">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
-              <span className="text-2xl font-heading font-bold text-white">L</span>
+          <div className="flex items-center justify-center gap-3 mb-5 md:mb-6">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
+              <span className="text-xl md:text-2xl font-heading font-bold text-white">L</span>
             </div>
             <div className="text-left">
-              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+              <h1 className="text-xl md:text-2xl font-heading font-bold text-ink tracking-tight">
                 lil<span className="text-coral">I</span>An
               </h1>
               <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">
@@ -81,7 +81,7 @@ function VerifyEmailInner() {
 
           {status === "verifying" && (
             <>
-              <h2 className="text-2xl font-heading font-bold text-ink">Verificando…</h2>
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-ink">Verificando…</h2>
               <p className="text-ink/60 mt-3">
                 Estamos confirmando tu correo. Esto toma unos segundos.
               </p>
@@ -93,7 +93,7 @@ function VerifyEmailInner() {
               <div
                 role="status"
                 aria-live="polite"
-                className="text-2xl font-heading font-bold text-emerald-700"
+                className="text-xl md:text-2xl font-heading font-bold text-emerald-700"
               >
                 ¡Listo!
               </div>
@@ -114,7 +114,7 @@ function VerifyEmailInner() {
 
           {status === "error" && (
             <>
-              <h2 className="text-2xl font-heading font-bold text-coral-dark">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-coral-dark">
                 No pudimos verificar tu correo
               </h2>
               <div
@@ -153,7 +153,7 @@ export default function VerifyEmailPage() {
       fallback={
         <main
           id="main-content"
-          className="min-h-screen bg-soft flex items-center justify-center p-4"
+          className="min-h-screen bg-soft flex items-center justify-center px-4 py-8 md:py-4"
         >
           <div className="text-ink/60">Cargando…</div>
         </main>
