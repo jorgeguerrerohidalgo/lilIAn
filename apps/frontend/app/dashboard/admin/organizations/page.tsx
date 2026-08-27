@@ -70,7 +70,7 @@ export default function AdminOrganizationsPage() {
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toastFromError(toast, data.detail || `Error ${res.status}`);
+        toast.show(toastFromError({detail: data.detail}, `Error ${res.status}`));
         setOrgs([]);
         return;
       }
@@ -84,7 +84,7 @@ export default function AdminOrganizationsPage() {
       setOrgs(slice);
       setReachedEnd(nextOffset + slice.length >= filtered.length);
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     } finally {
       setLoading(false);
     }
@@ -121,7 +121,7 @@ export default function AdminOrganizationsPage() {
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toastFromError(toast, data.detail || `Error ${res.status}`);
+        toast.show(toastFromError({detail: data.detail}, `Error ${res.status}`));
         return;
       }
       toast.show({
@@ -131,7 +131,7 @@ export default function AdminOrganizationsPage() {
       });
       void fetchOrgs(offset);
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     }
   }
 

@@ -74,6 +74,11 @@ export default function MattersPage() {
   const [seedError, setSeedError] = useState<string | null>(null);
 
   useEffect(() => {
+    void fetchMatters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchMatters = async () => {
     fetch(`/api/v1/matters`)
       .then((res) => res.json())
       .then(async (data) => {
@@ -91,7 +96,7 @@ export default function MattersPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  };
 
   const handleSeedSample = async () => {
     setSeeding(true);

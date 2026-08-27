@@ -87,7 +87,7 @@ export default function AuditLogsPage() {
       const data = (await res.json()) as AuditLog[];
       setLogs(data);
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     } finally {
       setLoading(false);
     }

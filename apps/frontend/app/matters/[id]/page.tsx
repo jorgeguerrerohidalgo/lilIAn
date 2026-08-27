@@ -575,8 +575,9 @@ export default function MatterDetailPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.show({
-          message: data.detail || "No se pudo generar el enlace",
-          type: "error",
+          title: "Error",
+          body: data.detail || "No se pudo generar el enlace",
+          tone: "error",
         });
         return;
       }
@@ -586,20 +587,23 @@ export default function MatterDetailPage() {
       try {
         await navigator.clipboard.writeText(data.url);
         toast.show({
-          message: "Enlace copiado al portapapeles",
-          type: "success",
+          title: "Listo",
+          body: "Enlace copiado al portapapeles",
+          tone: "success",
         });
       } catch {
         toast.show({
-          message: `Enlace generado: ${data.url}`,
-          type: "info",
+          title: "Información",
+          body: `Enlace generado: ${data.url}`,
+          tone: "info",
         });
       }
     } catch {
       toast.show({
-        message: "Error de red al generar el enlace",
-        type: "error",
-      });
+          title: "Error",
+          body: "Error de red al generar el enlace",
+          tone: "error",
+        });
     } finally {
       setSharing(false);
     }

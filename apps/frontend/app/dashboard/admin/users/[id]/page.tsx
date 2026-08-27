@@ -95,14 +95,14 @@ export default function AdminUserDetailPage({
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toastFromError(toast, data.detail || `Error ${res.status}`);
+        toast.show(toastFromError({detail: data.detail}, `Error ${res.status}`));
         setUser(null);
         return;
       }
       const data = (await res.json()) as AdminUser;
       setUser(data);
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     } finally {
       setLoading(false);
     }
@@ -132,7 +132,7 @@ export default function AdminUserDetailPage({
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toastFromError(toast, data.detail || `Error ${res.status}`);
+        toast.show(toastFromError({detail: data.detail}, `Error ${res.status}`));
         return;
       }
       toast.show({
@@ -142,7 +142,7 @@ export default function AdminUserDetailPage({
       });
       void load();
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     } finally {
       setBusy(null);
     }
@@ -166,7 +166,7 @@ export default function AdminUserDetailPage({
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toastFromError(toast, data.detail || `Error ${res.status}`);
+        toast.show(toastFromError({detail: data.detail}, `Error ${res.status}`));
         return;
       }
       const data = (await res.json()) as {
@@ -201,7 +201,7 @@ export default function AdminUserDetailPage({
       // re-render with the impersonated session.
       window.location.href = "/dashboard?impersonated=1";
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     } finally {
       setBusy(null);
     }
@@ -228,7 +228,7 @@ export default function AdminUserDetailPage({
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toastFromError(toast, data.detail || `Error ${res.status}`);
+        toast.show(toastFromError({detail: data.detail}, `Error ${res.status}`));
         return;
       }
       const data = (await res.json()) as {
@@ -244,7 +244,7 @@ export default function AdminUserDetailPage({
         body: `Se envió un correo a «${user.email}». Si el envío falló, puedes copiar el enlace manualmente.`,
       });
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     } finally {
       setBusy(null);
     }
@@ -523,7 +523,7 @@ function ResetPasswordModal({
         durationMs: 4000,
       });
     } catch (err) {
-      toastFromError(toast, err);
+      toast.show(toastFromError(err));
     }
   };
 
