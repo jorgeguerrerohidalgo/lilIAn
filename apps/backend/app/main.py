@@ -98,6 +98,19 @@ def _run_startup_migrations() -> None:
             exc,
         )
 
+    # S6.3-b / Phase 1b: password_reset_token / password_reset_expires_at
+    # on users. Without these the /auth/login endpoint 500s the moment
+    # the SELECT hydrates ``users.password_reset_token`` (column does not
+    # exist on prod until this heal runs). Idempotent.
+    try:
+        from migrations.add_password_reset_fields import main as _pwreset_heal
+        _pwreset_heal()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning(
+            "startup migration add_password_reset_fields failed (continuing): %s",
+            exc,
+        )
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
