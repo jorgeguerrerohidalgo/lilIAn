@@ -23,5 +23,12 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "playwright.config.ts"]
+  "exclude": [
+    "node_modules",
+    "playwright.config.ts",
+    "sentry.server.config.ts",
+    "sentry.edge.config.ts",
+    "sentry.client.config.ts",
+    "instrumentation.ts"
+  ]
 }
