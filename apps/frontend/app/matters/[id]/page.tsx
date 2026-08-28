@@ -723,26 +723,26 @@ export default function MatterDetailPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-5 md:mb-6">
         <Link href="/dashboard" className="text-sm text-gray-600 hover:text-primary-600 mb-2 inline-block">
           ← Volver al dashboard
         </Link>
-        <h1 className="text-3xl font-bold text-gray-900">{matter.title}</h1>
-        <div className="flex gap-3 mt-3">
-          <span className={`px-3 py-1 text-sm font-medium rounded-full ${statusColors[matter.status] || "bg-gray-100 text-gray-800"}`}>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">{matter.title}</h1>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <span className={`px-3 py-1 text-xs md:text-sm font-medium rounded-full ${statusColors[matter.status] || "bg-gray-100 text-gray-800"}`}>
             {statusLabels[matter.status] || matter.status}
           </span>
-          <span className={`px-3 py-1 text-sm font-medium rounded-full ${urgencyColors[matter.urgency] || "bg-gray-100 text-gray-800"}`}>
+          <span className={`px-3 py-1 text-xs md:text-sm font-medium rounded-full ${urgencyColors[matter.urgency] || "bg-gray-100 text-gray-800"}`}>
             Urgencia: {matter.urgency}
           </span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
+      <div className="border-b border-gray-200 mb-5 md:mb-6 -mx-4 md:mx-0">
         <nav
           aria-label="Secciones del caso"
-          className="flex gap-6"
+          className="flex gap-4 md:gap-6 overflow-x-auto whitespace-nowrap px-4 md:px-0 scrollbar-hide"
           role="tablist"
           onKeyDown={(e) => {
             const tabs: TabType[] = ["details", "documents", "analysis", "deadlines", "chat"];
@@ -774,7 +774,7 @@ export default function MatterDetailPage() {
               aria-controls={`tabpanel-${tab}`}
               id={`tab-${tab}`}
               tabIndex={activeTab === tab ? 0 : -1}
-              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 ${
+              className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-primary-500 flex-shrink-0 ${
                 activeTab === tab
                   ? "border-primary-600 text-primary-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -796,24 +796,24 @@ export default function MatterDetailPage() {
           id="tabpanel-details"
           role="tabpanel"
           aria-labelledby="tab-details"
-          className="bg-white rounded-xl shadow-sm border p-6"
+          className="bg-white rounded-xl shadow-sm border p-4 md:p-6"
         >
-          <h2 className="text-lg font-semibold mb-4">Detalles del caso</h2>
+          <h2 className="text-base md:text-lg font-semibold mb-4">Detalles del caso</h2>
           <dl className="space-y-3">
-            <div className="flex">
-              <dt className="w-40 text-gray-500">Tipo:</dt>
+            <div className="flex flex-col sm:flex-row sm:gap-2">
+              <dt className="sm:w-40 text-gray-500 text-sm">Tipo:</dt>
               <dd className="text-gray-900">
                 {matterTypeLabels[matter.matter_type] || matter.matter_type}
               </dd>
             </div>
             {matter.counterparty_name && (
-              <div className="flex">
-                <dt className="w-40 text-gray-500">Contraparte:</dt>
+              <div className="flex flex-col sm:flex-row sm:gap-2">
+                <dt className="sm:w-40 text-gray-500 text-sm">Contraparte:</dt>
                 <dd className="text-gray-900">{matter.counterparty_name}</dd>
               </div>
             )}
-            <div className="flex">
-              <dt className="w-40 text-gray-500">Creado:</dt>
+            <div className="flex flex-col sm:flex-row sm:gap-2">
+              <dt className="sm:w-40 text-gray-500 text-sm">Creado:</dt>
               <dd className="text-gray-900">
                 <time dateTime={matter.created_at}>
                   {new Date(matter.created_at).toLocaleDateString("es-CL")}
@@ -838,8 +838,8 @@ export default function MatterDetailPage() {
           className="space-y-6"
         >
           {/* Upload Section */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-lg font-semibold mb-4">Subir documento</h2>
+          <div className="bg-white rounded-xl shadow-sm border p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold mb-4">Subir documento</h2>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
               <input
                 ref={fileInputRef}
@@ -884,14 +884,14 @@ export default function MatterDetailPage() {
           />
 
           {/* Documents List */}
-          <div className="bg-white rounded-xl shadow-sm border p-6">
-            <h2 className="text-lg font-semibold mb-4">Documentos ({documents.length})</h2>
+          <div className="bg-white rounded-xl shadow-sm border p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold mb-4">Documentos ({documents.length})</h2>
             {documents.length === 0 ? (
               <p className="text-gray-500 text-center py-8">No hay documentos subiendo.</p>
             ) : (
               <div className="space-y-3">
                 {documents.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <svg aria-hidden="true" className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -904,7 +904,7 @@ export default function MatterDetailPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {/* Botón Procesar / Reprocesar */}
                       {(doc.status === "uploaded" || doc.status === "queued" || doc.status === "processing") && (
                         <button
@@ -1132,8 +1132,8 @@ export default function MatterDetailPage() {
           className="space-y-6"
         >
           {/* Request Analysis */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Análisis de Inteligencia Artificial</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6">
+            <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-2">Análisis de Inteligencia Artificial</h2>
             <p className="text-gray-600 mb-6">
               Solicita un análisis automático de tu caso legal basado en los documentos subidos.
             </p>
@@ -1314,9 +1314,9 @@ export default function MatterDetailPage() {
 
           {/* Analysis Results */}
           {analysis ? (
-            <div className="bg-white rounded-xl shadow-sm border p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold">Informe de Análisis</h2>
+            <div className="bg-white rounded-xl shadow-sm border p-4 md:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-5 md:mb-6">
+                <h2 className="text-base md:text-lg font-semibold">Informe de Análisis</h2>
                 <span className="text-sm text-gray-500">
                   <time dateTime={analysis.created_at}>
                     {new Date(analysis.created_at).toLocaleDateString("es-CL")}
@@ -1493,7 +1493,7 @@ export default function MatterDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-xl shadow-sm border p-6 text-center">
+            <div className="bg-white rounded-xl shadow-sm border p-4 md:p-6 text-center">
               <p className="text-gray-500">No hay análisis disponible. Solicita uno usando el botón de arriba.</p>
             </div>
           )}
@@ -1507,9 +1507,9 @@ export default function MatterDetailPage() {
           aria-labelledby="tab-deadlines"
           className="space-y-6"
         >
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6">
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Tiempos y Fechas Críticas</h2>
+              <h2 className="text-base md:text-lg font-semibold text-gray-900">Tiempos y Fechas Críticas</h2>
               <p className="text-sm text-gray-600 mt-1">
                 Plazos de firma, vencimientos, multas, garantías y prescripciones detectadas automáticamente
                 a partir del análisis de tus documentos. Se actualizan cada vez que ejecutas el análisis con IA.
@@ -1641,9 +1641,9 @@ export default function MatterDetailPage() {
           aria-labelledby="tab-chat"
           className="bg-white rounded-xl shadow-sm border overflow-hidden"
         >
-          <div className="flex h-[500px]">
+          <div className="flex flex-col md:flex-row h-[600px] md:h-[500px]">
             {/* Sessions Sidebar */}
-            <div className="w-64 border-r flex flex-col">
+            <div className="md:w-64 md:border-r flex flex-col md:flex-shrink-0 border-b md:border-b-0">
               <div className="p-4 border-b">
                 <button
                   onClick={handleCreateSession}
@@ -1653,11 +1653,11 @@ export default function MatterDetailPage() {
                   {creatingSession ? "Creando..." : "+ Nueva sesión"}
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto">
+              <div className="md:flex-1 overflow-x-auto md:overflow-y-auto md:overflow-x-hidden">
                 {sessions.length === 0 ? (
                   <p className="p-4 text-sm text-gray-500 text-center">No hay sesiones de chat.</p>
                 ) : (
-                  <nav aria-label="Sesiones de chat" className="p-2">
+                  <nav aria-label="Sesiones de chat" className="p-2 flex md:block gap-2 md:gap-0">
                     {sessions.map((session) => (
                       <button
                         key={session.id}
@@ -1666,7 +1666,7 @@ export default function MatterDetailPage() {
                           fetchMessages(session.id);
                         }}
                         aria-current={activeSession?.id === session.id ? "page" : undefined}
-                        className={`w-full text-left p-3 rounded-lg mb-1 ${
+                        className={`md:w-full text-left p-3 rounded-lg md:mb-1 whitespace-nowrap md:whitespace-normal flex-shrink-0 ${
                           activeSession?.id === session.id
                             ? "bg-primary-50 text-primary-700"
                             : "hover:bg-gray-50"

@@ -84,28 +84,28 @@ export function DeadlineDashboard() {
   ];
 
   return (
-    <div className="space-y-6" aria-live="polite">
+    <div className="space-y-4 md:space-y-6" aria-live="polite">
       {/* Summary Cards */}
-      <section aria-label="Resumen de alertas procesales" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900 text-white rounded-xl p-5">
-          <p className="text-3xl font-semibold">{summary.total}</p>
-          <p className="text-slate-400 text-sm mt-1">Total alertas</p>
+      <section aria-label="Resumen de alertas procesales" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="bg-slate-900 text-white rounded-xl p-4 md:p-5">
+          <p className="text-2xl md:text-3xl font-semibold">{summary.total}</p>
+          <p className="text-slate-400 text-xs md:text-sm mt-1">Total alertas</p>
         </div>
-        <div className="bg-red-600 text-white rounded-xl p-5">
-          <p className="text-3xl font-semibold">{summary.overdue}</p>
-          <p className="text-red-100 text-sm mt-1">Vencidos</p>
+        <div className="bg-red-600 text-white rounded-xl p-4 md:p-5">
+          <p className="text-2xl md:text-3xl font-semibold">{summary.overdue}</p>
+          <p className="text-red-100 text-xs md:text-sm mt-1">Vencidos</p>
         </div>
         {urgencyStats.slice(0, 2).map((stat) => (
-          <div key={stat.key} className={`${stat.bg} rounded-xl p-5 border border-slate-200`}>
-            <p className={`text-3xl font-semibold ${stat.color}`}>{stat.count}</p>
-            <p className={`${stat.color} text-sm mt-1 opacity-75`}>{stat.label}</p>
+          <div key={stat.key} className={`${stat.bg} rounded-xl p-4 md:p-5 border border-slate-200`}>
+            <p className={`text-2xl md:text-3xl font-semibold ${stat.color}`}>{stat.count}</p>
+            <p className={`${stat.color} text-xs md:text-sm mt-1 opacity-75`}>{stat.label}</p>
           </div>
         ))}
       </section>
 
       {/* By Matter */}
       {summary.by_matter.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-5">
           <h3 className="font-semibold text-slate-900 mb-3">Alertas por Caso</h3>
           <div className="space-y-2">
             {summary.by_matter.map((item) => (
@@ -126,7 +126,7 @@ export function DeadlineDashboard() {
       )}
 
       {/* Recent Alerts */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-5">
         <h3 className="font-semibold text-slate-900 mb-3">Próximos Vencimientos</h3>
         {recentAlerts.length === 0 ? (
           <p className="text-slate-500 text-center py-4">No hay alertas pendientes</p>
@@ -137,7 +137,7 @@ export function DeadlineDashboard() {
                 key={alert.id}
                 href={`/matters/${alert.matter_id}?tab=alerts`}
                 aria-label={`Alerta: ${alert.title} - caso ${alert.matter_title}, ${alert.days_remaining} días restantes`}
-                className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 <div>
                   <p className="font-medium text-slate-900">{alert.title}</p>

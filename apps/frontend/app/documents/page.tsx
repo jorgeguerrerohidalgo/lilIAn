@@ -117,12 +117,12 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-3xl font-heading font-bold text-ink tracking-tight">
+        <h1 className="text-2xl md:text-3xl font-heading font-bold text-ink tracking-tight">
           Documentos
         </h1>
-        <p className="text-ink/60 mt-1">
+        <p className="text-ink/60 mt-1 text-sm md:text-base">
           Todos los archivos que has subido, agrupados por caso.
         </p>
       </div>
@@ -163,10 +163,10 @@ export default function DocumentsPage() {
               <Link
                 key={d.id}
                 href={`/matters/${d.matter_id}`}
-                className="flex items-center justify-between px-6 py-4 hover:bg-soft transition-colors group"
+                className="flex items-center justify-between px-4 md:px-6 py-4 hover:bg-soft transition-colors group gap-3"
               >
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-soft flex items-center justify-center text-ink/40">
+                <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                  <div className="w-10 h-10 rounded-xl bg-soft flex items-center justify-center text-ink/40 flex-shrink-0">
                     <DocumentIcon className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
@@ -184,7 +184,7 @@ export default function DocumentsPage() {
                   </div>
                 </div>
                 <span
-                  className={`text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full ${
+                  className={`text-xs font-semibold uppercase tracking-wider px-2.5 md:px-3 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${
                     d.status === "analyzed" || d.status === "processed"
                       ? "bg-emerald-50 text-emerald-700"
                       : d.status === "failed"

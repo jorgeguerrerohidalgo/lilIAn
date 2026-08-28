@@ -124,19 +124,19 @@ export default function MattersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-ink tracking-tight">
+          <h1 className="text-2xl md:text-3xl font-heading font-bold text-ink tracking-tight">
             Casos
           </h1>
-          <p className="text-ink/60 mt-1">
+          <p className="text-ink/60 mt-1 text-sm md:text-base">
             Gestiona tus casos legales y documentos
           </p>
         </div>
-        <Link href="/matters/new">
-          <Button variant="primary" size="lg">
+        <Link href="/matters/new" className="self-start sm:self-auto">
+          <Button variant="primary" size="lg" className="w-full sm:w-auto">
             <PlusIcon />
             Nuevo caso
           </Button>
@@ -159,7 +159,7 @@ export default function MattersPage() {
             <div className="w-8 h-8 border-4 border-border border-t-coral rounded-full animate-spin" />
           </div>
         ) : matters.length === 0 ? (
-          <div className="px-6 py-16 text-center max-w-lg mx-auto" data-tour-target="empty-matters">
+          <div className="px-4 md:px-6 py-12 md:py-16 text-center max-w-lg mx-auto" data-tour-target="empty-matters">
             <div className="w-16 h-16 bg-soft rounded-2xl flex items-center justify-center mx-auto mb-4 text-ink/30">
               <BriefcaseIcon className="w-8 h-8" />
             </div>
@@ -214,29 +214,29 @@ export default function MattersPage() {
               <Link
                 key={matter.id}
                 href={`/matters/${matter.id}`}
-                className="flex items-center justify-between px-6 py-4 hover:bg-soft transition-colors group"
+                className="flex items-center justify-between px-4 md:px-6 py-4 hover:bg-soft transition-colors group gap-3"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="flex items-center gap-2 md:gap-3 mb-2 flex-wrap">
                     <h3 className="font-medium text-ink truncate group-hover:text-coral transition-colors">
                       {matter.title}
                     </h3>
                     <MatterStatusBadge status={matter.status as MatterStatus} />
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2 md:gap-4 text-xs md:text-sm flex-wrap">
                     <span className="text-ink/60">
                       {matterTypeLabels[matter.matter_type] || matter.matter_type}
                     </span>
                     {matter.client_id && clients[matter.client_id] && (
                       <>
                         <span className="text-ink/30">•</span>
-                        <span className="text-ink/60">
+                        <span className="text-ink/60 truncate max-w-[120px]">
                           {clients[matter.client_id].name}
                         </span>
                       </>
                     )}
                     <span className="text-ink/30">•</span>
-                    <span className="text-ink/40">
+                    <span className="text-ink/40 whitespace-nowrap">
                       <time dateTime={matter.created_at}>
                         {new Date(matter.created_at).toLocaleDateString("es-CL", {
                           day: "numeric",
@@ -247,13 +247,13 @@ export default function MattersPage() {
                     </span>
                     {(matter.urgency === "high" || matter.urgency === "urgent") && (
                       <>
-                        <span className="text-ink/30">•</span>
+                        <span className="text-ink/30 hidden md:inline">•</span>
                         <UrgencyBadge level={matter.urgency as UrgencyLevel} />
                       </>
                     )}
                   </div>
                 </div>
-                <div className="text-ink/30 group-hover:text-coral transition-colors">
+                <div className="text-ink/30 group-hover:text-coral transition-colors flex-shrink-0">
                   <ChevronRightIcon />
                 </div>
               </Link>

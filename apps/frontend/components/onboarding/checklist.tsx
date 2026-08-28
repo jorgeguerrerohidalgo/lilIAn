@@ -212,7 +212,7 @@ export function OnboardingChecklist({ state: controlledState, onMarkDone }: Onbo
     <section
       aria-label="Lista de primeros pasos"
       data-onboarding-checklist
-      className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm"
+      className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4 md:p-5 shadow-sm"
     >
       <div className="flex items-start justify-between gap-4 mb-3">
         <div>

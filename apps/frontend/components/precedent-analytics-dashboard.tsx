@@ -104,10 +104,10 @@ export function PrecedentAnalyticsDashboard() {
     : 1;
 
   return (
-    <div className="space-y-6" aria-live="polite">
+    <div className="space-y-4 md:space-y-6" aria-live="polite">
       {/* Header */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
-        <h2 className="text-lg font-semibold mb-2">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
+        <h2 className="text-base md:text-lg font-semibold mb-2">
           Análisis de Tendencias Jurisprudenciales
         </h2>
         <p className="text-slate-600 text-sm">
@@ -116,7 +116,7 @@ export function PrecedentAnalyticsDashboard() {
       </div>
 
       {/* Filters */}
-      <fieldset className="bg-white rounded-xl border border-slate-200 p-6">
+      <fieldset className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
         <legend className="font-medium mb-4 px-1">Filtros</legend>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
@@ -209,28 +209,28 @@ export function PrecedentAnalyticsDashboard() {
       {analytics && !loading && (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <p className="text-sm text-gray-500">Total Precedentes</p>
-              <p className="text-3xl font-bold text-slate-900">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
+              <p className="text-xs md:text-sm text-gray-500">Total Precedentes</p>
+              <p className="text-2xl md:text-3xl font-bold text-slate-900">
                 {analytics.summary.total_precedents}
               </p>
             </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <p className="text-sm text-gray-500">Tribunales</p>
-              <p className="text-3xl font-bold text-slate-900">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
+              <p className="text-xs md:text-sm text-gray-500">Tribunales</p>
+              <p className="text-2xl md:text-3xl font-bold text-slate-900">
                 {analytics.summary.unique_courts}
               </p>
             </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <p className="text-sm text-gray-500">Áreas Legales</p>
-              <p className="text-3xl font-bold text-slate-900">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
+              <p className="text-xs md:text-sm text-gray-500">Áreas Legales</p>
+              <p className="text-2xl md:text-3xl font-bold text-slate-900">
                 {analytics.summary.unique_areas}
               </p>
             </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
-              <p className="text-sm text-gray-500">Rango de Años</p>
-              <p className="text-lg font-bold text-slate-900">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
+              <p className="text-xs md:text-sm text-gray-500">Rango de Años</p>
+              <p className="text-base md:text-lg font-bold text-slate-900">
                 {analytics.summary.year_range.min || "—"} —{" "}
                 {analytics.summary.year_range.max || "—"}
               </p>
@@ -238,7 +238,7 @@ export function PrecedentAnalyticsDashboard() {
           </div>
 
           {/* Volume by Year */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
             <h3 className="font-semibold mb-4">Volumen por Año</h3>
             <div
               className="flex items-end gap-2 h-48"
@@ -262,9 +262,9 @@ export function PrecedentAnalyticsDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
             {/* Volume by Court */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
               <h3 className="font-semibold mb-4">Top Tribunales</h3>
               <div className="space-y-3">
                 {analytics.volume_by_court.slice(0, 10).map((item, i) => (
@@ -290,7 +290,7 @@ export function PrecedentAnalyticsDashboard() {
             </div>
 
             {/* Volume by Legal Area */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
               <h3 className="font-semibold mb-4">Por Área Legal</h3>
               <div className="space-y-2">
                 {analytics.volume_by_legal_area.map((item) => (
@@ -310,7 +310,7 @@ export function PrecedentAnalyticsDashboard() {
 
           {/* Top Ponentes */}
           {analytics.top_ponentes.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
               <h3 className="font-semibold mb-4">Ministros más Activos</h3>
               <div className="flex flex-wrap gap-2">
                 {analytics.top_ponentes.slice(0, 10).map((item) => (
@@ -327,7 +327,7 @@ export function PrecedentAnalyticsDashboard() {
 
           {/* Top Voces */}
           {analytics.top_voces.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
               <h3 className="font-semibold mb-4">Temas Más Frecuentes</h3>
               <div className="flex flex-wrap gap-2">
                 {analytics.top_voces.slice(0, 15).map((item) => (
@@ -344,7 +344,7 @@ export function PrecedentAnalyticsDashboard() {
 
           {/* Court × Matter Heatmap */}
           {analytics.court_matter_heatmap.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
               <h3 className="font-semibold mb-4">Especialización por Tribunal</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -385,7 +385,7 @@ export function PrecedentAnalyticsDashboard() {
                                 aria-label={`${court.court}, ${area.legal_area}: ${count} casos`}
                               >
                                 <span
-                                  className="inline-block w-8 h-8 rounded flex items-center justify-center text-xs"
+                                  className="inline-block w-7 h-7 md:w-8 md:h-8 rounded flex items-center justify-center text-xs"
                                   style={{
                                     backgroundColor: `rgba(59, 130, 246, ${intensity * 0.8 + 0.1})`,
                                     color: intensity > 0.5 ? "white" : "gray-700",
@@ -408,7 +408,7 @@ export function PrecedentAnalyticsDashboard() {
 
           {/* Temporal Evolution */}
           {Object.keys(analytics.temporal_evolution).length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
               <h3 className="font-semibold mb-4">Evolución Temporal por Área</h3>
               <div className="space-y-4">
                 {analytics.volume_by_legal_area.slice(0, 5).map((area) => {
@@ -448,7 +448,7 @@ export function PrecedentAnalyticsDashboard() {
           {/* Text Analysis */}
           {includeTextAnalysis &&
             analytics.text_analysis?.top_keywords?.length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
                 <h3 className="font-semibold mb-4">Palabras Clave en Decisiones</h3>
                 <div className="flex flex-wrap gap-2">
                   {analytics.text_analysis.top_keywords.slice(0, 25).map((item) => (

@@ -117,13 +117,13 @@ export default function NewMatterPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-5 md:space-y-6 px-1 md:px-0">
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900 tracking-tight">
+        <h1 className="text-xl md:text-2xl font-semibold text-slate-900 tracking-tight">
           Crear nuevo caso
         </h1>
-        <p className="text-slate-500 mt-1">
+        <p className="text-slate-500 mt-1 text-sm md:text-base">
           Ingresa la información básica de tu caso legal
         </p>
       </div>
@@ -147,7 +147,7 @@ export default function NewMatterPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 md:p-6">
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -250,11 +250,11 @@ export default function NewMatterPage() {
             </p>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <button
               type="button"
               onClick={() => router.back()}
-              className="px-4 py-2.5 border border-slate-200 rounded-lg text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
+              className="px-4 py-2.5 border border-slate-200 rounded-lg text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors order-2 sm:order-1"
             >
               Cancelar
             </button>
@@ -263,7 +263,7 @@ export default function NewMatterPage() {
               disabled={loading}
               aria-busy={loading}
               aria-live="polite"
-              className="px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium text-sm hover:bg-slate-800 disabled:opacity-50 transition-colors"
+              className="px-5 py-2.5 bg-slate-900 text-white rounded-lg font-medium text-sm hover:bg-slate-800 disabled:opacity-50 transition-colors order-1 sm:order-2"
             >
               {loading ? "Creando..." : "Crear caso"}
             </button>

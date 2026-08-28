@@ -129,7 +129,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
   return (
     <div className="space-y-4" aria-live="polite">
       {/* Filters */}
-      <div role="group" aria-label="Filtrar alertas por estado" className="flex gap-2">
+      <div role="group" aria-label="Filtrar alertas por estado" className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
         <button
           onClick={() => setFilter("all")}
           aria-pressed={filter === "all"}
@@ -182,7 +182,7 @@ export function DeadlineAlertsList({ matterId }: Props) {
                 aria-labelledby={`alert-title-${alert.id}`}
                 className={`${config.bg} border ${config.border} rounded-lg p-4`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`px-2 py-0.5 text-xs font-medium rounded ${config.badge}`}>
