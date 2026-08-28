@@ -252,7 +252,7 @@ export default function AdminUserDetailPage({
 
   if (loading) {
     return (
-      <main id="main-content" className="mx-auto max-w-4xl px-6 py-8" lang="es">
+      <main id="main-content" className="mx-auto max-w-4xl px-4 py-4 md:px-6 md:py-8" lang="es">
         <div className="text-sm text-slate-500" role="status" aria-live="polite">
           Cargando usuario…
         </div>
@@ -262,7 +262,7 @@ export default function AdminUserDetailPage({
 
   if (forbidden) {
     return (
-      <main id="main-content" className="mx-auto max-w-4xl px-6 py-8" lang="es">
+      <main id="main-content" className="mx-auto max-w-4xl px-4 py-4 md:px-6 md:py-8" lang="es">
         <header className="mb-6">
           <Link
             href="/dashboard/admin/organizations"
@@ -270,7 +270,7 @@ export default function AdminUserDetailPage({
           >
             ← Volver a Organizaciones
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+          <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-slate-900">
             Detalle de usuario
           </h1>
         </header>
@@ -287,7 +287,7 @@ export default function AdminUserDetailPage({
 
   if (notFound || !user) {
     return (
-      <main id="main-content" className="mx-auto max-w-4xl px-6 py-8" lang="es">
+      <main id="main-content" className="mx-auto max-w-4xl px-4 py-4 md:px-6 md:py-8" lang="es">
         <header className="mb-6">
           <Link
             href="/dashboard/admin/organizations"
@@ -295,7 +295,7 @@ export default function AdminUserDetailPage({
           >
             ← Volver a Organizaciones
           </Link>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+          <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-slate-900">
             Detalle de usuario
           </h1>
         </header>
@@ -311,7 +311,7 @@ export default function AdminUserDetailPage({
   return (
     <main
       id="main-content"
-      className="mx-auto max-w-4xl px-6 py-8"
+      className="mx-auto max-w-4xl px-4 py-4 md:px-6 md:py-8"
       lang="es"
     >
       <header className="mb-6">
@@ -321,12 +321,12 @@ export default function AdminUserDetailPage({
         >
           ← Volver a Organizaciones
         </Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
+        <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 truncate">
               {user.full_name}
             </h1>
-            <p className="mt-1 text-sm text-slate-600">{user.email}</p>
+            <p className="mt-1 text-sm text-slate-600 truncate">{user.email}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -367,7 +367,7 @@ export default function AdminUserDetailPage({
 
       <section
         aria-label="Información del usuario"
-        className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+        className="mb-6 rounded-lg border border-slate-200 bg-white p-4 md:p-5 shadow-sm"
       >
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           Información
@@ -411,7 +411,7 @@ export default function AdminUserDetailPage({
 
       <section
         aria-label="Organizaciones del usuario"
-        className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+        className="rounded-lg border border-slate-200 bg-white p-4 md:p-5 shadow-sm"
       >
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           Organizaciones
