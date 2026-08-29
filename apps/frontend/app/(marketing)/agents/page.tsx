@@ -57,13 +57,13 @@ export default async function AgentsGalleryPage() {
   return (
     <main id="main-content" className="min-h-screen bg-gradient-to-b from-soft to-cream">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <header className="flex items-center justify-between mb-12">
-          <Link href="/" className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-lg">
-              <span className="text-3xl font-heading font-bold text-white">L</span>
+        <header className="flex flex-wrap items-center justify-between gap-3 mb-12">
+          <Link href="/" className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-lg shrink-0">
+              <span className="text-2xl sm:text-3xl font-heading font-bold text-white">L</span>
             </div>
-            <div>
-              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-heading font-bold text-ink tracking-tight">
                 lil<span className="text-coral">I</span>An
               </h1>
               <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">
@@ -71,18 +71,27 @@ export default async function AgentsGalleryPage() {
               </p>
             </div>
           </Link>
-          <nav className="flex gap-3">
+          <nav className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
             <Link href="/agents">
-              <Button variant="ghost">Agentes</Button>
+              <Button variant="ghost" size="sm" className="px-2 sm:px-4">
+                Agentes
+              </Button>
             </Link>
             <Link href="/pricing">
-              <Button variant="ghost">Precios</Button>
+              <Button variant="ghost" size="sm" className="px-2 sm:px-4">
+                Precios
+              </Button>
             </Link>
             <Link href="/auth/login">
-              <Button variant="ghost">Iniciar sesión</Button>
+              <Button variant="ghost" size="sm" className="px-2 sm:px-4">
+                <span className="hidden sm:inline">Iniciar sesión</span>
+                <span className="sm:hidden">Entrar</span>
+              </Button>
             </Link>
             <Link href="/auth/register">
-              <Button variant="primary">Registrarse</Button>
+              <Button variant="primary" size="sm" className="px-3 sm:px-4 whitespace-nowrap">
+                Registrarse
+              </Button>
             </Link>
           </nav>
         </header>

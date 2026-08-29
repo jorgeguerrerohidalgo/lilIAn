@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, Button, Badge } from "@/components/ui";
+import { MarketingHeader } from "@/components/marketing/marketing-header";
 
 export const metadata: Metadata = {
   title: "Planes y precios — lilIAn",
@@ -118,30 +119,7 @@ const PLANS: ReadonlyArray<{
 export default function PricingPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {/* Brand header */}
-      <header className="flex items-center justify-between mb-12">
-        <Link href="/" className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-md">
-            <span className="text-2xl font-heading font-bold text-white">L</span>
-          </div>
-          <div>
-            <h1 className="text-xl font-heading font-bold text-ink tracking-tight">
-              lil<span className="text-coral">I</span>An
-            </h1>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">
-              Legal AI
-            </p>
-          </div>
-        </Link>
-        <nav className="flex gap-3">
-          <Link href="/auth/login">
-            <Button variant="ghost">Iniciar sesión</Button>
-          </Link>
-          <Link href="/auth/register">
-            <Button variant="primary">Registrarse</Button>
-          </Link>
-        </nav>
-      </header>
+      <MarketingHeader />
 
       {/* Page heading */}
       <section className="text-center max-w-2xl mx-auto mb-12">

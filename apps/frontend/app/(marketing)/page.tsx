@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import { Card } from "@/components/ui";
+import { MarketingHeader } from "@/components/marketing/marketing-header";
 
 export const metadata: Metadata = {
   title: "lilIAn — Revisor legal inteligente con IA",
@@ -13,27 +14,7 @@ export default function Home() {
   return (
     <main id="main-content" className="min-h-screen bg-gradient-to-b from-soft to-cream">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <header className="flex items-center justify-between mb-16">
-          <Link href="/" className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-ink to-blue flex items-center justify-center shadow-lg">
-              <span className="text-3xl font-heading font-bold text-white">L</span>
-            </div>
-            <div>
-              <h1 className="text-2xl font-heading font-bold text-ink tracking-tight">
-                lil<span className="text-coral">I</span>An
-              </h1>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Legal AI v2</p>
-            </div>
-          </Link>
-          <nav className="flex gap-3">
-            <Link href="/auth/login">
-              <Button variant="ghost">Iniciar sesión</Button>
-            </Link>
-            <Link href="/auth/register">
-              <Button variant="primary">Registrarse</Button>
-            </Link>
-          </nav>
-        </header>
+        <MarketingHeader />
 
         <section className="py-20 text-center">
           <h2 className="text-4xl md:text-5xl font-heading font-bold text-ink mb-6 tracking-tight">

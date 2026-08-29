@@ -238,10 +238,10 @@ function BillingPageInner() {
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8">
       <header>
-        <h1 className="text-3xl font-heading font-bold text-ink tracking-tight">
+        <h1 className="text-2xl md:text-3xl font-heading font-bold text-ink tracking-tight">
           Facturación y plan
         </h1>
-        <p className="text-ink/60 mt-2">
+        <p className="text-ink/60 mt-2 text-sm md:text-base">
           Gestiona tu plan, método de pago y facturas.
         </p>
       </header>

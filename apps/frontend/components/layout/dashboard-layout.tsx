@@ -162,6 +162,22 @@ function ChevronIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function MenuIcon({ className = "w-6 h-6" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+    </svg>
+  );
+}
+
+function CloseIcon({ className = "w-6 h-6" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
 function CountBadge({ count }: { count: number }) {
   return (
     <span className="ml-auto min-w-[23px] h-5 rounded-full border border-border bg-surface flex items-center justify-center font-mono text-[10px] font-bold text-ink/60">
@@ -170,19 +186,154 @@ function CountBadge({ count }: { count: number }) {
   );
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+// SidebarBody: el árbol de navegación compartido entre el drawer móvil y el
+// sidebar fijo de desktop. Cuando el drawer está abierto en móvil, ocultar el
+// contenido duplicado provocaría scroll innecesario, así que reutilizamos el
+// mismo JSX con un callback que cierra el drawer al hacer tap en un enlace.
+function SidebarBody({
+  pathname,
+  user,
+  onNavigate,
+}: {
+  pathname: string;
+  user: User | null;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      {/* Logo */}
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
+            <span className="text-white font-bold text-sm">LG</span>
+          </div>
+          <div>
+            <span className="text-lg font-heading font-semibold text-foreground tracking-tight">LilIAN</span>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Legal AI</p>
+          </div>
+        </Link>
+        {/* Close button only renders inside the mobile drawer */}
+        {onNavigate && (
+          <button
+            type="button"
+            onClick={onNavigate}
+            aria-label="Cerrar menú"
+            className="md:hidden -mr-1 p-2 rounded-lg text-ink/60 hover:bg-soft hover:text-ink transition-colors"
+          >
+            <CloseIcon />
+          </button>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <nav aria-label="Navegación principal" className="flex-1 p-3 overflow-auto">
+        <div className="nav-label">Navegación</div>
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          // S1.2: tour step 2 anchors to the Casos nav item.
+          const tourProps = item.href === "/matters" ? { "data-tour-target": "matters-list" } : {};
+          // S6.2: contextual tooltip per nav item. Hidden inside the mobile
+          // drawer to avoid hover/tap conflicts on touch devices.
+          const navTooltip = onNavigate
+            ? null
+            : item.href === "/dashboard/billing"
+            ? TOOLTIPS.currentPlan
+            : item.href === "/matters"
+            ? TOOLTIPS.newCase
+            : null;
+          const link = (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              aria-current={isActive ? "page" : undefined}
+              {...tourProps}
+              aria-label={
+                item.count !== undefined
+                  ? `${item.label}, ${item.count} ${item.count === 1 ? "elemento" : "elementos"}`
+                  : item.label
+              }
+              className={`nav-btn ${isActive ? 'nav-btn-active' : ''}`}
+            >
+              <span aria-hidden="true" className="text-ink/50">{item.icon}</span>
+              {item.label}
+              {item.count !== undefined && <CountBadge count={item.count} />}
+            </Link>
+          );
+          return navTooltip ? (
+            <Tooltip key={item.href} label={navTooltip} side="right">
+              {link}
+            </Tooltip>
+          ) : (
+            link
+          );
+        })}
+
+        {/* S4.6: Admin section. Only visible for PLATFORM_ADMIN. The
+            underlying endpoints enforce the same gate server-side, so
+            this is purely a UI gatekeeper. */}
+        {user?.roles?.includes("PLATFORM_ADMIN") && (
+          <>
+            <div className="nav-label mt-4">Administración</div>
+            {ADMIN_NAV_ITEMS.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onNavigate}
+                  aria-current={isActive ? "page" : undefined}
+                  aria-label={item.label}
+                  className={`nav-btn ${isActive ? 'nav-btn-active' : ''}`}
+                >
+                  <span aria-hidden="true" className="text-ink/50">{item.icon}</span>
+                  {item.label}
+                </Link>
+              );
+            })}
+          </>
+        )}
+      </nav>
+    </>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+  // Preview mode bypasses the auth check and renders a mock user. Intended
+  // for visual QA of the responsive layout without standing up the backend.
+  // Never set this from user-controlled code paths.
+  previewMode = false,
+  previewUser,
+}: {
+  children: React.ReactNode;
+  previewMode?: boolean;
+  previewUser?: Partial<User>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(
+    previewMode
+      ? {
+          id: 0,
+          email: previewUser?.email ?? "preview@lilian.mx",
+          full_name: previewUser?.full_name ?? "Usuario Preview",
+          roles: previewUser?.roles ?? ["PLATFORM_ADMIN"],
+        }
+      : null
+  );
+  const [loading, setLoading] = useState(!previewMode);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   // S6.3: invite-team modal state.
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Mobile drawer state.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // S1.2: 3-step first-run overlay. localStorage-backed so it never
   // reappears once dismissed.
   const tour = useWelcomeTour();
 
   useEffect(() => {
+    if (previewMode) return;
     // La cookie `lilian_auth_token` es HttpOnly, así que no se puede leer
     // desde aquí: el BFF la convierte en `Authorization: Bearer` y este
     // fetch es la única forma de saber si la sesión sigue viva.
@@ -226,7 +377,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, previewMode]);
+
+  // Close the mobile drawer automatically whenever the route changes —
+  // otherwise navigating through the drawer keeps it mounted over the
+  // destination page, which feels broken on touch devices.
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the mobile drawer is open so background tap
+  // doesn't bleed through the overlay.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (mobileMenuOpen) {
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = previousOverflow;
+      };
+    }
+  }, [mobileMenuOpen]);
 
   // S2e: click-outside closes the user dropdown. We bind/unbind on the
   // document on every render the menu is open so we never leave a stale
@@ -240,7 +411,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     }
     function handleEsc(event: KeyboardEvent) {
-      if (event.key === "Escape") setUserMenuOpen(false);
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+        setMobileMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleDocClick);
     document.addEventListener("keydown", handleEsc);
@@ -267,89 +441,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  const currentNavLabel =
+    NAV_ITEMS.find(n => pathname === n.href || (n.href !== "/dashboard" && pathname.startsWith(n.href)))?.label ||
+    "Dashboard";
+
   return (
     <div className="min-h-screen bg-soft flex">
-      {/* Sidebar - Warm Professional */}
-      <aside className="w-[275px] bg-surface border-r border-border flex flex-col">
-        {/* Logo */}
-        <div className="p-4 border-b border-border">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
-              <span className="text-white font-bold text-sm">LG</span>
-            </div>
-            <div>
-              <span className="text-lg font-heading font-semibold text-foreground tracking-tight">LilIAN</span>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Legal AI</p>
-            </div>
-          </Link>
-        </div>
-
-        {/* Navigation */}
-        <nav aria-label="Navegación principal" className="flex-1 p-3 overflow-auto">
-          <div className="nav-label">Navegación</div>
-          {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            // S1.2: tour step 2 anchors to the Casos nav item.
-            const tourProps = item.href === "/matters" ? { "data-tour-target": "matters-list" } : {};
-            // S6.2: contextual tooltip per nav item.
-            const navTooltip =
-              item.href === "/dashboard/billing"
-                ? TOOLTIPS.currentPlan
-                : item.href === "/matters"
-                ? TOOLTIPS.newCase
-                : null;
-            const link = (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={isActive ? "page" : undefined}
-                {...tourProps}
-                aria-label={
-                  item.count !== undefined
-                    ? `${item.label}, ${item.count} ${item.count === 1 ? "elemento" : "elementos"}`
-                    : item.label
-                }
-                className={`nav-btn ${isActive ? 'nav-btn-active' : ''}`}
-              >
-                <span aria-hidden="true" className="text-ink/50">{item.icon}</span>
-                {item.label}
-                {item.count !== undefined && <CountBadge count={item.count} />}
-              </Link>
-            );
-            return navTooltip ? (
-              <Tooltip key={item.href} label={navTooltip} side="right">
-                {link}
-              </Tooltip>
-            ) : (
-              link
-            );
-          })}
-
-          {/* S4.6: Admin section. Only visible for PLATFORM_ADMIN. The
-              underlying endpoints enforce the same gate server-side, so
-              this is purely a UI gatekeeper. */}
-          {user?.roles?.includes("PLATFORM_ADMIN") && (
-            <>
-              <div className="nav-label mt-4">Administración</div>
-              {ADMIN_NAV_ITEMS.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={isActive ? "page" : undefined}
-                    aria-label={item.label}
-                    className={`nav-btn ${isActive ? 'nav-btn-active' : ''}`}
-                  >
-                    <span aria-hidden="true" className="text-ink/50">{item.icon}</span>
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </>
-          )}
-        </nav>
-
+      {/* Sidebar - desktop only. Hidden on mobile; the mobile drawer below
+          renders the same navigation tree with a tap-to-close behavior. */}
+      <aside className="hidden md:flex w-[260px] xl:w-[275px] bg-surface border-r border-border flex-col">
+        <SidebarBody pathname={pathname} user={user} />
         {/* Footer */}
         <div className="p-4 border-t border-border space-y-1">
           {/* S6.3: invite-CTA. Pinned above logout so it stays visible even
@@ -374,37 +475,93 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
+      {/* Mobile drawer. Off-canvas by default; slides in when the hamburger
+          button is tapped. The overlay catches taps outside the panel so
+          the user has a clear way to dismiss it. */}
+      {mobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menú de navegación"
+        >
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            onClick={() => setMobileMenuOpen(false)}
+            className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-slide-in"
+          />
+          <aside className="absolute inset-y-0 left-0 w-[280px] max-w-[85vw] h-full bg-surface border-r border-border flex flex-col shadow-xl animate-slide-in z-10">
+            <SidebarBody
+              pathname={pathname}
+              user={user}
+              onNavigate={() => setMobileMenuOpen(false)}
+            />
+            <div className="p-4 border-t border-border space-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setInviteOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold text-primary bg-primary/5 hover:bg-primary/10 transition-colors"
+              >
+                <PlusUserIcon />
+                Invitar a tu equipo
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold text-ink/60 hover:bg-soft hover:text-ink transition-colors"
+              >
+                <LogoutIcon />
+                Cerrar sesión
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Topbar */}
-        <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur-xl border-b border-border px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-xl font-heading font-bold text-ink">
-                {NAV_ITEMS.find(n => pathname === n.href || (n.href !== "/dashboard" && pathname.startsWith(n.href)))?.label || "Dashboard"}
+        <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-xl border-b border-border px-4 md:px-6 py-3 md:py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 md:gap-4 min-w-0">
+              {/* Hamburger: only on mobile */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                aria-label="Abrir menú de navegación"
+                aria-expanded={mobileMenuOpen}
+                className="md:hidden -ml-1 p-2 rounded-lg text-ink/70 hover:bg-soft hover:text-ink transition-colors"
+              >
+                <MenuIcon />
+              </button>
+              <h1 className="text-base md:text-xl font-heading font-bold text-ink truncate">
+                {currentNavLabel}
               </h1>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
               <div ref={userMenuRef} className="relative">
-                {/* S2e: user dropdown trigger. Wraps the existing name +
-                    avatar so the visual stays identical; click toggles a
-                    small popover anchored to the bottom-right. */}
+                {/* S2e: user dropdown trigger. On mobile we collapse the
+                    visible identity to just the avatar so the header
+                    keeps a single row of tappable controls. */}
                 <button
                   type="button"
                   onClick={() => setUserMenuOpen((open) => !open)}
                   aria-haspopup="menu"
                   aria-expanded={userMenuOpen}
                   aria-label="Abrir menú de usuario"
-                  className="flex items-center gap-3 rounded-xl px-2 py-1 hover:bg-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors"
+                  className="flex items-center gap-2 md:gap-3 rounded-xl px-2 py-1 hover:bg-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 transition-colors"
                 >
-                  <div className="text-right">
+                  <div className="hidden sm:block text-right">
                     <p className="text-sm font-semibold text-ink">{user?.full_name}</p>
                     <p className="text-xs text-ink/50">{user?.email}</p>
                   </div>
-                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm shrink-0">
                     {user?.full_name?.charAt(0).toUpperCase() || "U"}
                   </div>
-                  <ChevronIcon className={`w-4 h-4 text-ink/40 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
+                  <ChevronIcon className={`hidden md:block w-4 h-4 text-ink/40 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {userMenuOpen && (
@@ -413,6 +570,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     aria-label="Menú de usuario"
                     className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-border bg-surface shadow-lg py-1 z-50"
                   >
+                    <div className="sm:hidden px-4 py-2 border-b border-border">
+                      <p className="text-sm font-semibold text-ink truncate">{user?.full_name}</p>
+                      <p className="text-xs text-ink/50 truncate">{user?.email}</p>
+                    </div>
                     <Link
                       href="/dashboard/settings"
                       role="menuitem"
@@ -449,7 +610,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page Content */}
-        <main id="main-content" className="flex-1 p-6">
+        <main id="main-content" className="flex-1 p-4 md:p-6">
           {children}
         </main>
       </div>

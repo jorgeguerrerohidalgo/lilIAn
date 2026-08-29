@@ -137,9 +137,9 @@ export default function AdminOrganizationsPage() {
 
   if (forbidden) {
     return (
-      <main id="main-content" className="mx-auto max-w-6xl px-6 py-8" lang="es">
+      <main id="main-content" className="mx-auto max-w-6xl px-4 md:px-6 py-6 md:py-8" lang="es">
         <header className="mb-6">
-          <h1 className="text-2xl font-semibold text-slate-900">Organizaciones</h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-slate-900">Organizaciones</h1>
         </header>
         <div
           role="alert"
@@ -155,7 +155,7 @@ export default function AdminOrganizationsPage() {
   return (
     <main
       id="main-content"
-      className="mx-auto max-w-6xl px-6 py-8"
+      className="mx-auto max-w-6xl px-4 md:px-6 py-6 md:py-8"
       lang="es"
     >
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">

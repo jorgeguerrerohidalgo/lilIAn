@@ -146,12 +146,12 @@ export function TeamClient() {
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-ink tracking-tight">
+      <header className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl md:text-3xl font-heading font-bold text-ink tracking-tight">
             Mi equipo
           </h1>
-          <p className="text-ink/60 mt-2">
+          <p className="text-ink/60 mt-2 text-sm md:text-base">
             Gestiona los miembros de tu organización y las invitaciones pendientes.
           </p>
         </div>

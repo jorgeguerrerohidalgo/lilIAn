@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const backendOrigin = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// In dev we relax script-src to allow 'unsafe-eval' — Next.js React Refresh
+// uses eval() and the strict production CSP would otherwise blank the page.
+// The full strict baseline still ships in production (NODE_ENV=production).
+const scriptSrc =
+  process.env.NODE_ENV === "development"
+    ? "'self' 'unsafe-inline' 'unsafe-eval'"
+    : "'self' 'unsafe-inline'";
+
 const securityHeaders = [
   // Content Security Policy — strict baseline.
   // - 'self' only for scripts (Next.js inlines a hydration bootstrap on
@@ -17,7 +25,7 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src ${scriptSrc}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",

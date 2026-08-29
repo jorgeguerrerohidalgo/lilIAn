@@ -112,7 +112,7 @@ export default function AuditLogsPage() {
   return (
     <main
       id="main-content"
-      className="mx-auto max-w-6xl px-6 py-8"
+      className="mx-auto max-w-6xl px-4 md:px-6 py-6 md:py-8"
       lang="es"
     >
       <header className="mb-6">

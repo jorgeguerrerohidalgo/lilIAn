@@ -111,17 +111,17 @@ export default function DashboardPage() {
       <OnboardingChecklist />
 
       {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-heading font-semibold text-foreground tracking-tight">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl md:text-3xl font-heading font-semibold text-foreground tracking-tight">
             Mis casos
           </h1>
-          <p className="text-secondary mt-1">
+          <p className="text-secondary mt-1 text-sm md:text-base">
             Gestiona tus casos legales y documentos
           </p>
         </div>
         <Tooltip label={TOOLTIPS.newCase} side="bottom">
-        <Link href="/matters/new" data-tour-target="new-matter">
+        <Link href="/matters/new" data-tour-target="new-matter" className="self-start sm:self-auto">
           <Button variant="primary" size="lg">
             <PlusIcon />
             Nuevo caso
@@ -160,7 +160,7 @@ export default function DashboardPage() {
 
       {/* Cases List */}
       <Card padding="none" elevated aria-live="polite">
-        <div className="px-6 py-4 border-b border-slate-100">
+        <div className="px-4 md:px-6 py-4 border-b border-slate-100">
           <h2 className="font-heading font-semibold text-lg text-foreground">Casos recientes</h2>
         </div>
 
@@ -196,20 +196,20 @@ export default function DashboardPage() {
                 key={matter.id}
                 href={`/matters/${matter.id}`}
                 aria-label={`Abrir caso ${matter.title} - ${matterTypeLabels[matter.matter_type] || matter.matter_type}`}
-                className="flex items-center justify-between px-6 py-4 hover:bg-muted/50 transition-colors group"
+                className="flex items-center justify-between gap-3 px-4 md:px-6 py-4 hover:bg-muted/50 transition-colors group"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
                     <h3 className="font-medium text-foreground truncate group-hover:text-primary transition-colors">
                       {matter.title}
                     </h3>
                     <MatterStatusBadge status={matter.status as MatterStatus} />
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-2 md:gap-4 text-sm flex-wrap">
                     <span className="text-secondary">
                       {matterTypeLabels[matter.matter_type] || matter.matter_type}
                     </span>
-                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-300" aria-hidden="true">•</span>
                     <span className="text-slate-400">
                       <time dateTime={matter.created_at}>
                         {new Date(matter.created_at).toLocaleDateString("es-CL", {
@@ -221,13 +221,13 @@ export default function DashboardPage() {
                     </span>
                     {(matter.urgency === "high" || matter.urgency === "urgent") && (
                       <>
-                        <span className="text-slate-300">•</span>
+                        <span className="text-slate-300" aria-hidden="true">•</span>
                         <UrgencyBadge level={matter.urgency as UrgencyLevel} />
                       </>
                     )}
                   </div>
                 </div>
-                <div className="text-slate-400 group-hover:text-primary transition-colors">
+                <div className="text-slate-400 group-hover:text-primary transition-colors shrink-0">
                   <ChevronRightIcon />
                 </div>
               </Link>

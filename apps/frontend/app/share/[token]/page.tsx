@@ -131,14 +131,14 @@ export default async function SharePage({ params }: PageProps) {
   return (
     <main
       id="main-content"
-      className="mx-auto max-w-3xl px-6 py-12"
+      className="mx-auto max-w-3xl px-4 sm:px-6 py-8 md:py-12"
       lang="es"
     >
-      <header className="mb-10 border-b border-slate-200 pb-8">
+      <header className="mb-8 md:mb-10 border-b border-slate-200 pb-6 md:pb-8">
         <p className="text-xs uppercase tracking-wider text-slate-500">
           Informe compartido
         </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+        <h1 className="mt-2 text-2xl md:text-3xl font-semibold text-slate-900 break-words">
           {report.matter_title}
         </h1>
         <p className="mt-2 text-sm text-slate-600">
