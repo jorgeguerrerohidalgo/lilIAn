@@ -66,7 +66,15 @@ class NormCatalog(Base):
     # BCN identifier (URI slug) — what BCN uses to refer to this norm.
     # Examples: "1984" (Codigo Penal), "1209272" (Ley 21.719).
     bcn_id = Column(String(64), unique=True, index=True, nullable=False)
-    tipo = Column(Enum(NormType), nullable=False, index=True)
+    # ``values_callable`` makes SQLAlchemy persist the enum's .value
+    # ("codigo", "ley") instead of the Python member name
+    # ("CODIGO", "LEY"). The crawler and the catalog store lowercase
+    # strings; the enum is for type-safety only.
+    tipo = Column(
+        Enum(NormType, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        index=True,
+    )
     # For leyes/decretos: "21.719". For codigos: typically empty.
     numero = Column(String(32), nullable=True, index=True)
     titulo = Column(String(500), nullable=False)
