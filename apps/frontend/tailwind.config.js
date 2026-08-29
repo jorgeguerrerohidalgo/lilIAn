@@ -8,9 +8,26 @@ module.exports = {
     extend: {
       colors: {
         /* Trust & Authority Palette - Legal */
+        // `primary` is a single brand color (`#1e3a8a`). Many components
+        // reach for `primary-50` / `primary-600` / `primary-700` etc. —
+        // those numeric shades didn't exist in the old config, so the
+        // utilities silently did nothing and the buttons looked broken
+        // (transparent background, only the white text visible). The
+        // defaults below mirror Tailwind's blue ramp so the existing
+        // class names resolve to real colors without renaming call sites.
         primary: {
-          DEFAULT: '#1E3A8A',
-          light: '#1E40AF',
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
+          DEFAULT: '#1e3a8a',
+          light: '#1e40af',
         },
         secondary: '#1E40AF',
         accent: '#B45309',

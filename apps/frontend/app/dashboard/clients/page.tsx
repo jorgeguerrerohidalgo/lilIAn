@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { EmptyState, Button } from "@/components/ui";
 
-
 interface Client {
   id: number;
   name: string;
