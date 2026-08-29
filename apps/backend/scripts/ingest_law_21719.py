@@ -179,12 +179,18 @@ def _embed(text: str) -> Optional[list[float]]:
     """
     try:
         provider = get_embedding_provider()
-        # `provider_name` is a @property — no need to call it. The dummy
-        # fallback is named "dummy"; real OpenAI is "openai".
-        if getattr(provider, "provider_name", "unknown") == "dummy":
-            logger.debug("skipping embedding: dummy provider in use (OPENAI_API_KEY not set or invalid)")
+        embedding = provider.generate_embedding(text)
+        # The pgvector column is fixed at 1536 dims. If the provider
+        # silently fell back to the 512-dim dummy (because the real
+        # API key is missing / invalid) we drop the embedding so the
+        # INSERT doesn't crash on dimension mismatch.
+        if embedding is None or len(embedding) != 1536:
+            logger.debug(
+                "skipping embedding: provider returned %s-dim vector (expected 1536)",
+                len(embedding) if embedding else 0,
+            )
             return None
-        return provider.generate_embedding(text)
+        return embedding
     except Exception as exc:  # pragma: no cover - best effort
         logger.warning("embedding skipped: %s", exc)
         return None
