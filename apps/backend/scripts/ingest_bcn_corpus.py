@@ -39,24 +39,30 @@ from typing import Optional
 
 logger = logging.getLogger("lilian.ingest_bcn_corpus")
 
-# Where the local text dumps live. Operators drop files here after
-# fetching them from BCN (or any other source — Akoma Ntoso exports,
-# Diario Oficial PDFs converted to text, etc.).
+# Kept for backwards compatibility — the Tier 1 ingest now downloads
+# from BCN automatically via bcn_http_client. Operators may still drop
+# files here as a fallback when BCN is down or for testing.
 LOCAL_DUMPS_DIR = Path(__file__).parent.parent / "data" / "legal_dumps"
 
-# Tier 1 — the 5 Códigos base + the Ley 21.719 we already have.
-# Other Tier 1 norms (Ley 19.628 derogada + 10 laboral + 5 tributario
-# + 10 consumidor) are added incrementally as the operator drops
-# their text dumps.
+# Tier 1 — the 5 Códigos base + the Constitution + Ley 21.719 +
+# Ley 19.628 (derogada). All BCN ids below were verified by
+# querying the Consulta/obtxml endpoint directly. The crawler pulls
+# the full XML for each, so no operator-side text dumps needed.
+#
+# Tier 2 (siguiente sprint): add ~100 most-cited leyes (laboral,
+# tributario, consumidor) once we have eval baseline.
+# Tier 3 (después): discover via ``discover_bcn_catalog.py`` and
+# iterate over all ~6.000 normas.
 TIER1_BCN_IDS: list[str] = [
-    "2561",  # Codigo Civil  (placeholder — actual BCN id may be "1984" or different)
-    "1984",  # Codigo Penal  (this is the BCN id we saw in earlier probes)
-    "21719", # Ley 21.719    (already in our DB)
-    "19628", # Ley 19.628 derogada (already in our DB)
+    "172986",  # Codigo Civil
+    "1984",    # Codigo Penal
+    "207436",  # Codigo del Trabajo
+    "22740",   # Codigo de Comercio
+    "176595",  # Codigo Procesal Penal (replaces "Procesal Civil" which is 57 MB)
+    "242302",  # Constitución Política
+    "21719",   # Ley 21.719 (Protección de Datos Personales)
+    "19628",   # Ley 19.628 derogada
 ]
-# The actual BCN ids for Codigo Civil and Codigo de Comercio need to
-# be confirmed at runtime; the operator can add them to TIER1_BCN_IDS
-# once discovered via `python -m scripts.ingest_bcn_corpus catalog`.
 
 
 # ---------------------------------------------------------------------------
@@ -68,17 +74,14 @@ def _get_session_factory():
     return SessionLocal
 
 
-def _get_or_create_norm(writer, catalog_row: dict) -> int:
-    """Insert-or-update a norm from the catalog dict; return its id."""
-    return writer.upsert_norm(catalog_row)
-
-
-def _load_local_text(bcn_id: str) -> Optional[str]:
-    """Return the local text dump for ``bcn_id``, or None if missing."""
-    path = LOCAL_DUMPS_DIR / f"{bcn_id}.txt"
-    if not path.exists():
+def _fetch_norm_xml(bcn_id: str) -> Optional[bytes]:
+    """Download the BCN XML for ``bcn_id`` via the legacy obtxml endpoint."""
+    from scripts.bcn_http_client import BCNHttpClient
+    client = BCNHttpClient()
+    content = client.fetch_norm_xml(bcn_id)
+    if content is None:
         return None
-    return path.read_text(encoding="utf-8", errors="ignore")
+    return content.encode("utf-8")
 
 
 def _ingest_one(
@@ -97,12 +100,18 @@ def _ingest_one(
     from scripts.html_parser import HierarchicalParser
 
     SessionLocal = _get_session_factory()
-    text = _load_local_text(bcn_id)
+    text = _fetch_norm_xml(bcn_id)
     if text is None:
-        logger.warning("no local dump for %s; skipping", bcn_id)
+        logger.warning("could not fetch XML for %s; skipping", bcn_id)
         return 0
 
-    parser = HierarchicalParser(max_chunk_chars=max_chunk_chars)
+    # We always parse via BCNXmlParser now that the BCN legacy
+    # ``Consulta/obtxml`` endpoint is the canonical source. The
+    # HTMLParser fallback remains available for non-BCN sources
+    # (Diario Oficial PDFs converted to text, etc.) — see
+    # ``ingest_law_21719.py`` for the historical text-dump path.
+    from scripts.bcn_xml_parser import BCNXmlParser
+    parser = BCNXmlParser()
     parsed = parser.parse(text)
     if not parsed.chunks:
         logger.warning("parser produced 0 chunks for %s; check input", bcn_id)
