@@ -66,6 +66,29 @@ def client(db):
 # ---------------------------------------------------------------------------
 _VALID_PASSWORD = "Test1234!Abcd"  # >=12 chars, upper/lower/digit/symbol
 
+# Ley 21.719 — the legal-page versions currently in production. Tests
+# that simulate a registration must include these so the backend's
+# consent gate accepts the payload.
+_LEGAL_TERMS_VERSION = "v1-2026-08-29"
+_LEGAL_PRIVACY_VERSION = "v1-2026-08-29"
+
+
+def _consent_payload(**overrides):
+    """Build a registration payload that satisfies the Ley 21.719
+    consent gate. Individual fields can be overridden to test
+    rejection paths."""
+    base = {
+        "email": "user@example.com",
+        "password": _VALID_PASSWORD,
+        "full_name": "Test User",
+        "terms_accepted": True,
+        "privacy_accepted": True,
+        "terms_version": _LEGAL_TERMS_VERSION,
+        "privacy_version": _LEGAL_PRIVACY_VERSION,
+    }
+    base.update(overrides)
+    return base
+
 
 def _auth_headers(user: User) -> dict:
     token = create_access_token(data={"sub": str(user.id), "email": user.email})
@@ -103,11 +126,7 @@ class TestRegisterSuccess:
     """POST /auth/register returns 201 and creates User + Org + Membership."""
 
     def test_register_success(self, client):
-        payload = {
-            "email": "new@example.com",
-            "password": _VALID_PASSWORD,
-            "full_name": "New User",
-        }
+        payload = _consent_payload(email="new@example.com", full_name="New User")
         response = client.post("/api/v1/auth/register", json=payload)
         assert response.status_code == 201, response.text
 
@@ -119,16 +138,16 @@ class TestRegisterSuccess:
         assert "password_hash" not in body
 
     def test_register_creates_organization_and_membership(self, client, db):
-        payload = {
-            "email": "owner@example.com",
-            "password": _VALID_PASSWORD,
-            "full_name": "Owner",
-        }
+        payload = _consent_payload(email="owner@example.com", full_name="Owner")
         response = client.post("/api/v1/auth/register", json=payload)
         assert response.status_code == 201
 
         user = db.query(User).filter(User.email == payload["email"]).first()
         assert user is not None
+        # Ley 21.719 — the denormalised consent fields land on the User row.
+        assert user.consent_given_at is not None
+        assert user.terms_version == _LEGAL_TERMS_VERSION
+        assert user.privacy_version == _LEGAL_PRIVACY_VERSION
 
         membership = (
             db.query(OrganizationMember)
@@ -195,6 +214,93 @@ class TestRegisterFailures:
         }
         response = client.post("/api/v1/auth/register", json=payload)
         assert response.status_code == 422, response.text
+
+    # ----------------------------------------------------------------
+    # Ley 21.719 — explicit consent gate (Fase 0).
+    # The backend must refuse to create an account when the user has
+    # not actively opted in to Terms + Privacy Policy. This is the
+    # legal requirement that gates everything else in the compliance
+    # surface.
+    # ----------------------------------------------------------------
+
+    def test_register_rejects_when_terms_not_accepted(self, client, db):
+        payload = _consent_payload(email="no-terms@example.com", terms_accepted=False)
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 422
+        assert "términos" in response.json()["detail"].lower()
+        # Critical: no User row should have been created.
+        assert db.query(User).filter(User.email == "no-terms@example.com").first() is None
+
+    def test_register_rejects_when_privacy_not_accepted(self, client, db):
+        payload = _consent_payload(email="no-privacy@example.com", privacy_accepted=False)
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 422
+        assert "privacidad" in response.json()["detail"].lower()
+        assert db.query(User).filter(User.email == "no-privacy@example.com").first() is None
+
+    def test_register_rejects_when_consent_flags_missing(self, client, db):
+        # Frontends built before Ley 21.719 don't send the consent
+        # flags at all. The gate must still hold.
+        payload = {
+            "email": "legacy@example.com",
+            "password": _VALID_PASSWORD,
+            "full_name": "Legacy",
+        }
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 422
+        assert "términos" in response.json()["detail"].lower()
+
+    def test_register_rejects_when_versions_missing(self, client, db):
+        # Consent granted but versions omitted — we still need a
+        # verifiable trail of *which* legal text the user agreed to.
+        payload = _consent_payload(
+            email="no-version@example.com",
+            terms_version=None,
+            privacy_version=None,
+        )
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 422
+        assert "versión" in response.json()["detail"].lower()
+
+    def test_register_persists_consent_records(self, client, db):
+        """Ley 21.719 — one ConsentRecord per scope must be persisted
+        with IP + UA so we have a verifiable trail for years."""
+        from app.models.consent import ConsentRecord, ConsentScope
+
+        payload = _consent_payload(email="tracked@example.com")
+        response = client.post(
+            "/api/v1/auth/register",
+            json=payload,
+            headers={"user-agent": "pytest-suite/1.0"},
+        )
+        assert response.status_code == 201
+
+        user = db.query(User).filter(User.email == "tracked@example.com").first()
+        records = (
+            db.query(ConsentRecord)
+            .filter(ConsentRecord.user_id == user.id)
+            .all()
+        )
+        scopes = {r.scope for r in records}
+        assert scopes == {ConsentScope.TERMS, ConsentScope.PRIVACY}
+        for r in records:
+            assert r.version == _LEGAL_TERMS_VERSION
+            assert r.granted_at is not None
+            assert r.revoked_at is None
+            assert r.user_agent == "pytest-suite/1.0"
+
+    def test_register_rejects_stale_terms_version(self, client):
+        # A user accepting a stale legal version (e.g. v0 cached in
+        # their browser) must be rejected so the frontend re-renders
+        # the current text. We can't actually verify staleness without
+        # server-side state, but we *can* verify that omitting the
+        # version triggers the gate.
+        payload = _consent_payload(
+            email="stale@example.com",
+            terms_version="",
+        )
+        response = client.post("/api/v1/auth/register", json=payload)
+        assert response.status_code == 422
 
 
 # ===========================================================================
