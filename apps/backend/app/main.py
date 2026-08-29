@@ -126,6 +126,18 @@ def _run_startup_migrations() -> None:
             exc,
         )
 
+    # Fase 1 corpus legal — creates norm_catalog, law_chunk_versions,
+    # norm_relations, and extends law_chunks with hierarchical +
+    # versionado columns. Required by the BCN crawler; idempotent.
+    try:
+        from migrations.add_norm_catalog_and_versions import main as _corpus_heal
+        _corpus_heal()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning(
+            "startup migration add_norm_catalog_and_versions failed (continuing): %s",
+            exc,
+        )
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
