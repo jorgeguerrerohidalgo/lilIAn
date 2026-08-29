@@ -627,3 +627,97 @@ def update_risk_review_status(
     db.commit()
 
     return {"message": "Estado actualizado", "risk_id": risk_id, "review_status": review_status}
+
+
+# ---------------------------------------------------------------------------
+# Ley 21.719 — privacy clause audit endpoint (Fase 1 product feature)
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel, Field
+from typing import Literal
+
+
+class PrivacyClause(BaseModel):
+    type: Literal[
+        "consentimiento",
+        "tratamiento_datos",
+        "transferencia",
+        "encargado",
+        "sensibles",
+        "menores",
+        "transferencia_internacional",
+        "decisiones_automatizadas",
+    ]
+    clause_text: str
+    cumple_21719: bool
+    issues: list[str] = Field(default_factory=list)
+    citacion_legal: str | None = None
+
+
+class PrivacyAuditResponse(BaseModel):
+    matter_id: int
+    risk_level: Literal["low", "medium", "high", "critical"]
+    score: int = Field(..., ge=0, le=100)
+    clauses: list[PrivacyClause]
+    summary: str
+
+
+@router.post("/privacy-audit", response_model=PrivacyAuditResponse)
+def privacy_audit(
+    matter_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(require_organization),
+    db: Session = Depends(get_db),
+):
+    """Auditoría de cláusulas de protección de datos según Ley 21.719.
+
+    Lee el último ``AnalysisReport`` del caso y, si existe, complementa
+    con una pasada LLM específica que clasifica cláusulas según las
+    8 categorías que la ley regula. Devuelve semáforo + issues.
+
+    NOTA: la implementación real de la pasada LLM se conecta con
+    ``app/services/privacy_auditor.py`` (Fase 1 work). Aquí va el
+    esqueleto del endpoint con un fallback determinista para que el
+    flujo end-to-end funcione mientras tanto.
+    """
+    matter = db.query(Matter).filter(
+        Matter.id == matter_id,
+        Matter.organization_id == membership.organization_id,
+    ).first()
+    if not matter:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    # Look for the latest AnalysisReport on this matter and surface its
+    # document content as the input for the privacy auditor.
+    report = (
+        db.query(AnalysisReport)
+        .filter(AnalysisReport.matter_id == matter_id)
+        .order_by(AnalysisReport.created_at.desc())
+        .first()
+    )
+
+    # Lazy import so the module is optional during early development.
+    try:
+        from app.services.privacy_auditor import audit_privacy_clauses
+        result = audit_privacy_clauses(
+            matter=matter,
+            report=report,
+            organization_id=membership.organization_id,
+            db=db,
+        )
+        return PrivacyAuditResponse(**result)
+    except ImportError:
+        # Fallback deterministic stub — returns a "no clauses detected"
+        # result so the frontend can render the empty state while we
+        # build the LLM-powered auditor.
+        return PrivacyAuditResponse(
+            matter_id=matter_id,
+            risk_level="low",
+            score=100,
+            clauses=[],
+            summary=(
+                "Auditor de privacidad en construcción. Cuando esté listo, "
+                "este endpoint clasificará las cláusulas del documento según "
+                "la Ley 21.719 y devolverá semáforo + issues priorizados."
+            ),
+        )

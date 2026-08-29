@@ -14,6 +14,7 @@ from app.core.security import create_access_token, get_password_hash, verify_pas
 from app.models.organization import Organization
 from app.models.organization_member import MemberRole, OrganizationMember
 from app.models.user import User
+from app.models.consent import ConsentRecord, ConsentScope
 from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
@@ -124,7 +125,27 @@ def register(
 
     Raises:
         HTTPException: 400 si el email ya está registrado.
+        HTTPException: 422 si el consentimiento explícito no fue otorgado.
     """
+    # Ley 21.719 — consentimiento explícito obligatorio. Sin esto no
+    # podemos crear la cuenta; es un requisito legal, no una nice-to-have.
+    if not (user_data.terms_accepted and user_data.privacy_accepted):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Debes aceptar los Términos de Uso y la Política de Privacidad "
+                "para crear tu cuenta (Ley 21.719)."
+            ),
+        )
+    if not user_data.terms_version or not user_data.privacy_version:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Falta la versión de los documentos legales aceptados. "
+                "Recarga la página para obtener la versión vigente."
+            ),
+        )
+
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(
@@ -132,17 +153,41 @@ def register(
             detail="El email ya está registrado"
         )
 
+    now = datetime.utcnow()
     user = User(
         email=user_data.email,
         password_hash=get_password_hash(user_data.password),
         full_name=user_data.full_name,
         email_verified=False,
         verification_token=_generate_verification_token(),
-        verification_sent_at=datetime.utcnow(),
+        verification_sent_at=now,
+        # Ley 21.719 — denormalised consent fields for the fast auth path.
+        consent_given_at=now,
+        terms_version=user_data.terms_version,
+        privacy_version=user_data.privacy_version,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Persist one ConsentRecord per scope. We store the IP/UA from the
+    # request so we have a verifiable trail ("user X consented to
+    # version Y from IP Z at timestamp T") for years to come.
+    ip = (request.client.host if request.client else None) or None
+    ua = (request.headers.get("user-agent") or "")[:512] or None
+    for scope, version in (
+        (ConsentScope.TERMS, user_data.terms_version),
+        (ConsentScope.PRIVACY, user_data.privacy_version),
+    ):
+        db.add(ConsentRecord(
+            user_id=user.id,
+            scope=scope,
+            version=version,
+            granted_at=now,
+            ip_address=ip,
+            user_agent=ua,
+        ))
+    db.commit()
 
     org = Organization(
         name=f"Organización de {user_data.full_name}",

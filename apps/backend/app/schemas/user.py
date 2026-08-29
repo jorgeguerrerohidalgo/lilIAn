@@ -40,6 +40,14 @@ def _validate_password_strength(value: str) -> str:
 
 class UserCreate(UserBase):
     password: str = Field(min_length=_PASSWORD_MIN_LEN, max_length=128)
+    # Ley 21.719 (Chile) — informed consent. Both flags must be true;
+    # the backend enforces this and rejects with 422 otherwise. The
+    # versions are also captured so we have a per-user record of which
+    # legal text they actually agreed to (see app/models/consent.py).
+    terms_accepted: bool = False
+    privacy_accepted: bool = False
+    terms_version: str | None = None
+    privacy_version: str | None = None
 
     @field_validator("password")
     @classmethod

@@ -28,6 +28,7 @@ from app.api.endpoints import (
     onboarding,
     organizations,
     precedents,
+    privacy,
     saas,
     search,
     share_links,
@@ -108,6 +109,20 @@ def _run_startup_migrations() -> None:
     except Exception as exc:  # pragma: no cover - never block startup
         _app_logger.warning(
             "startup migration add_password_reset_fields failed (continuing): %s",
+            exc,
+        )
+
+    # Ley 21.719 (Chile) — creates the four compliance tables
+    # (consent_records, data_processing_activities, rights_requests,
+    # breach_incidents) and extends users with denormalised consent
+    # fields. Required before the privacy router can mount in prod;
+    # idempotent (CREATE TABLE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS).
+    try:
+        from migrations.add_ley_21719_tables import main as _privacy_heal
+        _privacy_heal()
+    except Exception as exc:  # pragma: no cover - never block startup
+        _app_logger.warning(
+            "startup migration add_ley_21719_tables failed (continuing): %s",
             exc,
         )
 
@@ -305,6 +320,8 @@ app.include_router(share_links.router, prefix="/api/v1")
 app.include_router(support.router, prefix="/api/v1")
 app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(metrics.router)
+# Ley 21.719 (Chile) — privacy, ROPA, ARCO + portability + breach reporting.
+app.include_router(privacy.router, prefix="/api/v1")
 
 
 @app.get("/")
