@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.database import engine, get_db
 from app.core.security import create_access_token, get_password_hash
 from app.models.audit_log import AuditLog
+from app.models.document import Document
 from app.models.matter import Matter
 from app.models.organization import Organization, OrganizationType
 from app.models.organization_member import MemberRole, OrganizationMember
@@ -46,6 +47,44 @@ class OrganizationAdminResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class OrganizationMemberAdminItem(BaseModel):
+    """Single row of the membership list on
+    ``GET /admin/organizations/{org_id}``. Kept narrow on purpose —
+    the PLATFORM_ADMIN detail view shows role + identity, not every
+    tenant-internal field."""
+
+    user_id: int
+    email: str
+    full_name: str
+    role: str
+    created_at: str
+
+
+class OrganizationDetailAdminResponse(BaseModel):
+    """Detail payload for the cross-tenant Organizations admin UI.
+
+    Extends the list-row response with tenant profile fields and the
+    full member roster so the page can render without a second round
+    trip. Documents/deadlines are exposed as scalar counts; the detail
+    page does not list individual documents here — the tenant's own
+    dashboard is the surface for that."""
+
+    id: int
+    name: str
+    type: str
+    status: str
+    plan_id: str | None
+    rut: str | None
+    billing_email: str | None
+    stripe_customer_id: str | None
+    created_at: str
+    updated_at: str | None
+    user_count: int
+    matter_count: int
+    document_count: int
+    members: list[OrganizationMemberAdminItem]
 
 
 class UserOrganizationMembershipResponse(BaseModel):
@@ -328,6 +367,81 @@ def list_all_organizations(
         ))
 
     return result
+
+
+@router.get("/organizations/{org_id}", response_model=OrganizationDetailAdminResponse)
+def get_organization_admin(
+    org_id: int,
+    current_user: User = Depends(get_current_user),
+    membership: OrganizationMember = Depends(get_platform_admin_membership),
+    db: Session = Depends(get_db),
+):
+    """Single-tenant detail view for the PLATFORM_ADMIN.
+
+    Returns the org profile plus the full membership roster and
+    scalar counts. The dashboard UI links to this from
+    /dashboard/admin/organizations and from /dashboard/admin/users/[id]
+    so we need it to be self-contained (no follow-up calls for the
+    basic shape)."""
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organización no encontrada")
+
+    user_count = db.query(func.count(OrganizationMember.id)).filter(
+        OrganizationMember.organization_id == org.id
+    ).scalar() or 0
+
+    matter_count = db.query(func.count(Matter.id)).filter(
+        Matter.organization_id == org.id
+    ).scalar() or 0
+
+    # Documents are scoped by Matter, not Organization directly, so we
+    # count rows that belong to any of the tenant's matters. We use a
+    # single subquery instead of two queries + Python join to keep this
+    # endpoint cheap for tenants with large document libraries.
+    document_count = (
+        db.query(func.count(Document.id))
+        .join(Matter, Matter.id == Document.matter_id)
+        .filter(Matter.organization_id == org.id)
+        .scalar()
+        or 0
+    )
+
+    member_rows = (
+        db.query(OrganizationMember, User)
+        .join(User, User.id == OrganizationMember.user_id)
+        .filter(OrganizationMember.organization_id == org.id)
+        .order_by(OrganizationMember.created_at.asc())
+        .all()
+    )
+    members = [
+        OrganizationMemberAdminItem(
+            user_id=u.id,
+            email=u.email,
+            full_name=u.full_name,
+            role=m.role.value if hasattr(m.role, "value") else str(m.role),
+            created_at=m.created_at.isoformat() if m.created_at else "",
+        )
+        for m, u in member_rows
+    ]
+
+    return OrganizationDetailAdminResponse(
+        id=org.id,
+        name=org.name,
+        type=org.type.value if hasattr(org.type, "value") else str(org.type),
+        status=org.status.value if hasattr(org.status, "value") else str(org.status),
+        plan_id=org.plan_id,
+        rut=org.rut,
+        billing_email=org.billing_email,
+        stripe_customer_id=org.stripe_customer_id,
+        created_at=org.created_at.isoformat(),
+        updated_at=org.updated_at.isoformat() if org.updated_at else None,
+        user_count=user_count,
+        matter_count=matter_count,
+        document_count=document_count,
+        members=members,
+    )
 
 
 @router.get("/stats", response_model=DashboardStats)
