@@ -40,11 +40,17 @@ function RegisterForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  // Ley 21.719 (Chile) — informed consent for terms of use + privacy
+  // policy. Both must be checked before we POST. Versions are sent to
+  // the backend so we have a per-user consent trail.
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [errors, setErrors] = useState<{
     fullName?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
+    consent?: string;
     form?: string;
   }>({});
   const [loading, setLoading] = useState(false);
@@ -69,6 +75,16 @@ function RegisterForm() {
       return;
     }
 
+    // Ley 21.719 — explicit consent gate. The backend will reject
+    // the registration if these are missing or stale, but we validate
+    // locally too so the user gets immediate feedback.
+    if (!termsAccepted || !privacyAccepted) {
+      setErrors({
+        consent: "Debes aceptar los Términos de Uso y la Política de Privacidad para crear tu cuenta.",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -81,6 +97,12 @@ function RegisterForm() {
           email,
           password,
           full_name: fullName,
+          // Ley 21.719 — explicit consent. The backend stores a
+          // ConsentRecord per scope and stamps User.consent_given_at.
+          terms_accepted: termsAccepted,
+          privacy_accepted: privacyAccepted,
+          terms_version: "v1-2026-08-29",
+          privacy_version: "v1-2026-08-29",
         }),
       });
 
@@ -306,6 +328,55 @@ function RegisterForm() {
             aria-describedby={errors.form ? "register-form-error" : undefined}
             aria-invalid={errors.confirmPassword ? true : undefined}
           />
+
+          {/* Ley 21.719 — informed consent checkboxes. Both required. */}
+          <fieldset
+            aria-describedby={errors.consent ? "register-consent-error" : undefined}
+            className="space-y-3 pt-2"
+          >
+            <legend className="sr-only">Consentimiento para crear la cuenta</legend>
+            <label className="flex items-start gap-3 text-sm text-ink/80 leading-snug">
+              <input
+                type="checkbox"
+                checked={termsAccepted}
+                onChange={(e) => setTermsAccepted(e.target.checked)}
+                required
+                aria-required="true"
+                aria-invalid={errors.consent && !termsAccepted ? true : undefined}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink/30 text-primary focus:ring-primary/40"
+              />
+              <span>
+                Acepto los{" "}
+                <Link href="/legal/terminos" target="_blank" className="text-coral font-semibold hover:text-coral-dark underline">
+                  Términos de Uso
+                </Link>
+                {" "}de lilIAn (v1, vigente desde 29-ago-2026).
+              </span>
+            </label>
+            <label className="flex items-start gap-3 text-sm text-ink/80 leading-snug">
+              <input
+                type="checkbox"
+                checked={privacyAccepted}
+                onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                required
+                aria-required="true"
+                aria-invalid={errors.consent && !privacyAccepted ? true : undefined}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink/30 text-primary focus:ring-primary/40"
+              />
+              <span>
+                Acepto la{" "}
+                <Link href="/legal/privacy" target="_blank" className="text-coral font-semibold hover:text-coral-dark underline">
+                  Política de Privacidad
+                </Link>
+                {" "}y entiendo cómo se tratan mis datos personales conforme a la Ley 21.719.
+              </span>
+            </label>
+            {errors.consent && (
+              <p id="register-consent-error" role="alert" aria-live="polite" className="text-xs text-coral-dark">
+                {errors.consent}
+              </p>
+            )}
+          </fieldset>
 
           <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full">
             {loading ? "Creando cuenta..." : "Crear cuenta"}

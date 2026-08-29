@@ -607,6 +607,17 @@ export default function DashboardLayout({
                       <BillingIcon className="w-4 h-4" />
                       Mi plan
                     </Link>
+                    {/* Ley 21.719 — privacy & data-subject rights live one
+                        click away from every authenticated user. */}
+                    <Link
+                      href="/dashboard/settings/privacy"
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-ink hover:bg-soft transition-colors"
+                    >
+                      <ShieldIcon className="w-4 h-4" />
+                      Privacidad
+                    </Link>
                     <div role="separator" className="my-1 border-t border-border" />
                     <button
                       type="button"

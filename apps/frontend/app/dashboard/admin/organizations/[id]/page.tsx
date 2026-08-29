@@ -276,7 +276,106 @@ export default function OrganizationDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Ley 21.719 — Compliance score widget. Pure read-only call to
+          /api/v1/privacy/compliance-score; the backend already gates
+          this on OWNER/ADMIN/PLATFORM_ADMIN via the endpoint itself. */}
+      <ComplianceScoreWidget />
     </div>
+  );
+}
+
+function ComplianceScoreWidget() {
+  const [data, setData] = useState<{
+    score: number;
+    grade: string;
+    issues: string[];
+    activity_count: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/v1/privacy/compliance-score")
+      .then(async (res) => {
+        if (!res.ok) {
+          setLoading(false);
+          return;
+        }
+        const json = await res.json();
+        setData(json);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <section className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200">
+          <h2 className="text-sm font-semibold text-slate-700">Compliance Ley 21.719</h2>
+        </div>
+        <div className="px-5 py-6 text-center text-sm text-slate-500">Cargando…</div>
+      </section>
+    );
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const gradeStyles: Record<string, string> = {
+    A: "bg-green-100 text-green-800",
+    B: "bg-blue-100 text-blue-800",
+    C: "bg-amber-100 text-amber-800",
+    D: "bg-orange-100 text-orange-800",
+    F: "bg-red-100 text-red-800",
+  };
+
+  return (
+    <section
+      aria-labelledby="compliance-heading"
+      className="rounded-lg border border-slate-200 bg-white overflow-hidden"
+    >
+      <div className="px-5 py-4 border-b border-slate-200">
+        <h2 id="compliance-heading" className="text-sm font-semibold text-slate-700">
+          Compliance Ley 21.719
+        </h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Checklist técnico automatizado. No reemplaza una auditoría legal profesional.
+        </p>
+      </div>
+      <div className="px-5 py-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Score</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{data.score}<span className="text-lg text-slate-500">/100</span></p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Grado</p>
+          <p className="mt-2">
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-base font-semibold ${gradeStyles[data.grade] ?? "bg-slate-100 text-slate-700"}`}>
+              {data.grade}
+            </span>
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Actividades ROPA</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{data.activity_count}</p>
+        </div>
+      </div>
+      {data.issues.length > 0 && (
+        <div className="px-5 py-4 border-t border-slate-200">
+          <p className="text-xs font-semibold text-slate-600 mb-2">Issues a remediar:</p>
+          <ul className="space-y-1.5 text-sm text-slate-700">
+            {data.issues.map((issue, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span aria-hidden="true" className="text-amber-600 mt-0.5">⚠</span>
+                <span>{issue}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/lib/toast";
+import { CookieBanner } from "@/components/privacy/cookie-banner";
 
 export const metadata: Metadata = {
   title: "lilIAn",
@@ -26,7 +27,12 @@ export default function RootLayout({
         {/* S1.5: toast provider wraps the entire app so any client
             component can fire notifications (replaces ad-hoc
             setError patterns). */}
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {children}
+          {/* Ley 21.719 — opt-in cookie consent banner. Renders nothing
+              until the user has interacted (stored in localStorage). */}
+          <CookieBanner />
+        </ToastProvider>
       </body>
     </html>
   );
