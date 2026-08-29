@@ -118,7 +118,10 @@ def search_chunks_by_keyword(
     organization_id: int,
     matter_id: int,
     top_k: int = 10,
-    legal_area: LegalArea | None = None
+    legal_area: LegalArea | None = None,
+    as_of = None,
+    libro: str | None = None,
+    capitulo: str | None = None,
 ) -> list[dict]:
     """Busca chunks por coincidencia literal de la consulta.
 
@@ -227,6 +230,9 @@ def search_laws_by_embedding(
                {law_code_clause}
                {legal_area_clause}
                {keyword_clause}
+               {temporal_clause}
+               {libro_clause}
+               {capitulo_clause}
              ORDER BY embedding_vec <=> CAST(:q AS vector)
              LIMIT :k
         """
@@ -236,6 +242,9 @@ def search_laws_by_embedding(
             "AND legal_area = :legal_area" if legal_area is not None else ""
         )
         keyword_clause = ""
+        temporal_clause = ""
+        libro_clause = ""
+        capitulo_clause = ""
         params: dict = {"q": query_embedding, "k": top_k}
         if tokens:
             keyword_clause = "AND (" + " OR ".join(
@@ -244,12 +253,44 @@ def search_laws_by_embedding(
             for i, tok in enumerate(tokens):
                 params[f"kw{i}"] = f"%{tok}%"
 
+        # Temporal versionado (Fase 1 corpus legal): when ``as_of`` is
+        # set, restrict to chunks whose version was in force on that
+        # date. The NULL-handling lets a version with ``valid_until IS
+        # NULL`` (i.e. currently in force) pass through any as_of >= its
+        # valid_from.
+        if as_of is not None:
+            temporal_clause = (
+                "AND version_id IN ("
+                "  SELECT id FROM law_chunk_versions v"
+                "  WHERE v.valid_from <= :as_of"
+                "    AND (v.valid_until IS NULL OR v.valid_until > :as_of)"
+                ")"
+            )
+            params["as_of"] = as_of
+
+        if libro:
+            libro_clause = "AND libro = :libro"
+            params["libro"] = libro
+
+        if capitulo:
+            capitulo_clause = "AND capitulo = :capitulo"
+            params["capitulo"] = capitulo
+
         if law_code:
             params["law_code"] = law_code
         if legal_area is not None:
             params["legal_area"] = (
                 legal_area.value if hasattr(legal_area, "value") else legal_area
             )
+
+        sql = sql.format(
+            law_code_clause=law_code_clause,
+            legal_area_clause=legal_area_clause,
+            keyword_clause=keyword_clause,
+            temporal_clause=temporal_clause,
+            libro_clause=libro_clause,
+            capitulo_clause=capitulo_clause,
+        )
 
         sql = sql.format(
             law_code_clause=law_code_clause,
@@ -283,7 +324,10 @@ def hybrid_search(
     matter_id: int,
     top_k: int = 5,
     include_laws: bool = True,
-    legal_area: LegalArea | None = None
+    legal_area: LegalArea | None = None,
+    as_of = None,
+    libro: str | None = None,
+    capitulo: str | None = None,
 ) -> list[dict]:
     """Búsqueda híbrida con Reciprocal Rank Fusion (RRF).
 
@@ -293,6 +337,16 @@ def hybrid_search(
     S4-16: previously a 118-line function with three embedded concerns
     (embedding fetch, keyword fetch, RRF fusion). Split into three
     helpers so the top-level is the strategy + the merge.
+
+    Fase 1 corpus legal — extras:
+
+    - ``as_of``     : datetime.date | None — temporal filter. When set,
+                       only chunks whose associated law_chunk_versions
+                       row has ``valid_from <= as_of < valid_until``
+                       (or ``valid_until IS NULL``) are returned. Lets
+                       us answer "¿qué establecía esta ley en X fecha?"
+    - ``libro``     : book filter (only Códigos typically have LIBRO).
+    - ``capitulo``  : chapter filter.
 
     Args:
         query: Texto de la consulta del usuario.
@@ -311,12 +365,14 @@ def hybrid_search(
         ``keyword_score``.
     """
     embedding_results = _run_embedding_search(
-        query, organization_id, matter_id, top_k, legal_area
+        query, organization_id, matter_id, top_k,
+        legal_area=legal_area, as_of=as_of, libro=libro, capitulo=capitulo,
     )
     keyword_results = search_chunks_by_keyword(
-        query, organization_id, matter_id, top_k * 3, legal_area=legal_area
+        query, organization_id, matter_id, top_k * 3,
+        legal_area=legal_area, as_of=as_of, libro=libro, capitulo=capitulo,
     )
-    logger.debug(f"[DEBUG RAG] Keyword results: {len(keyword_results)}")  # S4-05
+    logger.debug(f"[DEBUG RAG] Keyword results: {len(keyword_results)}")
 
     merged = _merge_with_rrf(embedding_results, keyword_results)
     ranked = _sort_by_rrf_score(merged)
