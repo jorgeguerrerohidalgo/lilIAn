@@ -68,9 +68,16 @@ class OpenAIEmbedding(EmbeddingProvider):
         return self._dim_default
 
     def _dimensions_for(self, text: str) -> int:
-        """S3.7: short docs use smaller embeddings."""
-        if text and len(text) < self._short_threshold:
-            return self._dim_short
+        """Pick embedding dimensions for ``text``.
+
+        S3.7 originally used 512 dims for short texts to save storage.
+        That optimisation is incompatible with ``law_chunks.embedding_vec``,
+        which is a fixed-size pgvector column (1536 dims). Inserting a
+        512-dim vector there crashes the migration's expected-dimensions
+        check. The corpus needs a single dimension everywhere, so we
+        always return the default (1536). Cost difference is negligible
+        at Tier 1 scale (~50k tokens total = $0.001).
+        """
         return self._dim_default
 
     def _do_generate_embedding(self, text: str) -> list[float]:

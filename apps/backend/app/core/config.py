@@ -46,11 +46,19 @@ class Settings(BaseSettings):
 
     @property
     def resolved_llm_api_key(self) -> str | None:
-        return self.LLM_API_KEY or self.OPENAI_API_KEY
+        # Accept any of the three standard names so an operator only has
+        # to set ONE of them. Most local installs have only LLM_API_KEY.
+        return self.LLM_API_KEY or self.OPENAI_API_KEY or self.EMBEDDING_API_KEY
 
     @property
     def resolved_embedding_api_key(self) -> str | None:
-        return self.EMBEDDING_API_KEY or self.OPENAI_API_KEY
+        # Same fallback chain as the LLM key — keeps the operator from
+        # having to duplicate the secret across three env vars.
+        return (
+            self.EMBEDDING_API_KEY
+            or self.OPENAI_API_KEY
+            or self.LLM_API_KEY
+        )
 
     @property
     def model_routing_map(self) -> dict[str, str]:
