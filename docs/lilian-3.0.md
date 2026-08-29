@@ -188,36 +188,75 @@ Tres niveles:
 - Stepper de progreso: `12/47 archivos procesados, 3 con error`.
 - Errores no bloquean el resto — el usuario puede reintentar los fallidos.
 
-### 4.2 Base legal chilena
+### 4.2 Base legal chilena — corpus completo desde BCN Open Data
 
-#### 4.2.1 Corpus curado y versionado
+> **Documentación operativa**: `docs/corpus/legal-chile.md`. Resumen aquí, detalle ahí.
 
-**Estado actual**: `law_chunks` existe con pgvector, pero el volumen y la curación no están validados. Hay tabla `legal_sources` y `law_chunk` con campos `law_code`, `law_name`, `article_number`, `legal_area`.
+#### 4.2.1 Arquitectura del corpus (Fase 1 completada)
 
-**Diseño 3.0**:
-- **Tier 1** (debe estar en el MVP 3.0): 5 códigos base + 1.000 sentencias Corte Suprema 2020-2026.
-  - Código Civil
-  - Código de Comercio
-  - Código del Trabajo
-  - Ley 18.046 (Sociedades Anónimas)
-  - Ley 21.719 (Protección de Datos Personales) ← **obligatoria para vigencia 1-dic-2026**, debe cargarse en Fase 0
-  - Ley 19.628 (derogada, conservada con `valid_until=2026-12-01` para mostrar la evolución normativa)
-- **Tier 2** (Fase 2): Código Tributario, Ley de Seguros, jurisprudencia admin (SII, SUSESO).
-- **Tier 3** (Fase 3): Dictámenes DT, circulares SBIF/CMF, normativa sectorial.
+**Fuente primaria**: [BCN Open Data](https://datos.bcn.cl) — dataset completo de normas chilenas en formato abierto, con endpoint SPARQL (`bcnnorms:` ontology) y exportación Akoma Ntoso. Actualización diaria.
 
-**Ley 21.719 — ingestión prioritaria**:
-- Script reproducible: `apps/backend/scripts/ingest_law_21719.py`. Descarga desde el BCN Chile, parsea artículos, los inserta en `law_chunks` con `legal_area="data_protection"`.
-- Cada chunk lleva metadata en `chunk_metadata`: `valid_from` (publicación 2024-12-13), `valid_until` (None — vigente), `effective_date` (2026-12-01), `repealed_by_21719` (true para Ley 19.628), `source_url`.
-- Cita visible en la UI: cuando el chat o un análisis recupere chunks con `legal_area="data_protection"`, mostrar badge "📋 Ley 21.719" cerca de la citación.
-- Filtro dedicado en `/precedents`: checkbox "Protección de datos (Ley 21.719)" activa `legal_area="data_protection"` en la búsqueda.
-- **Soporte en golden dataset**: 5 preguntas nuevas sobre Ley 21.719 con respuestas verificadas. CI gate: `recall@5 ≥ 0.9`.
+**Limitación práctica**: la BCN sirve una SPA Angular con reCAPTCHA en todos los endpoints HTML; solo el SPARQL funciona con `httpx` simple. Para Tier 1 (~30 normas) la estrategia es **descarga manual desde el navegador** + parser propio. Para Tier 3 (~6.000 normas) se automatiza con Playwright (Fase 3).
 
-**Pipeline de ingestión**:
-- Script reproducible: `apps/backend/scripts/seed_legal_corpus.py --tier 1`.
-- Cada chunk lleva metadata: `law_code`, `article_number`, `valid_from`, `valid_until` (para leyes derogadas), `source_url`.
-- Re-corre el script cuando un código se actualiza (ej: reforma laboral).
+**Modelo de datos** (ver `docs/corpus/legal-chile.md` §2.1 para detalle):
 
-**Curación > cantidad**: 1.000 sentencias bien curadas con metadatos útiles vale más que 100.000 sentencias sin estructura.
+- `norm_catalog` (1 fila por norma): `bcn_id`, `tipo` (codigo/ley/decreto/dfl/dl/constitucion/tratado), `numero`, `titulo`, `fecha_publicacion`, `organismo_emisor`, `estado`, `url_bcn`, `legal_area`, `current_version_id`, `repealed_by_norm_id`.
+- `law_chunk_versions` (N filas por norma): `version_label`, `valid_from`, `valid_until`, `is_current`, `source_url`, `raw_source_hash`, `chunk_count`. Permite versionado temporal: queries con `as_of=X` devuelven chunks vigentes en X.
+- `norm_relations` (grafo): `from_norm_id`, `to_norm_id`, `relation_type` (modifica/deroga/rectifica/refunde/prorroga/reglamenta), `article_ref`.
+- `law_chunks` extendido con `jerarquia_path`, `parent_chunk_id`, `libro/titulo/capitulo/articulo/inciso/numeral/letra`, `norm_id`, `version_id`. Indexado por cada nivel jerárquico.
+
+**Pipeline**:
+
+```
+BCN SPARQL → BCNClient → HTMLParser (jerárquico) → DBWriter (idempotente)
+                                     ↓
+                    norm_catalog + law_chunk_versions + law_chunks
+                                     ↓
+                    hybrid_search() con filtros (as_of, libro, capitulo)
+                                     ↓
+                    /api/v1/corpus/search → /precedents en el frontend
+```
+
+#### 4.2.2 Tier 1 — cobertura objetivo
+
+5 Códigos base + Ley 21.719 + Ley 19.628 derogada + ~25 leyes frecuentes:
+
+- Código Civil, Código de Comercio, Código del Trabajo, Código Penal, Ley 18.046 (Sociedades Anónimas)
+- Ley 21.719 (vigente) + Ley 19.628 (derogada, conservada con `valid_until=2026-12-01`)
+- ~10 leyes laborales (CT, SSL, etc.), ~5 tributarias, ~10 consumidor/propiedad
+- **Total Tier 1**: ~6.000 chunks, ingestados en 30 min por operador
+
+Tier 2 (Fase 2, 1 semana): ~100 leyes más citadas + jurisprudencia reciente del Poder Judicial + grafo completo de relaciones.
+
+Tier 3 (Fase 3, 1 mes): ~6.000 normas restantes + automatización con Playwright + embeddings locales (sentence-transformers).
+
+#### 4.2.3 Versionado temporal — la feature más valiosa
+
+```sql
+-- Query con as_of=X
+SELECT chunk_id, content FROM law_chunks
+WHERE version_id IN (
+  SELECT id FROM law_chunk_versions v
+  WHERE v.valid_from <= :as_of
+    AND (v.valid_until IS NULL OR v.valid_until > :as_of)
+)
+```
+
+Esto permite responder *"¿qué establecía este artículo en 2023?"* correctamente cuando hay una versión histórica y otra vigente. El query se activa pasando `as_of=YYYY-MM-DD` al endpoint `/api/v1/corpus/search`.
+
+**Golden dataset** (`docs/corpus/golden-dataset-v2.json`): 20 preguntas, 3 de ellas con `as_of` específico para validar el versionado. CI gate: `recall@5 ≥ 0.85`.
+
+#### 4.2.4 Embeddings y chunking optimizado para texto legal
+
+Mantiene Plan A (OpenAI text-embedding-3-small) por costo (~€0.50 USD para Tier 3 completo). Plan B con `sentence-transformers` (BGE-m3) local está documentado para Fase 3 cuando el costo mensual supere $200.
+
+**Chunking jerárquico** (ver `apps/backend/scripts/html_parser.py`):
+- Detecta LIBRO / TÍTULO / CAPÍTULO / SECCIÓN / PÁRRAFO en Códigos.
+- Genera chunks respetando la jerarquía con `jerarquia_path` (breadcrumb legible) y `parent_chunk_id` (FK al chunk padre).
+- Para Leyes (sin estructura) usa article-only fallback.
+- Artículos > 2.200 chars se dividen en incisos o windows de palabras.
+
+**Curación > cantidad**: 1.000 sentencias bien curadas con metadatos útiles vale más que 100.000 sin estructura.
 
 #### 4.2.2 Embeddings y chunking optimizados para texto legal
 
