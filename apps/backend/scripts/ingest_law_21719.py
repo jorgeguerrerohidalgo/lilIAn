@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.law_chunk import LawChunk
-from app.services.llm import LLMService
+from app.services.embeddings import get_embedding_provider
 
 logger = logging.getLogger("lilian.ingest_law_21719")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s :: %(message)s")
@@ -167,11 +167,11 @@ def _existing_index(db: Session, law_code: str) -> set[str]:
 def _embed(text: str) -> Optional[list[float]]:
     """Returns the embedding vector for the given text, or None if
     embeddings aren't available. We isolate this so the script can
-    run in environments without LLM_API_KEY set (the corpus gets
+    run in environments without OPENAI_API_KEY set (the corpus gets
     inserted with NULL embeddings and we reindex later)."""
     try:
-        llm = LLMService(provider="openai")
-        return llm.get_embedding(text)
+        provider = get_embedding_provider()
+        return provider.generate_embedding(text)
     except Exception as exc:  # pragma: no cover - best effort
         logger.warning("embedding skipped: %s", exc)
         return None
@@ -226,20 +226,44 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--force-fetch", action="store_true", help="bypass the local HTML cache")
     parser.add_argument("--legal-area", default="data_protection",
                         help="legal_area tag for the new chunks (default: data_protection)")
+    parser.add_argument("--from-file", default=None,
+                        help="path to a local file with the raw law text (one per line, "
+                             "or HTML — auto-detected). Skips the BCN fetch entirely. "
+                             "Recommended because BCN is a SPA with captcha. "
+                             "Format: pass the path twice for both laws "
+                             "(--from-file=21719:/path/a.txt --from-file=19628:/path/b.txt).")
     args = parser.parse_args(argv)
 
-    targets: list[tuple[str, str, str]] = []
+    targets: list[tuple[str, str, str | None]] = []
+    from_file_map: dict[str, str] = {}
+    if args.from_file:
+        for spec in args.from_file.split(","):
+            spec = spec.strip()
+            if ":" not in spec:
+                parser.error(f"--from-file expects LAW:PATH, got {spec!r}")
+            law, path = spec.split(":", 1)
+            from_file_map[law.strip()] = path.strip()
     if args.law in ("21719", "both"):
-        targets.append(("21719", "Ley N° 21.719 — Protección de Datos Personales", BCN_LEY_21719))
+        targets.append(("21719", "Ley N° 21.719 — Protección de Datos Personales",
+                        from_file_map.get("21719")))
     if args.law in ("19628", "both"):
-        targets.append(("19628", "Ley N° 19.628 — Protección de la Vida Privada (derogada por 21.719)", BCN_LEY_19628))
+        targets.append(("19628", "Ley N° 19.628 — Protección de la Vida Privada (derogada por 21.719)",
+                        from_file_map.get("19628")))
 
     db = SessionLocal()
     try:
         total_new = 0
-        for law_code, law_name, url in targets:
+        for law_code, law_name, from_file in targets:
             logger.info("== ingesting %s ==", law_code)
-            html = _fetch(url, law_code, force=args.force_fetch)
+            if from_file:
+                logger.info("reading from local file: %s", from_file)
+                text = Path(from_file).read_text(encoding="utf-8", errors="ignore")
+                parsed = _parse_law_text(text, law_code=law_code, law_name=law_name)
+            else:
+                logger.info("fetching from BCN (may fail due to SPA / captcha)")
+                url = BCN_LEY_21719 if law_code == "21719" else BCN_LEY_19628
+                html = _fetch(url, law_code, force=args.force_fetch)
+                parsed = _parse_law_text(html, law_code=law_code, law_name=law_name)
             parsed = _parse_law_text(html, law_code=law_code, law_name=law_name)
             logger.info("parsed %d chunks for %s", len(parsed), law_code)
             if args.reindex:
