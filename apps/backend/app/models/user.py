@@ -37,6 +37,23 @@ class User(Base):
     password_reset_token = Column(String(128), nullable=True, index=True)
     password_reset_expires_at = Column(DateTime, nullable=True)
 
+    # Ley 21.719 (Chile) compliance — see models/consent.py for the related
+    # consent_records / rights_requests tables. We keep the denormalised
+    # consent timestamp here so the common auth path doesn't need a join.
+    # `terms_version` / `privacy_version` capture which text the user agreed
+    # to (we version the legal pages); if we ever bump them, existing users
+    # must re-accept before next meaningful action.
+    consent_given_at = Column(DateTime, nullable=True)
+    terms_version = Column(String(32), nullable=True)
+    privacy_version = Column(String(32), nullable=True)
+    # Self-service erasure request timestamp. The actual hard-delete is
+    # performed by a background job after the legal minimum retention
+    # period (Ley 21.719 art. 17 — proporcionalidad / finalidad).
+    deletion_requested_at = Column(DateTime, nullable=True)
+    # When the user last exercised the right to data portability
+    # (art. 22 — portabilidad). Useful for rate-limiting the export.
+    last_export_at = Column(DateTime, nullable=True)
+
     memberships = relationship("OrganizationMember", back_populates="user")
     matters = relationship("Matter", back_populates="created_by", foreign_keys="Matter.created_by_user_id")
     clients = relationship("Client", back_populates="created_by")

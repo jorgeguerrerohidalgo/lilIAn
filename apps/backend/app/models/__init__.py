@@ -3,6 +3,16 @@ from app.models.analysis_report import AnalysisReport
 from app.models.audit_log import AuditLog
 from app.models.chat import ChatMessage, ChatSession
 from app.models.client import Client
+from app.models.consent import (
+    BreachIncident,
+    BreachSeverity,
+    ConsentRecord,
+    ConsentScope,
+    DataProcessingActivity,
+    RightsRequest,
+    RightsRequestStatus,
+    RightsRequestType,
+)
 from app.models.deadline_alert import DeadlineAlert
 from app.models.document import Document
 from app.models.document_analysis import DocumentAnalysis
@@ -55,4 +65,13 @@ __all__ = [
     "FeedbackSignal",
     "AgentRun",
     "AgentStep",
+    # Ley 21.719 compliance tables — see app/models/consent.py.
+    "ConsentRecord",
+    "ConsentScope",
+    "DataProcessingActivity",
+    "RightsRequest",
+    "RightsRequestType",
+    "RightsRequestStatus",
+    "BreachIncident",
+    "BreachSeverity",
 ]
