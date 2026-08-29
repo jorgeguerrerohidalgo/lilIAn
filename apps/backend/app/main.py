@@ -16,6 +16,7 @@ from app.api.endpoints import (
     auth,
     chat,
     clients,
+    corpus,
     deadline_alerts,
     document_analysis,
     document_generator,
@@ -334,6 +335,9 @@ app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(metrics.router)
 # Ley 21.719 (Chile) — privacy, ROPA, ARCO + portability + breach reporting.
 app.include_router(privacy.router, prefix="/api/v1")
+# Fase 1 corpus legal — search across norm_catalog + law_chunks, plus
+# the BCN relations graph. Mounted under /api/v1/corpus.
+app.include_router(corpus.router, prefix="/api/v1")
 
 
 @app.get("/")
