@@ -59,9 +59,12 @@ CACHE_DIR = Path(__file__).parent / ".cache" / "law_ingestion"
 
 # ----------------------------- HTML parsing -----------------------------
 
-# Very tolerant regex: "Artículo 1.-", "Artículo 1°.-", "Artículo primero", etc.
+# Very tolerant regex: handles "Artículo 1.-", "Artículo 1°.-", "Artículo
+# 1° bis.-", "Artículo primero.-", with optional leading whitespace
+# (the DO text indents every article with 5 spaces) and optional
+# surrounding quotes.
 _ARTICLE_RE = re.compile(
-    r"^(?:Art\.\s*|Artículo\s+)([0-9]+(?:\s*[°º])?)\s*\.?-?",
+    r"^\s*\"?\s*(?:Art\.\s*|Artículo\s+)([0-9]+)(?:\s*[°º])?(?:\s+(?:bis|tercero))?\s*[.\-]?",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -166,11 +169,21 @@ def _existing_index(db: Session, law_code: str) -> set[str]:
 
 def _embed(text: str) -> Optional[list[float]]:
     """Returns the embedding vector for the given text, or None if
-    embeddings aren't available. We isolate this so the script can
-    run in environments without OPENAI_API_KEY set (the corpus gets
-    inserted with NULL embeddings and we reindex later)."""
+    embeddings aren't available.
+
+    We deliberately return ``None`` for the dummy/fallback provider so
+    the chunks land in the DB with ``embedding_vec=NULL`` rather than
+    producing a 512-dim vector that crashes the INSERT (the pgvector
+    column is fixed at 1536 dims). Re-indexing later once OpenAI is
+    available is a single ``UPDATE`` away.
+    """
     try:
         provider = get_embedding_provider()
+        # `provider_name` is a @property — no need to call it. The dummy
+        # fallback is named "dummy"; real OpenAI is "openai".
+        if getattr(provider, "provider_name", "unknown") == "dummy":
+            logger.debug("skipping embedding: dummy provider in use (OPENAI_API_KEY not set or invalid)")
+            return None
         return provider.generate_embedding(text)
     except Exception as exc:  # pragma: no cover - best effort
         logger.warning("embedding skipped: %s", exc)
@@ -264,7 +277,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 url = BCN_LEY_21719 if law_code == "21719" else BCN_LEY_19628
                 html = _fetch(url, law_code, force=args.force_fetch)
                 parsed = _parse_law_text(html, law_code=law_code, law_name=law_name)
-            parsed = _parse_law_text(html, law_code=law_code, law_name=law_name)
             logger.info("parsed %d chunks for %s", len(parsed), law_code)
             if args.reindex:
                 logger.warning("--reindex not implemented in this version; use --dry-run to preview, then run a separate reindex script")
