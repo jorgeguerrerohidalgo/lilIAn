@@ -47,6 +47,12 @@ const NAV_ITEMS: NavItem[] = [
 // itself enforces the role server-side; this is purely a UI gate so
 // non-admins don't see the link.
 const ADMIN_NAV_ITEMS: NavItem[] = [
+  // S4.6a: organizations list — the canonical landing surface for the
+  // PLATFORM_ADMIN (create new tenants, suspend, drill into members).
+  // Listed first so it's discoverable from the sidebar; "Auditoría" used
+  // to be the only admin entry, which left organizations unreachable
+  // without a deep link.
+  { href: "/dashboard/admin/organizations", label: "Organizaciones", icon: <BuildingIcon /> },
   { href: "/dashboard/admin/audit-logs", label: "Auditoría", icon: <ShieldIcon /> },
 ];
 
@@ -150,6 +156,15 @@ function ShieldIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
     <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.063 2.522-.187 3.757a48.32 48.32 0 01-3.387 13.094c-.18.452-.665.74-1.146.74H7.72c-.48 0-.965-.288-1.146-.74A48.32 48.32 0 013.187 15.757 48.696 48.696 0 013 12c0-2.357.24-4.66.69-6.879.132-.65.612-1.187 1.243-1.392A48.146 48.146 0 0112 3a48.146 48.146 0 017.067.729c.63.205 1.11.742 1.243 1.392C20.76 7.34 21 9.643 21 12z" />
+    </svg>
+  );
+}
+
+function BuildingIcon({ className = "w-5 h-5" }: { className?: string }) {
+  // Office-building glyph for the cross-tenant Organizations admin list.
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
     </svg>
   );
 }
