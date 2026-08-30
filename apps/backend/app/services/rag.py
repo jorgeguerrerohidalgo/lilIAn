@@ -27,7 +27,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(np.dot(a, b) / (norm_a * norm_b))
 
 
-_EMBEDDING_SIMILARITY_DEFAULT = 0.3  # DEBUG: lowered from 0.5
+_EMBEDDING_SIMILARITY_DEFAULT = -0.4
 
 
 def search_chunks_by_embedding(
@@ -180,7 +180,7 @@ def search_laws_by_embedding(
     query_embedding: list[float],
     law_code: str = None,
     top_k: int = 5,
-    similarity_threshold: float = 0.3,
+    similarity_threshold: float = -0.4,
     legal_area: LegalArea | None = None,
     query_text: str | None = None,
     as_of = None,

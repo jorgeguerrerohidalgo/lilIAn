@@ -208,24 +208,58 @@ def cmd_ingest(args) -> int:
 
 
 def cmd_ingest_tier1(args) -> int:
-    """Ingest every BCN id in TIER1_BCN_IDS that has a local dump."""
-    LOCAL_DUMPS_DIR.mkdir(parents=True, exist_ok=True)
-    missing = [bid for bid in TIER1_BCN_IDS if not (LOCAL_DUMPS_DIR / f"{bid}.txt").exists()]
-    if missing:
-        logger.warning(
-            "missing local dumps for %d norms: %s\nPlace .txt files at %s and re-run.",
-            len(missing), ", ".join(missing), LOCAL_DUMPS_DIR,
-        )
+    """Ingest every Tier 1 norm by downloading its XML from BCN.
+
+    Skips norms already in the DB (idempotent). Per-norm failures are
+    logged and swallowed so one fat Codigo de Comercio (57 MB XML)
+    doesn't poison the rest of the batch. Per-norm progress is logged
+    inline so operators can see what's actually happening.
+    """
+    import time
+    from sqlalchemy import text
+    SessionLocal = _get_session_factory()
+    session = SessionLocal()
+    try:
+        already_ingested = {
+            row[0]
+            for row in session.execute(text(
+                "SELECT DISTINCT nc.bcn_id FROM law_chunks lc "
+                "JOIN law_chunk_versions v ON v.id = lc.version_id "
+                "JOIN norm_catalog nc ON nc.id = v.norm_id "
+                "WHERE nc.bcn_id = ANY(:ids)"
+            ), {"ids": list(TIER1_BCN_IDS)}).all()
+        }
+    finally:
+        session.close()
+
+    targets = [bid for bid in TIER1_BCN_IDS if bid not in already_ingested]
+    if not targets:
+        logger.info("all Tier 1 norms already ingested — nothing to do")
+        return 0
+
+    logger.info(
+        "ingesting %d Tier 1 norms (skipping %d already in DB)",
+        len(targets), len(already_ingested),
+    )
     total = 0
-    for bcn_id in TIER1_BCN_IDS:
-        total += _ingest_one(
-            bcn_id=bcn_id,
-            catalog_rows={},
-            legal_area=args.legal_area,
-            max_chunk_chars=args.max_chunk_chars,
-            generate_embeddings=not args.no_embeddings,
-        )
-    logger.info("ingested %d total chunks across Tier 1 (%d norms)", total, len(TIER1_BCN_IDS))
+    for bcn_id in targets:
+        t0 = time.monotonic()
+        try:
+            n = _ingest_one(
+                bcn_id=bcn_id,
+                catalog_rows={},
+                legal_area=args.legal_area,
+                max_chunk_chars=args.max_chunk_chars,
+                generate_embeddings=not args.no_embeddings,
+            )
+        except Exception as exc:  # pragma: no cover - keep batch alive
+            logger.exception("ingest failed for %s: %s", bcn_id, exc)
+            continue
+        elapsed = time.monotonic() - t0
+        logger.info("  ✓ %s: %d chunks in %.1fs", bcn_id, n, elapsed)
+        total += n
+
+    logger.info("done: %d total chunks across %d Tier 1 norms", total, len(targets))
     return 0
 
 

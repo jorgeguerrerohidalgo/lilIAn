@@ -32,7 +32,7 @@ from typing import Optional
 
 logger = logging.getLogger("lilian.eval_law_retrieval")
 
-GOLDEN_PATH = Path(__file__).parent.parent.parent / "docs" / "corpus" / "golden-dataset-v2.json"
+GOLDEN_PATH = Path(__file__).parent.parent.parent.parent / "docs" / "corpus" / "golden-dataset-v2.json"
 DEFAULT_RECALL_K = 5
 DEFAULT_THRESHOLD = 0.85
 

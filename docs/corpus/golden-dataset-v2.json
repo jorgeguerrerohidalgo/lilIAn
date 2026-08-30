@@ -2,144 +2,278 @@
   {
     "id": 1,
     "query": "¿Qué establece la Ley 21.719 sobre consentimiento explícito?",
-    "expected_law_codes": ["21719"],
-    "expected_articles": ["5"],
+    "expected_law_codes": [
+      "21719"
+    ],
+    "expected_articles": [
+      "5"
+    ],
     "tier": 1,
     "category": "data_protection"
   },
   {
     "id": 2,
     "query": "¿Cuál es el plazo para responder derechos ARCO?",
-    "expected_law_codes": ["21719"],
-    "expected_articles": ["27"],
+    "expected_law_codes": [
+      "21719"
+    ],
+    "expected_articles": [
+      "27"
+    ],
     "tier": 1,
     "category": "data_protection"
   },
   {
     "id": 3,
     "query": "¿Qué multas puede imponer la Agencia de Protección de Datos?",
-    "expected_law_codes": ["21719"],
-    "expected_articles": ["33"],
+    "expected_law_codes": [
+      "21719"
+    ],
+    "expected_articles": [
+      "33"
+    ],
     "tier": 1,
     "category": "data_protection"
   },
   {
     "id": 4,
     "query": "¿Cómo se regula la portabilidad de datos en Chile?",
-    "expected_law_codes": ["21719"],
-    "expected_articles": ["22"],
+    "expected_law_codes": [
+      "21719"
+    ],
+    "expected_articles": [
+      "22"
+    ],
     "tier": 1,
     "category": "data_protection"
   },
   {
     "id": 5,
     "query": "¿Qué es el DPO y cuándo es obligatorio?",
-    "expected_law_codes": ["21719"],
-    "expected_articles": ["47"],
+    "expected_law_codes": [
+      "21719"
+    ],
+    "expected_articles": [
+      "47"
+    ],
     "tier": 1,
     "category": "data_protection"
   },
   {
     "id": 6,
     "query": "¿Cuáles son las causales de término del contrato de trabajo?",
-    "expected_law_codes": ["codigo_trabajo"],
-    "expected_articles": ["159", "160", "161"],
+    "expected_law_codes": [
+      "207436"
+    ],
+    "expected_articles": [
+      "159",
+      "160",
+      "161"
+    ],
     "tier": 1,
     "category": "laboral"
   },
   {
     "id": 7,
     "query": "¿Qué dice el Código del Trabajo sobre feriado anual?",
-    "expected_law_codes": ["codigo_trabajo"],
-    "expected_articles": ["67", "67 bis", "68", "69", "70", "71", "72", "73"],
+    "expected_law_codes": [
+      "207436"
+    ],
+    "expected_articles": [
+      "67",
+      "67 bis",
+      "68",
+      "69",
+      "70",
+      "71",
+      "72",
+      "73"
+    ],
     "tier": 1,
     "category": "laboral"
   },
   {
     "id": 8,
     "query": "¿Cuál es el plazo de prescripción de las acciones laborales?",
-    "expected_law_codes": ["codigo_trabajo"],
-    "expected_articles": ["510"],
+    "expected_law_codes": [
+      "207436"
+    ],
+    "expected_articles": [
+      "510"
+    ],
     "tier": 1,
     "category": "laboral"
   },
   {
     "id": 9,
     "query": "¿Cómo se calcula la indemnización por despido injustificado?",
-    "expected_law_codes": ["codigo_trabajo"],
-    "expected_articles": ["162", "163", "164", "165", "166", "167", "168", "169", "170", "171", "172"],
+    "expected_law_codes": [
+      "207436"
+    ],
+    "expected_articles": [
+      "162",
+      "163",
+      "164",
+      "165",
+      "166",
+      "167",
+      "168",
+      "169",
+      "170",
+      "171",
+      "172"
+    ],
     "tier": 1,
     "category": "laboral"
   },
   {
     "id": 10,
     "query": "¿Qué dice el Código Civil sobre la lesión enorme en la compraventa?",
-    "expected_law_codes": ["codigo_civil"],
-    "expected_articles": ["1888", "1889", "1890", "1891", "1892", "1893", "1894", "1895"],
+    "expected_law_codes": [
+      "172986"
+    ],
+    "expected_articles": [
+      "1888",
+      "1889",
+      "1890",
+      "1891",
+      "1892",
+      "1893",
+      "1894",
+      "1895"
+    ],
     "tier": 1,
     "category": "civil"
   },
   {
     "id": 11,
     "query": "¿Cuál es el plazo para la acción redhibitoria?",
-    "expected_law_codes": ["codigo_civil"],
-    "expected_articles": ["1857", "1858", "1859", "1860", "1861", "1862", "1863", "1864", "1865", "1866", "1867"],
+    "expected_law_codes": [
+      "172986"
+    ],
+    "expected_articles": [
+      "1857",
+      "1858",
+      "1859",
+      "1860",
+      "1861",
+      "1862",
+      "1863",
+      "1864",
+      "1865",
+      "1866",
+      "1867"
+    ],
     "tier": 1,
     "category": "civil"
   },
   {
     "id": 12,
     "query": "¿Qué regula el Código de Comercio sobre la sociedad anónima?",
-    "expected_law_codes": ["codigo_comercio"],
-    "expected_articles": ["424", "425", "426", "427", "428", "429"],
+    "expected_law_codes": [
+      "22740"
+    ],
+    "expected_articles": [
+      "424",
+      "425",
+      "426",
+      "427",
+      "428",
+      "429"
+    ],
     "tier": 1,
     "category": "comercial"
   },
   {
     "id": 13,
     "query": "¿Cómo se constituye una SA en Chile?",
-    "expected_law_codes": ["18046"],
-    "expected_articles": ["126", "127", "128"],
+    "expected_law_codes": [
+      "18046"
+    ],
+    "expected_articles": [
+      "126",
+      "127",
+      "128"
+    ],
     "tier": 1,
     "category": "comercial"
   },
   {
     "id": 14,
     "query": "¿Qué establece el Código Penal sobre el hurto?",
-    "expected_law_codes": ["codigo_penal"],
-    "expected_articles": ["432", "433", "434"],
+    "expected_law_codes": [
+      "1984"
+    ],
+    "expected_articles": [
+      "432",
+      "433",
+      "434"
+    ],
     "tier": 1,
     "category": "penal"
   },
   {
     "id": 15,
     "query": "¿Cuál es el plazo para la prescripción de la acción penal?",
-    "expected_law_codes": ["codigo_penal"],
-    "expected_articles": ["93", "94", "95", "96", "97", "98", "99", "100", "101", "102", "103"],
+    "expected_law_codes": [
+      "1984"
+    ],
+    "expected_articles": [
+      "93",
+      "94",
+      "95",
+      "96",
+      "97",
+      "98",
+      "99",
+      "100",
+      "101",
+      "102",
+      "103"
+    ],
     "tier": 1,
     "category": "penal"
   },
   {
     "id": 16,
     "query": "¿Qué dice la Ley del Consumidor sobre el derecho a retracto?",
-    "expected_law_codes": ["19496"],
-    "expected_articles": ["3 bis", "3 ter"],
+    "expected_law_codes": [
+      "19496"
+    ],
+    "expected_articles": [
+      "3 bis",
+      "3 ter"
+    ],
     "tier": 1,
     "category": "consumidor"
   },
   {
     "id": 17,
     "query": "¿Cuál es el procedimiento de fiscalización de la Dirección del Trabajo?",
-    "expected_law_codes": ["codigo_trabajo"],
-    "expected_articles": ["478", "479", "480", "481"],
+    "expected_law_codes": [
+      "207436"
+    ],
+    "expected_articles": [
+      "478",
+      "479",
+      "480",
+      "481"
+    ],
     "tier": 1,
     "category": "laboral"
   },
   {
     "id": 18,
     "query": "¿Qué era el Derecho a la Vida Privada según la Ley 19.628?",
-    "expected_law_codes": ["19628"],
-    "expected_articles": ["1", "2", "3", "4"],
+    "expected_law_codes": [
+      "19628"
+    ],
+    "expected_articles": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
     "tier": 1,
     "category": "data_protection",
     "as_of": "2024-12-13",
@@ -148,8 +282,12 @@
   {
     "id": 19,
     "query": "¿Cómo cambió la Ley 19.628 con la reforma 21.719?",
-    "expected_law_codes": ["21719"],
-    "expected_articles": ["primero"],
+    "expected_law_codes": [
+      "21719"
+    ],
+    "expected_articles": [
+      "primero"
+    ],
     "tier": 1,
     "category": "data_protection",
     "as_of": "2026-01-01",
@@ -158,8 +296,12 @@
   {
     "id": 20,
     "query": "¿Qué establece la Ley 19.628 sobre el consentimiento antes de la reforma?",
-    "expected_law_codes": ["19628"],
-    "expected_articles": ["4"],
+    "expected_law_codes": [
+      "19628"
+    ],
+    "expected_articles": [
+      "4"
+    ],
     "as_of": "2024-01-01",
     "tier": 1,
     "category": "data_protection",
