@@ -26,7 +26,7 @@ echo "Backend dir: $BACKEND_DIR"
 # 1) DELETE chunks existentes para re-ingestar limpio
 echo ""
 echo "[1/5] Limpiando chunks existentes para re-ingest..."
-"$VENV_PY" -c "
+( cd "$BACKEND_DIR" && "$VENV_PY" -c "
 from app.core.database import SessionLocal
 from sqlalchemy import text
 session = SessionLocal()
@@ -39,7 +39,7 @@ session.execute(text('DELETE FROM law_chunk_versions WHERE norm_id NOT IN (SELEC
 session.commit()
 session.close()
 print('OK')
-"
+" )
 
 # 2) Re-ingestar Tier 1 completo con el parser arreglado
 echo ""
@@ -61,7 +61,7 @@ sleep 5
 # 5) Resumen del corpus
 echo ""
 echo "[5/5] Resumen del corpus:"
-"$VENV_PY" -c "
+( cd "$BACKEND_DIR" && "$VENV_PY" -c "
 from app.core.database import SessionLocal
 from sqlalchemy import text
 session = SessionLocal()
@@ -69,4 +69,4 @@ print(f'  Total chunks: {session.execute(text(\"SELECT COUNT(*) FROM law_chunks\
 print(f'  With embeddings: {session.execute(text(\"SELECT COUNT(*) FROM law_chunks WHERE embedding_vec IS NOT NULL\")).scalar()}')
 print(f'  Distinct law_codes: {session.execute(text(\"SELECT COUNT(DISTINCT law_code) FROM law_chunks\")).scalar()}')
 session.close()
-"
+" )
