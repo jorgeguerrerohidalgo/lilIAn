@@ -169,14 +169,18 @@ class BCNXmlParser:
                 # updates — handled above.
                 continue
 
-            if fecha_derog is not None:
-                # Skip articles explicitly marked as derogated at the
-                # BCN level — they're historical and we keep them in
-                # chunk_metadata if needed via a Tier-3 migration.
+            derogado = fecha_derog is not None
+            if derogado:
+                # Don't skip derogated chunks — keep them in the corpus
+                # so the RAG has full historical context. The BCN marks
+                # every Codigo Civil article as derogated because each
+                # has been modified by a later ley, but the articles
+                # themselves remain in force (partial derogation). The
+                # flag in chunk_metadata.vigente lets the RAG filter
+                # them out if the user wants only-current.
                 result.warnings.append(
-                    f"skipping derogated article {article_num} (FechaDerogacion={fecha_derog.text!r})"
+                    f"article {article_num} marked as derogated ({fecha_derog.text!r}) - kept in corpus"
                 )
-                continue
 
             if not texto.strip():
                 continue
@@ -192,6 +196,7 @@ class BCNXmlParser:
                 capitulo=current_capitulo,
                 content=texto.strip(),
                 parent_hint=parent_hint,
+                derogado=derogado,
             )
             result.chunks.append(chunk)
 

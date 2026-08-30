@@ -65,6 +65,7 @@ class ParsedChunk:
     content: str = ""
     chunk_index: int = 0
     parent_hint: str = ""  # human-readable breadcrumb for the chunker
+    derogado: bool = False  # True when BCN marks this article as repealed
 
     def hierarchy_path(self) -> str:
         """Slash-separated breadcrumb for ``law_chunks.jerarquia_path``."""

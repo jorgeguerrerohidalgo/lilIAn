@@ -303,6 +303,13 @@ class DBWriter:
                     "source_url": source_url,
                     "jerarquia_hint": chunk.parent_hint,
                     "imported_at": datetime.utcnow().isoformat(),
+                    # True when BCN marks this article as fully repealed.
+                    # Codigo Civil articles all carry this flag because
+                    # each has been modified by a later ley; the corpus
+                    # keeps them so the RAG has full historical context.
+                    # The ``/api/v1/corpus/search`` endpoint can filter
+                    # by ``vigente=true`` if needed.
+                    "derogado": getattr(chunk, "derogado", False),
                 },
                 jerarquia_path=chunk.hierarchy_path() or None,
                 libro=chunk.libro,
