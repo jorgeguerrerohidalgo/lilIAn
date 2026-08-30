@@ -17,15 +17,16 @@ echo "=================================================="
 echo "Recuperacion completa del corpus legal chileno"
 echo "=================================================="
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BACKEND_DIR="$SCRIPT_DIR/apps/backend"
-echo "Working dir: $SCRIPT_DIR"
-echo "Backend dir:  $BACKEND_DIR"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+BACKEND_DIR="$REPO_ROOT/apps/backend"
+VENV_PY="$BACKEND_DIR/.venv_test/bin/python"
+echo "Repo root:   $REPO_ROOT"
+echo "Backend dir: $BACKEND_DIR"
 
 # 1) DELETE chunks existentes para re-ingestar limpio
 echo ""
 echo "[1/5] Limpiando chunks existentes para re-ingest..."
-.venv_test/bin/python -c "
+"$VENV_PY" -c "
 from app.core.database import SessionLocal
 from sqlalchemy import text
 session = SessionLocal()
@@ -43,24 +44,24 @@ print('OK')
 # 2) Re-ingestar Tier 1 completo con el parser arreglado
 echo ""
 echo "[2/5] Re-ingestando Tier 1 (~5-10 min)..."
-.venv_test/bin/python -m scripts.ingest_bcn_corpus ingest-tier1 --no-embeddings
+( cd "$BACKEND_DIR" && "$VENV_PY" -m scripts.ingest_bcn_corpus ingest-tier1 --no-embeddings )
 
 # 3) Reindexar embeddings
 echo ""
 echo "[3/5] Reindexando embeddings (~30 min en background)..."
-nohup .venv_test/bin/python -m scripts.reindex_chunks > /tmp/reindex.log 2>&1 &
+( cd "$BACKEND_DIR" && nohup "$VENV_PY" -m scripts.reindex_chunks > /tmp/reindex.log 2>&1 & )
 echo "PID: $!"
 
 # 4) Run eval final
 echo ""
 echo "[4/5] Corriendo eval final..."
 sleep 5
-.venv_test/bin/python -m scripts.eval_law_retrieval
+( cd "$BACKEND_DIR" && "$VENV_PY" -m scripts.eval_law_retrieval )
 
 # 5) Resumen del corpus
 echo ""
 echo "[5/5] Resumen del corpus:"
-.venv_test/bin/python -c "
+"$VENV_PY" -c "
 from app.core.database import SessionLocal
 from sqlalchemy import text
 session = SessionLocal()
