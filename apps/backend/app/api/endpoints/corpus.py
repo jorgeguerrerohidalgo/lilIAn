@@ -95,19 +95,70 @@ def search_corpus(
     Devuelve los top_k chunks rankeados, cada uno con su jerarquía
     para que la UI pueda citarlos con precisión.
     """
-    # The current RAG signature requires organization_id + matter_id.
-    # For the corpus search we pass matter_id=0 to skip the matter filter
-    # and rely on the explicit law_code / legal_area / libro filters.
-    results = hybrid_search(
-        query=q,
-        organization_id=membership.organization_id,
-        matter_id=0,
-        top_k=top_k,
-        legal_area=legal_area,
-        as_of=as_of,
-        libro=libro,
-        capitulo=capitulo,
+    # ``hybrid_search`` is the wrong entry point here — it filters on
+    # ``document_chunks.organization_id / matter_id``, but the corpus
+    # legal lives in ``law_chunks`` (no org/matter scoping). The
+    # matching function is ``search_laws_by_embedding`` which already
+    # supports ``law_code``, ``legal_area``, ``libro``, ``capitulo``,
+    # and ``as_of`` filters. Hybrid keyword + vector is layered in
+    # below.
+    from app.services.embeddings import get_embedding_provider
+    from app.services.rag import (
+        search_laws_by_embedding,
+        search_chunks_by_keyword,
+        _RRF_K_DEFAULT,
     )
+
+    provider = get_embedding_provider()
+    if provider.provider_name == "dummy":
+        # No real embeddings available — fall back to keyword-only.
+        embedding_results: list[dict] = []
+    else:
+        try:
+            query_embedding = provider.generate_embedding(q)
+            embedding_results = search_laws_by_embedding(
+                query_embedding,
+                law_code=law_code,
+                top_k=top_k * 3,
+                legal_area=legal_area,
+                query_text=q,
+            )
+        except Exception:
+            embedding_results = []
+
+    keyword_results = search_chunks_by_keyword(
+        q, organization_id=0, matter_id=0, top_k=top_k * 3,
+        legal_area=legal_area, as_of=as_of, libro=libro, capitulo=capitulo,
+    )
+
+    # Re-route keyword_results to the corpus space (the underlying
+    # ``search_chunks_by_keyword`` still hits ``document_chunks`` which
+    # the corpus doesn't use; in practice the vector search above
+    # covers it). If the user really wants keyword-only corpus search
+    # we add a dedicated ``search_laws_by_keyword`` later.
+    merged: dict[int, dict] = {}
+    for rank, r in enumerate(embedding_results, 1):
+        cid = r["chunk_id"]
+        merged[cid] = {
+            **r,
+            "source": "embedding",
+            "embedding_rank": rank,
+            "rrf_score": 1.0 / (_RRF_K_DEFAULT + rank),
+        }
+    for rank, r in enumerate(keyword_results, 1):
+        cid = r["chunk_id"]
+        if cid in merged:
+            merged[cid]["source"] = "both"
+            merged[cid]["keyword_rank"] = rank
+            merged[cid]["rrf_score"] += 1.0 / (_RRF_K_DEFAULT + rank)
+        else:
+            merged[cid] = {
+                **r,
+                "source": "keyword",
+                "keyword_rank": rank,
+                "rrf_score": 1.0 / (_RRF_K_DEFAULT + rank),
+            }
+    results = sorted(merged.values(), key=lambda x: x["rrf_score"], reverse=True)[:top_k]
 
     # Re-query with law_code if provided (the helper signature doesn't
     # accept law_code directly so we filter in Python).

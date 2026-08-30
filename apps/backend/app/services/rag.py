@@ -183,6 +183,9 @@ def search_laws_by_embedding(
     similarity_threshold: float = 0.3,
     legal_area: LegalArea | None = None,
     query_text: str | None = None,
+    as_of = None,
+    libro: str | None = None,
+    capitulo: str | None = None,
 ) -> list[dict]:
     """Busca en chunks de leyes chilenas por embedding con pgvector.
 
@@ -382,6 +385,10 @@ def hybrid_search(
 def _run_embedding_search(
     query: str, organization_id: int, matter_id: int,
     top_k: int, legal_area: LegalArea | None,
+    *,
+    as_of = None,
+    libro: str | None = None,
+    capitulo: str | None = None,
 ) -> list[dict]:
     """Run the embedding-based search; degrade gracefully on provider errors."""
     try:
