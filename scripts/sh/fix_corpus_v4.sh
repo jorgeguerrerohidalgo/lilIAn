@@ -1,8 +1,24 @@
 #!/bin/bash
 # Script v4: re-ingest Tier 1 con idNormas correctos de BCN
-# Ejecutar desde la raíz:
+# Ejecutar desde la raiz del proyecto:
 #   cd /home/jorge-guerrero-hidalgo/Desarrollo/legal_lilIAn/lilian
 #   bash scripts/sh/fix_corpus_v4.sh
+#
+# Cambios vs v3:
+#   - Reemplaza el bcn_id 21719 por 1209272 (idNorma BCN real de la 21.719)
+#   - Agrega 18046 (Ley 18.046) y 19496 (Ley 19.496) al Tier 1
+#   - Re-borra todos los chunks Tier 1 para re-ingestar limpio
+#   - Re-borra 21719 (legacy con idNorma incorrecto) explicitamente
+#
+# Pasos:
+#   [1/5] DELETE chunks Tier 1 con idNormas antiguos
+#   [2/5] Re-ingestar Tier 1 con idNormas correctos
+#   [3/5] Reindexar embeddings (~30-40 min en background)
+#   [4/5] Eval final
+#   [5/5] Resumen del corpus
+#
+# Salida esperada: recall@10 >= 0.85 sobre golden-dataset-v2.json
+# (que se debe actualizar con los idNorma BCN correctos).
 
 set -e
 
@@ -12,6 +28,7 @@ VENV_PY="$BACKEND_DIR/.venv_test/bin/python"
 echo "Repo root:   $REPO_ROOT"
 echo "Backend dir: $BACKEND_DIR"
 
+# 1) DELETE chunks Tier 1
 echo ""
 echo "[1/5] Limpiando chunks Tier 1 con idNormas antiguos..."
 ( cd "$BACKEND_DIR" && "$VENV_PY" -c "
@@ -33,20 +50,24 @@ session.close()
 print('OK')
 " )
 
+# 2) Re-ingestar Tier 1
 echo ""
 echo "[2/5] Re-ingestando Tier 1 (~15-25 min)..."
 ( cd "$BACKEND_DIR" && "$VENV_PY" -m scripts.ingest_bcn_corpus ingest-tier1 --no-embeddings )
 
+# 3) Reindexar embeddings
 echo ""
 echo "[3/5] Reindexando embeddings (~30-40 min en background)..."
 ( cd "$BACKEND_DIR" && nohup "$VENV_PY" -m scripts.reindex_chunks > /tmp/reindex.log 2>&1 & )
 echo "PID: $!"
 
+# 4) Eval final
 echo ""
 echo "[4/5] Corriendo eval final..."
 sleep 5
 ( cd "$BACKEND_DIR" && "$VENV_PY" -m scripts.eval_law_retrieval )
 
+# 5) Resumen del corpus
 echo ""
 echo "[5/5] Resumen del corpus:"
 ( cd "$BACKEND_DIR" && "$VENV_PY" -c "

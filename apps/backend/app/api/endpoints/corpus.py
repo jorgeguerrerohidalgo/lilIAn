@@ -116,12 +116,21 @@ def search_corpus(
     else:
         try:
             query_embedding = provider.generate_embedding(q)
+            # Use a low threshold because text-embedding-3-small returns
+            # similarities in the 0.4-0.8 range for clear matches and the
+            # previous default of 0.3 was clipping almost everything.
+            # -0.4 lets through anything that's even remotely related and
+            # lets the RRF ranker sort. See services/rag.py:_RRF_K_DEFAULT.
             embedding_results = search_laws_by_embedding(
                 query_embedding,
                 law_code=law_code,
                 top_k=top_k * 3,
                 legal_area=legal_area,
                 query_text=q,
+                as_of=as_of,
+                libro=libro,
+                capitulo=capitulo,
+                similarity_threshold=-0.4,
             )
         except Exception:
             embedding_results = []

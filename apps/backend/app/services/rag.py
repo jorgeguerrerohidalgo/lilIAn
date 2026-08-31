@@ -49,8 +49,8 @@ def search_chunks_by_embedding(
 
     Returns up to ``top_k`` chunks with similarity >= threshold.
     """
-    if similarity_threshold < 0 or similarity_threshold > 1:
-        raise ValueError("similarity_threshold must be in [0, 1]")
+    if similarity_threshold < -1 or similarity_threshold > 1:
+        raise ValueError("similarity_threshold must be in [-1, 1]")
     max_distance = 2.0 * (1.0 - similarity_threshold)
 
     db = SessionLocal()
@@ -208,8 +208,8 @@ def search_laws_by_embedding(
 
     # pgvector cosine distance is 0 (identical) → 2 (opposite). Convert
     # to a 0..1 similarity scale that matches the threshold semantics.
-    if similarity_threshold < 0 or similarity_threshold > 1:
-        raise ValueError("similarity_threshold must be in [0, 1]")
+    if similarity_threshold < -1 or similarity_threshold > 1:
+        raise ValueError("similarity_threshold must be in [-1, 1]")
     max_distance = 2.0 * (1.0 - similarity_threshold)
 
     from sqlalchemy import bindparam, or_
