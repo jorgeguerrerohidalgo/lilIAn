@@ -12,6 +12,8 @@ Pipeline: BCN legacy obtxml?opt=7&idNorma=X -> BCNHttpClient -> BCNXmlParser -> 
 ## Commits relevantes
 
 ```
+4fd2e37  feat(sh): v4 re-ingest script + endpoint uses correct BCN idNormas  <- HEAD, pushado
+bd86372  docs: STATUS - handoff document for new chat context
 ebf01cf  fix(ingest): use correct BCN idNormas (1209272 for 21.719) + add 18046, 19496
 f87f875  feat(sh): add v3 script - re-ingest post-VARCHAR migration + reindex + eval
 225df76  fix(corpus): route /corpus/search through search_laws_by_embedding
@@ -193,5 +195,5 @@ Proximos pasos:
 - No re-correr el script v3 con delete seguido de re-ingest sin antes buscar el idNorma refundido de 19.628
 - El corpus va a quedar con un documento incorrecto (Decreto MINEDUC) en lugar de la Ley 19.628
 - El codigo de Comercio (22740) requiere parser streaming (iterparse) antes de poder re-ingestarse
-- El script v4 esta en disco pero NO commiteado (cree el archivo v4 en un commit vacio)
-- Si abres un nuevo chat, podes recrearlo desde la descripcion de este STATUS o usar el script v3 que SI esta commiteado (con idNorma 21719 que es el bug original)
+- El script v4 esta en `scripts/sh/fix_corpus_v4.sh` y SI esta commiteado (4fd2e37, pushado a origin/main). No hace falta recrearlo
+- No usar el script v3: sigue teniendo el idNorma 21719 (el bug original)
