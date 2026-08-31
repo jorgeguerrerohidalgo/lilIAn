@@ -3,7 +3,8 @@
     "id": 1,
     "query": "¿Qué establece la Ley 21.719 sobre consentimiento explícito?",
     "expected_law_codes": [
-      "21719"
+      "21719",
+      "1209272"
     ],
     "expected_articles": [
       "5"
@@ -15,7 +16,8 @@
     "id": 2,
     "query": "¿Cuál es el plazo para responder derechos ARCO?",
     "expected_law_codes": [
-      "21719"
+      "21719",
+      "1209272"
     ],
     "expected_articles": [
       "27"
@@ -27,7 +29,8 @@
     "id": 3,
     "query": "¿Qué multas puede imponer la Agencia de Protección de Datos?",
     "expected_law_codes": [
-      "21719"
+      "21719",
+      "1209272"
     ],
     "expected_articles": [
       "33"
@@ -39,7 +42,8 @@
     "id": 4,
     "query": "¿Cómo se regula la portabilidad de datos en Chile?",
     "expected_law_codes": [
-      "21719"
+      "21719",
+      "1209272"
     ],
     "expected_articles": [
       "22"
@@ -51,7 +55,8 @@
     "id": 5,
     "query": "¿Qué es el DPO y cuándo es obligatorio?",
     "expected_law_codes": [
-      "21719"
+      "21719",
+      "1209272"
     ],
     "expected_articles": [
       "47"
@@ -279,7 +284,8 @@
     "query": "¿Qué era el Derecho a la Vida Privada según la Ley 19.628?",
     "expected_law_codes": [
       "19628",
-      "ley_19628"
+      "ley_19628",
+      "141599"
     ],
     "expected_articles": [
       "1",
@@ -296,7 +302,8 @@
     "id": 19,
     "query": "¿Cómo cambió la Ley 19.628 con la reforma 21.719?",
     "expected_law_codes": [
-      "21719"
+      "21719",
+      "1209272"
     ],
     "expected_articles": [
       "primero"
@@ -311,7 +318,8 @@
     "query": "¿Qué establece la Ley 19.628 sobre el consentimiento antes de la reforma?",
     "expected_law_codes": [
       "19628",
-      "ley_19628"
+      "ley_19628",
+      "141599"
     ],
     "expected_articles": [
       "4"

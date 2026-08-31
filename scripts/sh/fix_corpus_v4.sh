@@ -6,9 +6,11 @@
 #
 # Cambios vs v3:
 #   - Reemplaza el bcn_id 21719 por 1209272 (idNorma BCN real de la 21.719)
+#   - Reemplaza el bcn_id 19628 por 141599 (idNorma BCN real de la 19.628;
+#     19628 era el Decreto 11 MINEDUC de 1996, no la Ley DICOM)
 #   - Agrega 18046 (Ley 18.046) y 19496 (Ley 19.496) al Tier 1
 #   - Re-borra todos los chunks Tier 1 para re-ingestar limpio
-#   - Re-borra 21719 (legacy con idNorma incorrecto) explicitamente
+#   - Re-borra 21719 y 19628 (legacy con idNormas incorrectos) explicitamente
 #
 # Pasos:
 #   [1/5] DELETE chunks Tier 1 con idNormas antiguos
@@ -35,8 +37,8 @@ echo "[1/5] Limpiando chunks Tier 1 con idNormas antiguos..."
 from app.core.database import SessionLocal
 from sqlalchemy import text
 session = SessionLocal()
-old_codes = ['21719']
-tier1 = ['172986','1984','207436','22740','176595','242302','1209272','19628','18046','19496']
+old_codes = ['21719', '19628']
+tier1 = ['172986','1984','207436','22740','176595','242302','1209272','141599','18046','19496']
 for lc in old_codes:
     n = session.execute(text('DELETE FROM law_chunks WHERE law_code = :lc'), {'lc': lc}).rowcount
     print(f'  old {lc}: borrados {n} chunks')

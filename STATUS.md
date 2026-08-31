@@ -49,16 +49,16 @@ Recall@10 actual: 30% (6/20 PASS). Limitado por:
 
 ## Bugs conocidos (de la auditoria del agente)
 
-| # | Severidad | Bug | Ubicacion |
-|---|---|---|---|
-| P1 | HIGH | 19628 no resuelve a la Ley 19.628 (devuelve Decreto MINEDUC) | ingest_bcn_corpus.py:71 |
-| P2 | HIGH | law_code almacena idNorma BCN (1209272) pero golden espera alias cortos (21719). Mismatch causa recall@10 ~30% | db_writer.py:293 + eval_law_retrieval.py:149 + golden-dataset-v2.json |
-| P3 | HIGH | Codigo de Comercio (22740) XML de 57 MB hace que el parser se cuelgue (OOM o minutos por parseo) | bcn_xml_parser.py:103,143 |
-| P4 | MED | law_chunks sin UNIQUE constraint -> re-ingest duplica chunks | db_writer.py:324 |
-| P5 | MED | Credenciales hardcoded en eval_law_retrieval.py:62-63 | eval_law_retrieval.py:62 |
-| P6 | MED | cmd_sync ignora --since y re-corre todo Tier 1 | ingest_bcn_corpus.py:284 |
-| P7 | MED | reindex_chunks.py rate-limit plano sin backoff en 429 | reindex_chunks.py:84-86 |
-| P8 | MED | _ingest_one traga toda Exception per norm | ingest_bcn_corpus.py:264 |
+| # | Severidad | Bug | Ubicacion | Estado |
+|---|---|---|---|---|
+| P1 | HIGH | 19628 no resuelve a la Ley 19.628 (devuelve Decreto MINEDUC) | ingest_bcn_corpus.py:71 | RESUELTO (idNorma real = 141599) |
+| P2 | HIGH | law_code almacena idNorma BCN (1209272) pero golden espera alias cortos (21719). Mismatch causa recall@10 ~30% | db_writer.py:293 + eval_law_retrieval.py:149 + golden-dataset-v2.json | RESUELTO (golden actualizado) |
+| P3 | HIGH | Codigo de Comercio (22740) XML de 57 MB hace que el parser se cuelgue (OOM o minutos por parseo) | bcn_xml_parser.py:103,143 | RESUELTO (parser streaming con iterparse) |
+| P4 | MED | law_chunks sin UNIQUE constraint -> re-ingest duplica chunks | db_writer.py:324 | MIGRACION ESCRITA, NO APLICADA |
+| P5 | MED | Credenciales hardcoded en eval_law_retrieval.py:62-63 | eval_law_retrieval.py:62 | RESUELTO (env vars) |
+| P6 | MED | cmd_sync ignora --since y re-corre todo Tier 1 | ingest_bcn_corpus.py:284 | pendiente |
+| P7 | MED | reindex_chunks.py rate-limit plano sin backoff en 429 | reindex_chunks.py:84-86 | pendiente |
+| P8 | MED | _ingest_one traga toda Exception per norm | ingest_bcn_corpus.py:264 | RESUELTO (IngestError jerárquico) |
 
 ## Plan de correcciones pendientes
 
@@ -82,11 +82,15 @@ Orden por DEPENDENCIA, no por comodidad. Dos reglas que mandan sobre todo lo dem
   (mientras siga ahi, una ingesta fallida se ve igual que una exitosa)
 
 ### Fase 3 - Contenido faltante (es lo unico que sube el recall de verdad)
-- P1: [BLOQUEANTE MANUAL - lo resuelve Jorge en el navegador]
-      Buscar el idNorma refundido de 19.628 en https://www.bcn.cl/leychile/Navegar?idNorma=19628
-      Ya se descarto por SPARQL, opt=7 (9 IDs) y opt=3 paginado. Requiere inspeccion visual.
-- P3: lxml.etree.iterparse + element.clear() en bcn_xml_parser.py para el Codigo de Comercio
-      (22740, 57 MB). Sin esto queda en 0 chunks para siempre.
+- P1: [RESUELTO] El idNorma real de la Ley 19.628 (Protección a la Vida Privada / "Ley DICOM",
+      publicacion 1999-08-28, organismo Secretaría General de la Presidencia) es **141599**.
+      Descubierto via Playwright + busqueda simple de BCN (cadena=19628 -> idNorma=141599).
+      idNorma 19628 es realmente el Decreto 11 MINEDUC de 1996. Scripts de re-ingest
+      actualizados (ingest_bcn_corpus.py:TIER1_BCN_IDS, fix_corpus_v4.sh) y golden-dataset
+      (Q18, Q20) con 141599.
+- P3: [RESUELTO] lxml.etree.iterparse + element.clear() en bcn_xml_parser.py para el
+      Codigo de Comercio (22740, 57 MB). Routing automatico: <5MB usa path eager,
+      >=5MB usa streaming. 6 tests unitarios.
 
 ### Fase 4 - Re-ingest y validacion (solo despues de 2 y 3)
 - bash scripts/sh/fix_corpus_v4.sh

@@ -39,6 +39,16 @@ from typing import Optional
 
 logger = logging.getLogger("lilian.ingest_bcn_corpus")
 
+
+class IngestError(Exception):
+    """Recoverable per-norm failure during ingest.
+
+    Raised by ``_ingest_one`` when the XML fetch or the DB upsert fails
+    in a way that should NOT abort the rest of the batch. System-level
+    errors (KeyboardInterrupt, MemoryError, ...) propagate as
+    themselves so the operator sees the real cause.
+    """
+
 # Kept for backwards compatibility — the Tier 1 ingest now downloads
 # from BCN automatically via bcn_http_client. Operators may still drop
 # files here as a fallback when BCN is down or for testing.
@@ -68,7 +78,7 @@ TIER1_BCN_IDS: list[str] = [
     "176595",   # Codigo Procesal Penal refundido
     "242302",   # Constitución Política refundida
     "1209272",  # Ley 21.719 refundida (Protección de Datos Personales)
-    "19628",    # Ley 19.628 refundida
+    "141599",   # Ley 19.628 refundida (Protección a la Vida Privada / "Ley DICOM")
     "18046",    # Ley 18.046 (Sociedad Anónima)
     "19496",    # Ley 19.496 (Protección al Consumidor)
 ]
@@ -109,7 +119,10 @@ def _ingest_one(
     from scripts.html_parser import HierarchicalParser
 
     SessionLocal = _get_session_factory()
-    text = _fetch_norm_xml(bcn_id)
+    try:
+        text = _fetch_norm_xml(bcn_id)
+    except Exception as exc:
+        raise IngestError(f"fetch failed: {exc}") from exc
     if text is None:
         logger.warning("could not fetch XML for %s; skipping", bcn_id)
         return 0
@@ -121,7 +134,10 @@ def _ingest_one(
     # ``ingest_law_21719.py`` for the historical text-dump path.
     from scripts.bcn_xml_parser import BCNXmlParser
     parser = BCNXmlParser()
-    parsed = parser.parse(text)
+    try:
+        parsed = parser.parse(text)
+    except Exception as exc:
+        raise IngestError(f"parse failed: {exc}") from exc
     if not parsed.chunks:
         logger.warning("parser produced 0 chunks for %s; check input", bcn_id)
         return 0
@@ -140,30 +156,33 @@ def _ingest_one(
         if valid_from is None:
             valid_from = date.today()
 
-    with DBWriter(SessionLocal) as writer:
-        norm_id = writer.upsert_norm(catalog_row)
-        version_id = writer.upsert_version(
-            norm_id=norm_id,
-            version_label=version_label,
-            valid_from=valid_from,
-            source_url=source_url or catalog_row.get("url_bcn"),
-            extra={"parser_warnings": parsed.warnings},
-        )
-        # Flip any previously-current versions on this norm to historical.
-        writer.mark_previous_versions_superseded(
-            norm_id=norm_id,
-            superseded_from=valid_from,
-            exclude_version_id=version_id,
-        )
-        n = writer.upsert_chunks(
-            version_id=version_id,
-            chunks=parsed.chunks,
-            law_code=bcn_id,
-            law_name=catalog_row.get("titulo", f"Norma {bcn_id}"),
-            legal_area=legal_area,
-            source_url=source_url or catalog_row.get("url_bcn"),
-            generate_embeddings=generate_embeddings,
-        )
+    try:
+        with DBWriter(SessionLocal) as writer:
+            norm_id = writer.upsert_norm(catalog_row)
+            version_id = writer.upsert_version(
+                norm_id=norm_id,
+                version_label=version_label,
+                valid_from=valid_from,
+                source_url=source_url or catalog_row.get("url_bcn"),
+                extra={"parser_warnings": parsed.warnings},
+            )
+            # Flip any previously-current versions on this norm to historical.
+            writer.mark_previous_versions_superseded(
+                norm_id=norm_id,
+                superseded_from=valid_from,
+                exclude_version_id=version_id,
+            )
+            n = writer.upsert_chunks(
+                version_id=version_id,
+                chunks=parsed.chunks,
+                law_code=bcn_id,
+                law_name=catalog_row.get("titulo", f"Norma {bcn_id}"),
+                legal_area=legal_area,
+                source_url=source_url or catalog_row.get("url_bcn"),
+                generate_embeddings=generate_embeddings,
+            )
+    except Exception as exc:
+        raise IngestError(f"db write failed: {exc}") from exc
 
     logger.info("ingested %s: %d chunks, %d warnings", bcn_id, n, len(parsed.warnings))
     return n
@@ -251,6 +270,7 @@ def cmd_ingest_tier1(args) -> int:
         len(targets), len(already_ingested),
     )
     total = 0
+    failed: list[tuple[str, str]] = []
     for bcn_id in targets:
         t0 = time.monotonic()
         try:
@@ -261,12 +281,24 @@ def cmd_ingest_tier1(args) -> int:
                 max_chunk_chars=args.max_chunk_chars,
                 generate_embeddings=not args.no_embeddings,
             )
-        except Exception as exc:  # pragma: no cover - keep batch alive
+        except IngestError as exc:
+            # Recoverable per-norm failure: log full stack and move on.
+            # The rest of Tier 1 still ingests.
             logger.exception("ingest failed for %s: %s", bcn_id, exc)
+            failed.append((bcn_id, str(exc)))
             continue
         elapsed = time.monotonic() - t0
         logger.info("  ✓ %s: %d chunks in %.1fs", bcn_id, n, elapsed)
         total += n
+
+    if failed:
+        logger.warning(
+            "Tier 1 ingest: %d/%d norms failed",
+            len(failed),
+            len(targets),
+        )
+        for bcn_id, reason in failed:
+            logger.warning("  - %s: %s", bcn_id, reason)
 
     logger.info("done: %d total chunks across %d Tier 1 norms", total, len(targets))
     return 0

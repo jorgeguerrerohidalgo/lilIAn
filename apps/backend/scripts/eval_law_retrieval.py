@@ -58,8 +58,14 @@ def _get_token(base_url: str) -> str | None:
     if _TOKEN_CACHE["value"] and _TOKEN_CACHE["expires_at"] > time.monotonic():
         return _TOKEN_CACHE["value"]
     import os
-    username = os.environ.get("LILIAN_EVAL_USERNAME", "madneo710@gmail.com")
-    password = os.environ.get("LILIAN_EVAL_PASSWORD", "Test123!Abcd")
+    username = os.environ.get("LILIAN_EVAL_USERNAME")
+    password = os.environ.get("LILIAN_EVAL_PASSWORD")
+    if not username or not password:
+        logger.warning(
+            "LILIAN_EVAL_USERNAME / LILIAN_EVAL_PASSWORD not set; "
+            "eval will run unauthenticated (search results will be 401/empty)."
+        )
+        return None
     import httpx
     try:
         r = httpx.post(

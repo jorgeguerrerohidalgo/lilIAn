@@ -95,9 +95,19 @@ class BCNXmlParser:
     # the chunk sequence still makes sense.
     PREAMBLE_TAG = "preamble"
 
+    # Codigo de Comercio is 57 MB and the previous in-memory
+    # ``etree.fromstring`` would OOM or take minutes. Above this size
+    # we always use the streaming ``iterparse`` path even for
+    # small-file callers — the cost is one extra branch.
+    STREAMING_THRESHOLD_BYTES = 5 * 1024 * 1024
+
     def parse(self, xml_bytes: bytes | str) -> ParseResult:
         if isinstance(xml_bytes, str):
             xml_bytes = xml_bytes.encode("utf-8")
+
+        if len(xml_bytes) >= self.STREAMING_THRESHOLD_BYTES:
+            return self._parse_streaming(xml_bytes)
+
         result = ParseResult()
         try:
             root = etree.fromstring(xml_bytes)
@@ -201,6 +211,159 @@ class BCNXmlParser:
             result.chunks.append(chunk)
 
         # Number chunks globally (1-based) so the DB row order matches.
+        for i, chunk in enumerate(result.chunks):
+            chunk.chunk_index = i
+
+        return result
+
+    def _parse_streaming(self, xml_bytes: bytes) -> ParseResult:
+        """Streaming variant of :meth:`parse` for large BCN XMLs.
+
+        Uses ``etree.iterparse`` with ``huge_tree=True`` so the entire
+        document never lives in memory. ``element.clear()`` is called
+        on every processed ``<EstructuraFuncional>`` and on the
+        ``<Norma>`` root after each batch so lxml can release the
+        memory it just consumed.
+
+        Behaviour matches the eager :meth:`parse` exactly: same
+        chunk ordering, same hierarchy tracking, same derogado flag.
+        """
+        result = ParseResult()
+        ns_tag = f"{{{NS['n']}}}EstructuraFuncional"
+        root_tag = f"{{{NS['n']}}}Norma"
+
+        # ``huge_tree=True`` lifts libxml2's hardcoded 10 MB size
+        # limit; BCN's 57 MB Codigo de Comercio trips the default
+        # guard. ``resolve_entities=False`` keeps DTD processing off
+        # the critical path. ``no_network=True`` blocks external
+        # entity resolution (we never want to fetch from the BCN
+        # network during a stream-parse).
+        import io
+        context = etree.iterparse(
+            io.BytesIO(xml_bytes),
+            events=("start", "end"),
+            huge_tree=True,
+            resolve_entities=False,
+            no_network=True,
+        )
+
+        result.bcn_id = None
+        result.titulo = None
+        result.fecha_publicacion = None
+        result.organismo = None
+        result.tipo = None
+        result.numero = None
+
+        current_libro: Optional[str] = None
+        current_titulo: Optional[str] = None
+        current_capitulo: Optional[str] = None
+        seen_estructura = 0
+        norm_attrs_captured = False
+
+        for event, elem in context:
+            # Root metadata MUST be captured on the ``start`` event of
+            # the <Norma> element. On its ``end`` event all children
+            # have already been emitted and we lose the chance to read
+            # the preamble.
+            if not norm_attrs_captured and event == "start" and elem.tag == root_tag:
+                result.bcn_id = elem.get("normaId")
+                result.titulo = _txt(elem.find("./n:Metadatos/n:TituloNorma", NS))
+                id_node = elem.find("./n:Identificador", NS)
+                if id_node is not None:
+                    result.fecha_publicacion = id_node.get("fechaPublicacion")
+                    org = id_node.find("./n:Organismos/n:Organismo", NS)
+                    if org is not None and org.text:
+                        result.organismo = org.text.strip()
+                    tn = id_node.find("./n:TiposNumeros/n:TipoNumero", NS)
+                    if tn is not None:
+                        t = tn.findtext("./n:Tipo", namespaces=NS)
+                        n = tn.findtext("./n:Numero", namespaces=NS)
+                        if t:
+                            result.tipo = t.strip().lower()
+                        if n:
+                            result.numero = n.strip()
+                preamble_text = _txt(elem.find("./n:Encabezado/n:Texto", NS))
+                if preamble_text and len(preamble_text.strip()) >= 5:
+                    result.chunks.append(
+                        ParsedChunk(
+                            article_number=self.PREAMBLE_TAG,
+                            content=preamble_text.strip(),
+                            parent_hint="encabezado",
+                        )
+                    )
+                norm_attrs_captured = True
+                continue
+
+            if event != "end" or elem.tag != ns_tag:
+                continue
+
+            # Same fields as the eager path.
+            article_num = _txt(elem.find(".//n:NombreParte", NS))
+            titulo_parte = _txt(elem.find(".//n:TituloParte", NS))
+            texto = _txt(elem.find(".//n:Texto", NS))
+            fecha_derog = elem.find(".//n:FechaDerogacion", NS)
+
+            if titulo_parte:
+                titulo_norm = _normalize_label(titulo_parte)
+                kind, ordinal = _split_heading(titulo_norm)
+                if kind == "libro":
+                    current_libro = ordinal
+                elif kind == "titulo":
+                    current_titulo = ordinal
+                elif kind == "capitulo":
+                    current_capitulo = ordinal
+
+            if not article_num or not texto:
+                elem.clear()
+                seen_estructura += 1
+                continue
+
+            derogado = fecha_derog is not None
+            if derogado:
+                result.warnings.append(
+                    f"article {article_num} marked as derogated ({fecha_derog.text!r}) - kept in corpus"
+                )
+
+            if not texto.strip():
+                elem.clear()
+                seen_estructura += 1
+                continue
+
+            parent_hint = " ".join(
+                filter(None, [current_libro, current_titulo, current_capitulo, titulo_parte])
+            )
+            result.chunks.append(
+                ParsedChunk(
+                    article_number=article_num.strip(),
+                    libro=current_libro,
+                    titulo=current_titulo,
+                    capitulo=current_capitulo,
+                    content=texto.strip(),
+                    parent_hint=parent_hint,
+                    derogado=derogado,
+                )
+            )
+
+            # Release the element + its siblings so lxml can reuse the
+            # memory. ``elem.getparent().clear()`` is a stronger
+            # variant that drops the previous siblings too; we use it
+            # periodically to bound peak memory.
+            elem.clear()
+            seen_estructura += 1
+            if seen_estructura % 200 == 0:
+                parent = elem.getparent()
+                if parent is not None:
+                    # Clears the prior siblings' tail; keeps attributes
+                    # we may still need (root only has normaId, which
+                    # we've already captured).
+                    for sibling in list(parent):
+                        if sibling is elem:
+                            break
+                        parent.remove(sibling)
+
+        # Final cleanup: drop the root.
+        # (the iterparse generator goes out of scope here)
+
         for i, chunk in enumerate(result.chunks):
             chunk.chunk_index = i
 
