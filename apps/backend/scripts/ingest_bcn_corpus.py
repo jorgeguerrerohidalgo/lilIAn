@@ -53,15 +53,25 @@ LOCAL_DUMPS_DIR = Path(__file__).parent.parent / "data" / "legal_dumps"
 # tributario, consumidor) once we have eval baseline.
 # Tier 3 (después): discover via ``discover_bcn_catalog.py`` and
 # iterate over all ~6.000 normas.
+# Tier 1 — the BCN idNorma for each norm. Confirmed against the legacy
+# corpus and the BCN LeyChile endpoint.
+#
+# IMPORTANT: the BCN idNorma is not always the obvious "YYYY" — e.g.
+# the Ley 21.719 is idNorma=1209272 in BCN, NOT "21719". A wrong idNorma
+# would ingest a related-but-different norm (or an empty historical
+# stub) and explain nothing.
 TIER1_BCN_IDS: list[str] = [
-    "172986",  # Codigo Civil
-    "1984",    # Codigo Penal
-    "207436",  # Codigo del Trabajo
-    "22740",   # Codigo de Comercio
-    "176595",  # Codigo Procesal Penal (replaces "Procesal Civil" which is 57 MB)
-    "242302",  # Constitución Política
-    "21719",   # Ley 21.719 (Protección de Datos Personales)
-    "19628",   # Ley 19.628 derogada
+    "172986",   # Codigo Civil refundido (DFL 1 30-May-2000)
+    "1984",     # Codigo Penal refundido
+    "207436",   # Codigo del Trabajo refundido
+    "22740",    # Codigo de Comercio refundido (57 MB XML)
+    "176595",   # Codigo Procesal Penal refundido
+    "242302",   # Constitución Política refundida
+    "1209272",  # Ley 21.719 refundida (Protección de Datos Personales)
+    "19628",    # Ley 19.628 refundida
+    "18046",    # Ley 18.046 (Sociedad Anónima)
+    "19496",    # Ley 19.496 (Protección al Consumidor)
+]
 ]
 
 
