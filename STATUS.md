@@ -62,21 +62,45 @@ Recall@10 actual: 30% (6/20 PASS). Limitado por:
 
 ## Plan de correcciones pendientes
 
-### Prioridad 1 (sin tocar DB compartida)
-- P4: Migracion Alembic para agregar UNIQUE constraint en law_chunks (law_code, version_id, chunk_index)
-- P5: Quitar credenciales hardcoded de eval_law_retrieval.py
-- P8: Cambiar except Exception en _ingest_one por un log estructurado
+Orden por DEPENDENCIA, no por comodidad. Dos reglas que mandan sobre todo lo demas:
 
-### Prioridad 2 (requiere DB compartida)
-- P2: Actualizar golden-dataset-v2.json con idNorma BCN correctos (1209272 para 21.719, no 21719)
-- P1: Buscar idNorma refundido de 19.628 manualmente en https://www.bcn.cl/leychile/Navegar?idNorma=19628
-- P3: Implementar lxml.etree.iterparse con element.clear() para procesar el Codigo de Comercio
-- P6: Hacer que cmd_sync use --since para filtrar normas con updated_at > since
+1. **No re-ingestar antes de tener el UNIQUE constraint (P4).** Hoy law_chunks no lo tiene,
+   asi que correr fix_corpus_v4.sh duplica chunks en vez de reemplazarlos y el recall EMPEORA.
+2. **Medir antes de cambiar el corpus.** P2 es un mismatch de etiquetas, no de contenido.
+   Si re-ingestas primero, no vas a poder separar cuanto del recall era etiqueta y cuanto
+   era corpus faltante.
 
-### Prioridad 3 (Tier 2/3 completo)
-- Implementar discover_bcn_catalog.py con opt=3 paginado
-- Implementar cmd_ingest_tier2 para ingestar las 100 leyes mas citadas
-- Implementar cmd_ingest_all para ingestar las ~6.000 normas restantes
+### Fase 1 - Medicion limpia (no toca la DB, no bloquea con nadie)
+- P2: Actualizar golden-dataset-v2.json con idNorma BCN (1209272 para 21.719, no 21719)
+- Re-correr eval_law_retrieval -> este es el baseline REAL, no el 30% actual
+- Salida esperada: separa "recall perdido por etiqueta" de "recall perdido por corpus"
+
+### Fase 2 - Prerequisitos de re-ingest (bloquea la Fase 4)
+- P4: Migracion Alembic con UNIQUE en law_chunks (law_code, version_id, chunk_index)
+- P5: Quitar credenciales hardcoded de eval_law_retrieval.py:62
+- P8: Reemplazar el except Exception de _ingest_one por log estructurado
+  (mientras siga ahi, una ingesta fallida se ve igual que una exitosa)
+
+### Fase 3 - Contenido faltante (es lo unico que sube el recall de verdad)
+- P1: [BLOQUEANTE MANUAL - lo resuelve Jorge en el navegador]
+      Buscar el idNorma refundido de 19.628 en https://www.bcn.cl/leychile/Navegar?idNorma=19628
+      Ya se descarto por SPARQL, opt=7 (9 IDs) y opt=3 paginado. Requiere inspeccion visual.
+- P3: lxml.etree.iterparse + element.clear() en bcn_xml_parser.py para el Codigo de Comercio
+      (22740, 57 MB). Sin esto queda en 0 chunks para siempre.
+
+### Fase 4 - Re-ingest y validacion (solo despues de 2 y 3)
+- bash scripts/sh/fix_corpus_v4.sh
+- reindex de embeddings
+- eval final contra el criterio de exito
+
+### Fase 5 - Fuera del camino critico
+- P6: Hacer que cmd_sync respete --since (hoy re-corre todo Tier 1)
+- P7: Backoff en 429 para reindex_chunks.py
+
+### Fase 6 - Tier 2/3 completo
+- discover_bcn_catalog.py con opt=3 paginado
+- cmd_ingest_tier2 para las 100 leyes mas citadas
+- cmd_ingest_all para las ~6.000 normas restantes
 
 ## Plan de pruebas
 
@@ -183,18 +207,27 @@ Estado actual:
 - 22740 falla por ser archivo de 57 MB (P3)
 - Golden dataset v2 no actualizado con idNorma BCN (P2)
 
-Proximos pasos:
-1. Buscar idNorma refundido de 19.628 en BCN manualmente
-2. Actualizar golden-dataset-v2.json con idNorma correctos (1209272)
-3. Re-ingestar con script v4
-4. Re-correr eval
-5. Implementar parser streaming para Codigo de Comercio
-6. Agregar UNIQUE constraint
-7. Suite de tests completa
+Proximos pasos (ORDEN CORREGIDO - respeta dependencias):
+1. Actualizar golden-dataset-v2.json con idNorma correctos (1209272) y re-correr el eval.
+   Esto da el baseline REAL. Hacerlo ANTES de tocar el corpus, si no no se puede separar
+   cuanto del recall se pierde por etiqueta y cuanto por corpus faltante.
+2. Agregar UNIQUE constraint en law_chunks (Alembic). PREREQUISITO de cualquier re-ingest:
+   sin esto, correr fix_corpus_v4.sh duplica chunks y el recall empeora.
+3. Limpieza: quitar credenciales hardcoded (eval_law_retrieval.py:62) y el except Exception
+   de _ingest_one.
+4. Buscar el idNorma refundido de 19.628 en BCN a mano (bloqueante, lo hace Jorge).
+5. Parser streaming (iterparse) para el Codigo de Comercio (22740, 57 MB).
+6. RECIEN ACA: re-ingestar con el script v4 + reindex + eval final.
+7. Suite de tests completa.
+
+Nota: el orden viejo ponia el re-ingest en el paso 3 y el UNIQUE constraint en el 6.
+Eso estaba mal y duplicaba chunks.
 ```
 
 ## Advertencias importantes
 
+- **NO correr fix_corpus_v4.sh antes de agregar el UNIQUE constraint (P4).** law_chunks no lo
+  tiene todavia, asi que el re-ingest DUPLICA chunks en lugar de reemplazarlos y el recall baja
 - No re-correr el script v3 con delete seguido de re-ingest sin antes buscar el idNorma refundido de 19.628
 - El corpus va a quedar con un documento incorrecto (Decreto MINEDUC) en lugar de la Ley 19.628
 - El codigo de Comercio (22740) requiere parser streaming (iterparse) antes de poder re-ingestarse
