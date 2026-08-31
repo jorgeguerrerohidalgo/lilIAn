@@ -44,9 +44,46 @@ def _load_golden() -> list[dict]:
     return json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
 
 
-def _search_corpus(question: dict, top_k: int) -> list[dict]:
+_TOKEN_CACHE = {"value": None, "expires_at": 0.0}
+
+
+def _get_token(base_url: str) -> str | None:
+    """Login as the platform admin and return a bearer token.
+
+    Tokens last ~24h; we cache for the duration of the eval run.
+    Credentials come from the active user's environment so the script
+    works in any developer machine without hardcoding.
+    """
+    import time
+    if _TOKEN_CACHE["value"] and _TOKEN_CACHE["expires_at"] > time.monotonic():
+        return _TOKEN_CACHE["value"]
+    import os
+    username = os.environ.get("LILIAN_EVAL_USERNAME", "madneo710@gmail.com")
+    password = os.environ.get("LILIAN_EVAL_PASSWORD", "Test123!Abcd")
+    import httpx
+    try:
+        r = httpx.post(
+            f"{base_url}/api/v1/auth/login",
+            data={"username": username, "password": password},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10.0,
+        )
+        if r.status_code != 200:
+            logger.warning("login failed: %d %s", r.status_code, r.text[:200])
+            return None
+        _TOKEN_CACHE["value"] = r.json().get("access_token")
+        _TOKEN_CACHE["expires_at"] = time.monotonic() + 3600
+        return _TOKEN_CACHE["value"]
+    except Exception as exc:
+        logger.debug("login failed: %s", exc)
+        return None
+
+
+def _search_corpus(question: dict, top_k: int, base_url: str = "http://127.0.0.1:8765") -> list[dict]:
     """Call our own /api/v1/corpus/search via HTTPX. Falls back to a
     direct SQL query if the backend isn't running."""
+    token = _get_token(base_url)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         import httpx
         params = {"q": question["query"], "top_k": top_k}
@@ -54,10 +91,11 @@ def _search_corpus(question: dict, top_k: int) -> list[dict]:
             params["legal_area"] = question["legal_area"]
         if question.get("as_of"):
             params["as_of"] = question["as_of"]
-        r = httpx.post(
-            "http://localhost:8000/api/v1/corpus/search",
-            json=params,
-            timeout=10.0,
+        r = httpx.get(
+            f"{base_url}/api/v1/corpus/search",
+            params=params,
+            headers=headers,
+            timeout=30.0,
         )
         if r.status_code == 200:
             return r.json().get("chunks", [])
@@ -81,7 +119,7 @@ def evaluate(
     *,
     recall_k: int = DEFAULT_RECALL_K,
     threshold: float = DEFAULT_THRESHOLD,
-    base_url: str = "http://localhost:8000",
+    base_url: str = "http://127.0.0.1:8765",
 ) -> dict:
     """Run every question and compute recall@k per question.
 
@@ -93,7 +131,7 @@ def evaluate(
     results = []
     passed = 0
     for q in questions:
-        chunks = _search_corpus(q, top_k=recall_k)
+        chunks = _search_corpus(q, top_k=recall_k, base_url=base_url)
         expected_articles = _expected_article_set(q)
         expected_codes = _expected_law_codes(q)
 

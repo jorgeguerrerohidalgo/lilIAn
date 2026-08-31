@@ -63,7 +63,8 @@
     "id": 6,
     "query": "¿Cuáles son las causales de término del contrato de trabajo?",
     "expected_law_codes": [
-      "207436"
+      "207436",
+      "codigo_trabajo"
     ],
     "expected_articles": [
       "159",
@@ -77,7 +78,8 @@
     "id": 7,
     "query": "¿Qué dice el Código del Trabajo sobre feriado anual?",
     "expected_law_codes": [
-      "207436"
+      "207436",
+      "codigo_trabajo"
     ],
     "expected_articles": [
       "67",
@@ -96,7 +98,8 @@
     "id": 8,
     "query": "¿Cuál es el plazo de prescripción de las acciones laborales?",
     "expected_law_codes": [
-      "207436"
+      "207436",
+      "codigo_trabajo"
     ],
     "expected_articles": [
       "510"
@@ -108,7 +111,8 @@
     "id": 9,
     "query": "¿Cómo se calcula la indemnización por despido injustificado?",
     "expected_law_codes": [
-      "207436"
+      "207436",
+      "codigo_trabajo"
     ],
     "expected_articles": [
       "162",
@@ -130,7 +134,8 @@
     "id": 10,
     "query": "¿Qué dice el Código Civil sobre la lesión enorme en la compraventa?",
     "expected_law_codes": [
-      "172986"
+      "172986",
+      "dfl-1_30-may-2000"
     ],
     "expected_articles": [
       "1888",
@@ -149,7 +154,8 @@
     "id": 11,
     "query": "¿Cuál es el plazo para la acción redhibitoria?",
     "expected_law_codes": [
-      "172986"
+      "172986",
+      "dfl-1_30-may-2000"
     ],
     "expected_articles": [
       "1857",
@@ -171,7 +177,8 @@
     "id": 12,
     "query": "¿Qué regula el Código de Comercio sobre la sociedad anónima?",
     "expected_law_codes": [
-      "22740"
+      "22740",
+      "codigo_comercio"
     ],
     "expected_articles": [
       "424",
@@ -188,7 +195,8 @@
     "id": 13,
     "query": "¿Cómo se constituye una SA en Chile?",
     "expected_law_codes": [
-      "18046"
+      "18046",
+      "ley_18046"
     ],
     "expected_articles": [
       "126",
@@ -202,7 +210,8 @@
     "id": 14,
     "query": "¿Qué establece el Código Penal sobre el hurto?",
     "expected_law_codes": [
-      "1984"
+      "1984",
+      "codigo_penal"
     ],
     "expected_articles": [
       "432",
@@ -216,7 +225,8 @@
     "id": 15,
     "query": "¿Cuál es el plazo para la prescripción de la acción penal?",
     "expected_law_codes": [
-      "1984"
+      "1984",
+      "codigo_penal"
     ],
     "expected_articles": [
       "93",
@@ -238,7 +248,8 @@
     "id": 16,
     "query": "¿Qué dice la Ley del Consumidor sobre el derecho a retracto?",
     "expected_law_codes": [
-      "19496"
+      "19496",
+      "ley_proteccion_consumidor"
     ],
     "expected_articles": [
       "3 bis",
@@ -251,7 +262,8 @@
     "id": 17,
     "query": "¿Cuál es el procedimiento de fiscalización de la Dirección del Trabajo?",
     "expected_law_codes": [
-      "207436"
+      "207436",
+      "codigo_trabajo"
     ],
     "expected_articles": [
       "478",
@@ -266,7 +278,8 @@
     "id": 18,
     "query": "¿Qué era el Derecho a la Vida Privada según la Ley 19.628?",
     "expected_law_codes": [
-      "19628"
+      "19628",
+      "ley_19628"
     ],
     "expected_articles": [
       "1",
@@ -297,7 +310,8 @@
     "id": 20,
     "query": "¿Qué establece la Ley 19.628 sobre el consentimiento antes de la reforma?",
     "expected_law_codes": [
-      "19628"
+      "19628",
+      "ley_19628"
     ],
     "expected_articles": [
       "4"
