@@ -175,6 +175,9 @@ ingest_bcn_corpus.py con los idNorma BCN correctos: 172986, 1984, 207436, 22740,
 242302, 1209272, 19628 (que es incorrecto, devuelve Decreto MINEDUC), 18046, 19496.
 
 Estado actual:
+- Script de re-ingest v4 YA COMMITEADO en scripts/sh/fix_corpus_v4.sh (4fd2e37, en origin/main).
+  No hay que recrearlo. No usar el v3: tiene el idNorma 21719, el bug original.
+- Arbol de git limpio, HEAD en origin/main
 - 12.000 chunks en law_chunks, todos con embeddings
 - 19628 devuelve Decreto, no Ley 19.628 refundida (P1)
 - 22740 falla por ser archivo de 57 MB (P3)
