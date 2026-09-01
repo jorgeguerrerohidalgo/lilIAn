@@ -131,6 +131,53 @@ Orden por DEPENDENCIA, no por comodidad. Dos reglas que mandan sobre todo lo dem
 - Tests pytest pasando con coverage >= 80%
 - Cobertura de Tier 1 completa
 
+## Resultados de la re-ingesta (2026-08-31)
+
+### Re-ingest Tier 1 ejecutado
+- Script `scripts/sh/fix_corpus_v4.sh` (con TIER1 actualizado: 141599 en vez de 19628)
+- 9/10 normas ingestadas OK (3185 chunks nuevos)
+- 1/10 normas fallo: 172986 (Codigo Civil) por `article_number` > 64 chars
+- Fix: nueva migracion `widen_law_chunk_article_columns.py` (VARCHAR(50/64) -> VARCHAR(255))
+- Re-ingest 172986: 2843 chunks OK
+- Reindex de embeddings: 13904/13905 chunks con vector (1 fallo SSL irrecuperable)
+
+### Distribucion final del corpus Tier 1
+| idNorma | Ley | Chunks |
+|---|---|---|
+| 172986 | Codigo Civil | 2843 |
+| 1984 | Codigo Penal | 680 |
+| 207436 | Codigo del Trabajo | 739 |
+| 22740 | Codigo de Comercio | 933 (streaming) |
+| 176595 | Codigo Procesal Penal | 564 |
+| 242302 | Constitucion | 225 |
+| 1209272 | Ley 21.719 | 12 |
+| 141599 | Ley 19.628 (DICOM) | 28 |
+| 18046 | Ley 18.046 (S.A.) | 2 |
+| 19496 | Ley 19.496 (Consumidor) | 2 |
+
+### Recall: baseline vs final
+| top_k | recall | threshold |
+|---|---|---|
+| 5 (default) | 6/20 (30%) | 85% |
+| 20 (max endpoint) | 9/20 (45%) | 85% |
+
+### Diagnostico del techo de 45%
+Las 11 preguntas que fallan con top_k=20 caen en 3 categorias:
+1. **Cobertura insuficiente** (Q2, Q3, Q4, Q5, Q19): la 21.719 (1209272) tiene solo 12 chunks.
+   El refundido real de la BCN deberia tener ~50 articulos. Re-ingestar con mas profundidad
+   (no solo el chapter level) deberia bastar.
+2. **Chunks muy pequenos** (Q13, Q16): 18046 y 19496 tienen 2 chunks cada uno. Mismo problema.
+3. **Embedding retrieval no preciso** (Q14, Q17): la ley correcta aparece en top, pero el
+   articulo especifico no. Requiere hybrid search (BM25 + vector) o re-chunking.
+
+### Trabajo pendiente para llegar al 85%
+- **A corto plazo** (1 sesion):
+  - Re-ingestar 1209272, 141599, 18046, 19496 con `max_chunk_chars` mas chico para mas granularidad
+  - Activar hybrid search (BM25 + vector) en el endpoint - ya esta implementado en `rag.py`
+- **Mediano plazo** (multiples sesiones):
+  - Tier 2: las 100 leyes mas citadas (`cmd_ingest_tier2`)
+  - Tier 3: las 6.000 normas restantes (`cmd_ingest_all` + `discover_bcn_catalog.py`)
+
 ## Comandos para continuar
 
 ### Diagnosticar el estado actual
