@@ -83,6 +83,17 @@ TIER1_BCN_IDS: list[str] = [
     "19496",    # Ley 19.496 (Protección al Consumidor)
 ]
 
+# Some BCN idNormas don't match their law number: idNorma=19496 returns a
+# 3 KB Decreto "Feria Internacional del Salmón" instead of the Ley del
+# Consumidor. The same law number via BCN's ``idLey=`` parameter returns
+# the 300 KB consolidated text. We mark these here so ``_fetch_norm_xml``
+# routes them through :meth:`BCNHttpClient.fetch_law_xml` instead of
+# ``fetch_norm_xml``.
+TIER1_USE_IDLEY: set[str] = {
+    "19496",    # Ley 19.496 (Consumidor): idNorma points at unrelated Decreto
+    "18046",    # Ley 18.046 (S.A.): same pattern
+}
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -94,10 +105,18 @@ def _get_session_factory():
 
 
 def _fetch_norm_xml(bcn_id: str) -> Optional[bytes]:
-    """Download the BCN XML for ``bcn_id`` via the legacy obtxml endpoint."""
+    """Download the BCN XML for ``bcn_id`` via the legacy obtxml endpoint.
+
+    Routes through :meth:`BCNHttpClient.fetch_law_xml` (using the
+    ``idLey=`` parameter) for norms whose idNorma points at an unrelated
+    document — see :data:`TIER1_USE_IDLEY` for the current set.
+    """
     from scripts.bcn_http_client import BCNHttpClient
     client = BCNHttpClient()
-    content = client.fetch_norm_xml(bcn_id)
+    if bcn_id in TIER1_USE_IDLEY:
+        content = client.fetch_law_xml(bcn_id)
+    else:
+        content = client.fetch_norm_xml(bcn_id)
     if content is None:
         return None
     return content.encode("utf-8")

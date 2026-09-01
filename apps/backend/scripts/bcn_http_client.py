@@ -129,6 +129,45 @@ class BCNHttpClient:
         self._write_cache(self._norm_path(bcn_id), content)
         return content
 
+    def fetch_law_xml(self, law_number: str, *, force: bool = False) -> Optional[str]:
+        """Return the full XML text for a law identified by its short number.
+
+        BCN's ``Consulta/obtxml`` endpoint accepts two parameter styles:
+
+        - ``idNorma=<N>``  — a specific historical version of a norm
+        - ``idLey=<N>``    — the law itself, including ALL modifications
+                            accumulated up to today (the "refundido
+                            consolidado"). This is what we want for
+                            RAG coverage: the corpus needs the current
+                            consolidated text, not the original 1999
+                            publication of Ley 19.628.
+
+        Some idNormas return tiny XMLs (3 KB for the Ley del Consumidor
+        at idNorma=19496, which actually points at an unrelated Decreto
+        "Feria Internacional del Salmón"). Same number with ``idLey=``
+        returns the 300 KB consolidated law.
+
+        Cached under a separate key (``.law.<N>.xml``) so it doesn't
+        collide with the idNorma cache.
+        """
+        cache_key = f"law_{law_number}"
+        cached = self._read_cache(self._norm_path(cache_key), self.norm_cache_ttl)
+        if cached is not None and not force:
+            logger.debug("cache hit for law %s", law_number)
+            return cached
+
+        url = self._build_url(opt=7, params={"idLey": law_number})
+        content = self._get(url, accept="application/xml, text/xml")
+        if content is None:
+            return None
+
+        if "<Norma " not in content:
+            logger.warning("BCN response for idLey=%s is not a valid Norma", law_number)
+            return None
+
+        self._write_cache(self._norm_path(cache_key), content)
+        return content
+
     def fetch_catalog_page(self, offset: int, limit: int = 100) -> Optional[str]:
         """Return the ``opt=3`` feed for a single offset/limit window.
 

@@ -105,7 +105,7 @@ def search_corpus(
     from app.services.embeddings import get_embedding_provider
     from app.services.rag import (
         search_laws_by_embedding,
-        search_chunks_by_keyword,
+        search_laws_by_keyword,
         _RRF_K_DEFAULT,
     )
 
@@ -135,8 +135,8 @@ def search_corpus(
         except Exception:
             embedding_results = []
 
-    keyword_results = search_chunks_by_keyword(
-        q, organization_id=0, matter_id=0, top_k=top_k * 3,
+    keyword_results = search_laws_by_keyword(
+        q, top_k=top_k * 3,
         legal_area=legal_area, as_of=as_of, libro=libro, capitulo=capitulo,
     )
 

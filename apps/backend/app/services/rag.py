@@ -318,6 +318,109 @@ def search_laws_by_embedding(
         db.close()
 
 
+def search_laws_by_keyword(
+    query: str,
+    top_k: int = 10,
+    legal_area=None,
+    as_of=None,
+    libro: str | None = None,
+    capitulo: str | None = None,
+) -> list[dict]:
+    """Full-text search on ``law_chunks`` for the corpus legal.
+
+    Uses Postgres ``to_tsvector`` / ``to_tsquery`` (Spanish config) on
+    ``content`` so articles with exact keyword matches rank above
+    vector-only neighbors. Returns chunks ordered by ``ts_rank_cd``.
+
+    Complements :func:`search_laws_by_embedding` in the hybrid-search
+    flow: the endpoint calls both and merges with RRF.
+
+    The query is sanitized so a single bad token (e.g. ``&``) doesn't
+    raise — we strip non-alnum and rebuild with ``&`` between tokens.
+    Empty after sanitization returns ``[]`` so callers can short-circuit
+    the keyword half of the RRF.
+    """
+    if not LAW_CHUNKS_AVAILABLE:
+        return []
+
+    import re as _re
+    tokens = [
+        t for t in _re.findall(r"[a-záéíóúñü0-9]+", query.lower())
+        if len(t) >= 3
+    ]
+    if not tokens:
+        return []
+
+    tsquery = " & ".join(tokens)
+
+    db = SessionLocal()
+    try:
+        sql = """
+            SELECT id, content, law_code, law_name, article_number,
+                   ts_rank_cd(
+                       to_tsvector('spanish', content),
+                       to_tsquery('spanish', :q)
+                   ) AS rank
+              FROM law_chunks
+             WHERE to_tsvector('spanish', content) @@ to_tsquery('spanish', :q)
+               {legal_area_clause}
+               {temporal_clause}
+               {libro_clause}
+               {capitulo_clause}
+             ORDER BY rank DESC
+             LIMIT :k
+        """
+
+        legal_area_clause = (
+            "AND legal_area = :legal_area" if legal_area is not None else ""
+        )
+        temporal_clause = ""
+        libro_clause = ""
+        capitulo_clause = ""
+        params: dict = {"q": tsquery, "k": top_k}
+        if legal_area is not None:
+            params["legal_area"] = (
+                legal_area.value if hasattr(legal_area, "value") else legal_area
+            )
+        if as_of is not None:
+            temporal_clause = (
+                "AND version_id IN ("
+                "  SELECT id FROM law_chunk_versions v"
+                "  WHERE v.valid_from <= :as_of"
+                "    AND (v.valid_until IS NULL OR v.valid_until > :as_of)"
+                ")"
+            )
+            params["as_of"] = as_of
+        if libro:
+            libro_clause = "AND libro = :libro"
+            params["libro"] = libro
+        if capitulo:
+            capitulo_clause = "AND capitulo = :capitulo"
+            params["capitulo"] = capitulo
+
+        sql = sql.format(
+            legal_area_clause=legal_area_clause,
+            temporal_clause=temporal_clause,
+            libro_clause=libro_clause,
+            capitulo_clause=capitulo_clause,
+        )
+
+        rows = db.execute(text(sql), params).fetchall()
+        return [
+            {
+                "chunk_id": row[0],
+                "content": row[1],
+                "law_code": row[2],
+                "law_name": row[3],
+                "article_number": row[4],
+                "keyword_rank": float(row[5]),
+            }
+            for row in rows
+        ]
+    finally:
+        db.close()
+
+
 _RRF_K_DEFAULT = 60  # Constante típica para Reciprocal Rank Fusion
 
 
