@@ -3,6 +3,32 @@
 > Documento de estado para reanudar trabajo en nueva sesion.
 > Ultima actualizacion: 2026-09-01 (sesion extendida)
 
+## Handover rapido (leer primero)
+
+```
+# STATUS - Sesion 2026-09-01
+
+Trabajando en la rama `corpus/fix-refundidos-and-hybrid` (1 commit pusheado,
+no mergeado). PR: https://github.com/jorgeguerrerohidalgo/lilIAn/pull/new/corpus/fix-refundidos-and-hybrid
+
+Plan A completado: idLey= para 19496 y 18046. 19496: 2->149 chunks, 18046: 2->177.
+Plan B completado: search_laws_by_keyword + RRF en endpoint. Recall 45% con top_k=20.
+
+NO commitear a main todavia. Mergear la rama primero (review de 30 min).
+
+Siguiente accion recomendada: mergear la rama, luego agregar GIN index en
+to_tsvector(content) en law_chunks para bajar el keyword search de 10s a <100ms.
+
+Bug conocido: 1209272 (Ley 21.719) solo tiene 12 chunks. La refundida completa
+NO esta en BCN todavia. Imposible mejorar Q2-Q5, Q19 sin otra fuente.
+
+Comandos clave:
+- Eval: LILIAN_EVAL_USERNAME=... LILIAN_EVAL_PASSWORD=... .venv_test/bin/python -m scripts.eval_law_retrieval --k=20
+- Ver corpus: SELECT law_code, COUNT(*) FROM law_chunks GROUP BY law_code
+```
+
+---
+
 ## Contexto rapido
 
 Lilian es una plataforma SaaS legal chilena. El corpus legal vive en Supabase
@@ -208,26 +234,7 @@ curl -s "https://www.bcn.cl/leychile/Consulta/obtxml?opt=7&idNorma=19496" | head
    top_k=20. Pero el golden pide 2+ articulos por pregunta en top-20, y
    eso requiere corpus mas granular o mas normas.
 
-## Bloque de handover (pegar al inicio de sesion nueva)
+## Bloque de handover (ahora al inicio del documento)
 
-```
-# STATUS - Sesion 2026-09-01
-
-Trabajando en la rama `corpus/fix-refundidos-and-hybrid` (1 commit pusheado,
-no mergeado). PR: https://github.com/jorgeguerrerohidalgo/lilIAn/pull/new/corpus/fix-refundidos-and-hybrid
-
-Plan A completado: idLey= para 19496 y 18046. 19496: 2->149 chunks, 18046: 2->177.
-Plan B completado: search_laws_by_keyword + RRF en endpoint. Recall 45% con top_k=20.
-
-NO commitear a main todavia. Mergear la rama primero (review de 30 min).
-
-Siguiente accion recomendada: mergear la rama, luego agregar GIN index en
-to_tsvector(content) en law_chunks para bajar el keyword search de 10s a <100ms.
-
-Bug conocido: 1209272 (Ley 21.719) solo tiene 12 chunks. La refundida completa
-NO esta en BCN todavia. Imposible mejorar Q2-Q5, Q19 sin otra fuente.
-
-Comandos clave:
-- Eval: LILIAN_EVAL_USERNAME=... LILIAN_EVAL_PASSWORD=... .venv_test/bin/python -m scripts.eval_law_retrieval --k=20
-- Ver corpus: SELECT law_code, COUNT(*) FROM law_chunks GROUP BY law_code
-```
+El bloque de handover rapido vive al principio de este archivo. Ver
+`## Handover rapido (leer primero)` arriba.
