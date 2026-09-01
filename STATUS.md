@@ -1,31 +1,43 @@
 # STATUS - Corpus Legal Chileno
 
 > Documento de estado para reanudar trabajo en nueva sesion.
-> Ultima actualizacion: 2026-09-01 (sesion extendida)
+> Ultima actualizacion: 2026-09-01 (sesion extendida + verificacion parser)
 
 ## Handover rapido (leer primero)
 
 ```
-# STATUS - Sesion 2026-09-01
+# STATUS - Sesion 2026-09-01 PM
 
-main tiene Plan A + Plan B commiteado y pusheado (commits 2fc39a1, 3838962,
-698b301). Backend en :8765 con codigo nuevo. DB: 14227 chunks, 13900 con
-embeddings.
+Plan A+B ya mergeado a main (commits: 2fc39a1, 3838962, 698b301, 752dffa,
+14514fc). GIN index migration 035 creado, idempotente. Keyword search:
+~10s -> ~200ms (50x). DB: 14227 chunks, 13900 con embeddings.
 
-Recall 45% con top_k=20 (Q1,Q6-Q12,Q15). Fallan Q2-Q5,Q19 (1209272 sin
-refundida), Q13-14,Q16-17 (articulos especificos no llegan al top), Q18,Q20.
+Backend en :8765 con codigo nuevo. Working tree limpio en main.
 
-GIN index ya creado (migration 035). Keyword search: ~10s -> ~200ms.
+Recall 45% con top_k=20 (Q1, Q6-Q12, Q15). Fallan Q2-Q5,Q19 (1209272 sin
+refundida en BCN), Q13-14,Q16-17 (articulos especificos), Q18,Q20.
 
-Proximo: parser fix (tipoParte fallback) en `bcn_xml_parser.py`. Despues
-Tier 2 (100 leyes), Tier 3 (6k normas), re-chunking granular.
+Parser verificado correcto - 0 articulos perdidos en las 14 leyes
+cacheadas. Los elementos "saltados" son headings (LIBRO/TITULO/CAPITULO)
+que no son articulos. Task #3 del plan original es no-op.
 
-Bug conocido: 1209272 (Ley 21.719) solo tiene 12 chunks. La refundida completa
-NO esta en BCN todavia. Imposible mejorar Q2-Q5, Q19 sin otra fuente.
+Pendiente:
+- Tier 2 (100 leyes mas citadas) - palanca grande de recall
+- Tier 3 (~6k normas restantes)
+- Re-chunking mas granular (2200 -> 800 chars)
+- Opcional: refactor parser (deduplicar logica eager vs streaming)
+
+Bug conocido: 1209272 (Ley 21.719) solo tiene 12 chunks. La refundida
+completa NO esta en BCN todavia. Imposible mejorar Q2-Q5, Q19 sin otra
+fuente.
 
 Comandos clave:
-- Eval: LILIAN_EVAL_USERNAME=... LILIAN_EVAL_PASSWORD=... .venv_test/bin/python -m scripts.eval_law_retrieval --k=20
-- Ver corpus: SELECT law_code, COUNT(*) FROM law_chunks GROUP BY law_code
+- Eval: LILIAN_EVAL_USERNAME=... LILIAN_EVAL_PASSWORD=...
+         cd apps/backend && .venv_test/bin/python -m scripts.eval_law_retrieval --k=20
+- Ver corpus:
+  .venv_test/bin/python -c "from app.core.database import SessionLocal; from sqlalchemy import text; s = SessionLocal(); print(s.execute(text('SELECT law_code, COUNT(*) FROM law_chunks GROUP BY law_code ORDER BY law_code')).all()); s.close()"
+- Re-ingestar una ley:
+  cd apps/backend && .venv_test/bin/python -m scripts.ingest_bcn_corpus --law <id>
 ```
 
 ---
@@ -113,9 +125,14 @@ Ruteo via `TIER1_USE_IDLEY` en `ingest_bcn_corpus.py:TIER1_BCN_IDS`.
 - 1209272 (21.719) con idLey da el MISMO XML que idNorma (12 articulos).
   BCN no expone la refundida completa de la 21.719 todavia (entra en
   vigencia escalonada hasta 2026-12-01).
-- 141599 (19.628) con idLey da 35 EstructuraFuncional; el parser extrae
+- ~~141599 (19.628) con idLey da 35 EstructuraFuncional; el parser extrae
   28 chunks. Los 7 que se pierden son los que tienen `tipoParte="Articulo"`
-  sin `<NombreParte>` hijo o con nombre huerfano.
+  sin `<NombreParte>` hijo o con nombre huerfano.~~ **CORREGIDO 1 Sep PM:**
+  los 7-8 elementos saltados en 141599 (y todos los similares en las otras
+  13 leyes cacheadas) son container headings `tipoParte="Título"` (LIBRO/
+  TITULO/CAPITULO/Disposicion Transitoria) con `<NombreParte>\xa0</NombreParte>`
+  (placeholder BCN para elementos no numerados). NO son articulos y el
+  parser los salta correctamente. Ver "Sesion 2026-09-01 PM" mas abajo.
 
 ## Plan B: hybrid search implementado
 
@@ -166,10 +183,17 @@ Ruteo via `TIER1_USE_IDLEY` en `ingest_bcn_corpus.py:TIER1_BCN_IDS`.
    7s, 2.8 MB. Keyword search: ~10s -> ~200ms. Prerequisito de Tier 2/3
    cumplido.
 
-3. **Mejorar el parser para que use `tipoParte` atributo como fallback**
-   cuando no hay `<NombreParte>` hijo. Hoy pierde ~7 articulos de la 19.628
-   y unos cuantos de otras leyes. Cambio chico en `bcn_xml_parser.py`
-   (~20 lineas).
+3. ~~**Mejorar el parser para que use `tipoParte` atributo como fallback**~~
+   - DESCARTADO 1 Sep PM. Verificacion transversal de las 14 leyes
+   cacheadas: **0 articulos perdidos** por falta de NombreParte. Los
+   elementos saltados son container headings (LIBRO/TITULO/CAPITULO) que
+   el parser rechaza correctamente. No hay fix que aplicar.
+
+   **Opcional (no urgente):** refactor de `bcn_xml_parser.py`. La logica
+   de extraccion de articulos esta duplicada entre `parse()` (line 104)
+   y `_parse_streaming()` (line 219). Extraer a un helper compartido baja
+   el riesgo de divergencias futuras. ~50 lineas tocadas. NO cambia
+   comportamiento.
 
 ### Mediano plazo (multiples sesiones)
 4. **Tier 2 — las 100 leyes mas citadas.** `cmd_ingest_tier2`. El endpoint
@@ -230,6 +254,59 @@ curl -s "https://www.bcn.cl/leychile/Consulta/obtxml?opt=7&idNorma=19496" | head
    leyes.** El BM25 vector+keyword juntos suben el recall 9 puntos con
    top_k=20. Pero el golden pide 2+ articulos por pregunta en top-20, y
    eso requiere corpus mas granular o mas normas.
+6. **El parser NO pierde articulos.** Verificacion cruzada de las 14 leyes
+   cacheadas (Sep 1 PM): 0 elementos con `tipoParte="Articulo"` sin
+   `<NombreParte>`. La diferencia XML->chunks se explica enteramente por
+   container headings (LIBRO/TITULO/CAPITULO). Antes de asumir que el
+   parser pierde algo, verificar con el script de "Distribucion" abajo.
+
+## Sesion 2026-09-01 PM — trabajo completado
+
+| # | Accion | Resultado | Commit |
+|---|---|---|---|
+| 1 | Reorganizar STATUS.md: handover block del final al inicio | Bloque de handover visible al abrir | `698b301` |
+| 2 | Mergear `corpus/fix-refundidos-and-hybrid` a main (ff) | Plan A+B en produccion, backend :8765 ok | fast-forward de `2fc39a1`, `3838962`, `698b301` |
+| 3 | Crear GIN index `law_chunks_tsv_idx` en `to_tsvector('spanish', content)` | Keyword search ~10s -> ~200ms (50x). EXPLAIN: Bitmap Index Scan | `752dffa` + migration `035_law_chunks_tsv_idx.sql` |
+| 4 | Verificar parser transversalmente (14 leyes cacheadas) | 0 articulos perdidos. Task #3 descartado. | (solo doc) |
+
+### Distribucion de elementos por ley (verificacion parser)
+
+```
+normaId   | EF en XML | Chunks emitidos | no_np+articulo (lost articles)
+----------|-----------|-----------------|--------------------------------
+1209272   |     12    |       12        |   0
+141599    |     35    |       28        |   0
+176595    |    656    |      564        |   0
+ 1984     |    798    |      680        |   0
+207436    |    854    |      739        |   0
+242302    |    269    |      225        |   0
+ 29473    |    193    |      177        |   0
+ 61438    |    170    |      149        |   0
+172986    |   3151    |     2843        |   0
+18046*    |      1    |        2        |   0  (idLey, contenido refundido)
+19496*    |      1    |        2        |   0  (idLey, contenido refundido)
+19628     |      1    |        2        |   0  (idNorma equivocado, antes del fix)
+ 21719    |      1    |        2        |   0  (idNorma equivocado, antes del fix)
+```
+
+(*) Para 18046/19496/19628/21719 los XMLs cacheados son los idNorma
+equivocados (Decretos sin articulos). El idLey correspondiente esta en DB.
+
+**Conclusión:** la diferencia entre "EF en XML" y "chunks emitidos" se
+explica por container headings (LIBRO/TITULO/CAPITULO/Disposicion
+Transitoria) con `<NombreParte>\xa0</NombreParte>` (placeholder BCN).
+Estos son marcadores estructurales, NO articulos, y el parser los salta
+correctamente.
+
+### Pendiente para proxima sesion
+
+1. **Tier 2 — 100 leyes mas citadas.** Mayor palanca de recall.
+   Dependencia: GIN index (listo).
+2. **Tier 3 — ~6k normas restantes.** Multiples sesiones.
+3. **Re-chunking granular** (2200 -> 800 chars). Mas chunks por ley,
+   mas chances de que un articulo especifico llegue al top-k.
+4. **Opcional:** refactor de `bcn_xml_parser.py` para deduplicar logica
+   `parse()` vs `_parse_streaming()`. No cambia comportamiento.
 
 ## Bloque de handover (ahora al inicio del documento)
 
