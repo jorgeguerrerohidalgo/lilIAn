@@ -8,16 +8,17 @@
 ```
 # STATUS - Sesion 2026-09-01
 
-Trabajando en la rama `corpus/fix-refundidos-and-hybrid` (1 commit pusheado,
-no mergeado). PR: https://github.com/jorgeguerrerohidalgo/lilIAn/pull/new/corpus/fix-refundidos-and-hybrid
+main tiene Plan A + Plan B commiteado y pusheado (commits 2fc39a1, 3838962,
+698b301). Backend en :8765 con codigo nuevo. DB: 14227 chunks, 13900 con
+embeddings.
 
-Plan A completado: idLey= para 19496 y 18046. 19496: 2->149 chunks, 18046: 2->177.
-Plan B completado: search_laws_by_keyword + RRF en endpoint. Recall 45% con top_k=20.
+Recall 45% con top_k=20 (Q1,Q6-Q12,Q15). Fallan Q2-Q5,Q19 (1209272 sin
+refundida), Q13-14,Q16-17 (articulos especificos no llegan al top), Q18,Q20.
 
-NO commitear a main todavia. Mergear la rama primero (review de 30 min).
+GIN index ya creado (migration 035). Keyword search: ~10s -> ~200ms.
 
-Siguiente accion recomendada: mergear la rama, luego agregar GIN index en
-to_tsvector(content) en law_chunks para bajar el keyword search de 10s a <100ms.
+Proximo: parser fix (tipoParte fallback) en `bcn_xml_parser.py`. Despues
+Tier 2 (100 leyes), Tier 3 (6k normas), re-chunking granular.
 
 Bug conocido: 1209272 (Ley 21.719) solo tiene 12 chunks. La refundida completa
 NO esta en BCN todavia. Imposible mejorar Q2-Q5, Q19 sin otra fuente.
@@ -130,8 +131,9 @@ Ruteo via `TIER1_USE_IDLEY` en `ingest_bcn_corpus.py:TIER1_BCN_IDS`.
 - Cambio: usa `search_laws_by_keyword` (en vez de `search_chunks_by_keyword`
   que iba contra `document_chunks`).
 
-**Performance:** keyword search tarda ~10s por query sobre 14k chunks
-(sin GIN index). Aceptable para piloto, mejorable.
+**Performance:** con GIN index en `to_tsvector('spanish', content)`
+(`migration 035_law_chunks_tsv_idx.sql`), el keyword search baja de ~10s a
+~200ms (50x). El EXPLAIN confirma `Bitmap Index Scan on law_chunks_tsv_idx`.
 
 ## Recall baseline y techo
 
@@ -153,21 +155,16 @@ Ruteo via `TIER1_USE_IDLEY` en `ingest_bcn_corpus.py:TIER1_BCN_IDS`.
 
 ## Proximos pasos (en orden recomendado)
 
-### Inmediato (10 min)
-1. **Mergear la rama `corpus/fix-refundidos-and-hybrid` a main.** Los cambios
-   son aditivos: el endpoint ya tenia la fusion RRF armada, solo cambio la
-   fuente del keyword. El hybrid funciona, el recall subio 9 puntos con
-   top_k=20. Review de 30 min, merge, listo.
+### Inmediato (10 min) - COMPLETADO 1 Sep
+1. ~~**Mergear la rama `corpus/fix-refundidos-and-hybrid` a main.**~~
+   Merged via fast-forward (`698b301`, `3838962`, `2fc39a1`). main ahora
+   tiene Plan A + Plan B en produccion.
 
 ### Corto plazo (1 sesion, ~3-4 h)
-2. **GIN index en `to_tsvector(content)`** en `law_chunks`. El keyword search
-   tarda ~10s por query. Con GIN index baja a <100ms. Prerequisito para
-   Tier 2/3 (que va a multiplicar el corpus por 5-10x).
-
-   ```sql
-   CREATE INDEX law_chunks_tsv_idx ON law_chunks
-     USING gin (to_tsvector('spanish', content));
-   ```
+2. ~~**GIN index en `to_tsvector(content)`**~~ - COMPLETADO 1 Sep.
+   `migration 035_law_chunks_tsv_idx.sql` (idempotente). Index creado en
+   7s, 2.8 MB. Keyword search: ~10s -> ~200ms. Prerequisito de Tier 2/3
+   cumplido.
 
 3. **Mejorar el parser para que use `tipoParte` atributo como fallback**
    cuando no hay `<NombreParte>` hijo. Hoy pierde ~7 articulos de la 19.628
@@ -177,7 +174,7 @@ Ruteo via `TIER1_USE_IDLEY` en `ingest_bcn_corpus.py:TIER1_BCN_IDS`.
 ### Mediano plazo (multiples sesiones)
 4. **Tier 2 — las 100 leyes mas citadas.** `cmd_ingest_tier2`. El endpoint
    de `discover_bcn_catalog.py` con opt=3 paginado ya esta parcialmente
-   implementado.
+   implementado. Depende de GIN index (ya listo).
 
 5. **Tier 3 — las ~6.000 normas restantes.** `cmd_ingest_all`. Esta es la
    unica palanca grande para subir el recall.
