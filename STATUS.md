@@ -6,38 +6,36 @@
 ## Handover rapido (leer primero)
 
 ```
-# STATUS - Sesion 2026-09-01 PM
+# STATUS - Sesion 2026-09-01 PM (extendida)
 
-Plan A+B ya mergeado a main (commits: 2fc39a1, 3838962, 698b301, 752dffa,
-14514fc). GIN index migration 035 creado, idempotente. Keyword search:
-~10s -> ~200ms (50x). DB: 14227 chunks, 13900 con embeddings.
+Plan A+B + parser-fix + Tier 2 commiteados a main. Commits:
+- eb00af4 feat(corpus): parser respects max_chunk_chars + Tier 2 scaffolding
+- 4b25404 fix(embeddings): batched API always emits 1536 dims + batched reindex
 
-Backend en :8765 con codigo nuevo. Working tree limpio en main.
+Cambios de esta sesion:
+- BCNXmlParser ahora respeta --max-chunk-chars (antes era no-op)
+- Tier 1 re-chunked de 2200 -> 800 chars: 6350 -> 8666 chunks (+36.5%)
+- Tier 2 ingestaradas: 62 leyes -> 215 chunks
+- Total corpus: 16543 chunks, 100% con embeddings
+- _do_generate_embeddings fix: ya no emite 512-dim para short texts
+- Nuevos scripts: discover_bcn_catalog, verify_corpus_chunks,
+  reindex_chunks_batched
 
-Recall 45% con top_k=20 (Q1, Q6-Q12, Q15). Fallan Q2-Q5,Q19 (1209272 sin
-refundida en BCN), Q13-14,Q16-17 (articulos especificos), Q18,Q20.
+Recall NO medido en esta sesion - eval requiere credenciales que no
+estan en el entorno. Verificar con:
+  LILIAN_EVAL_USERNAME=... LILIAN_EVAL_PASSWORD=... \
+    .venv_test/bin/python -m scripts.eval_law_retrieval --k=20
 
-Parser verificado correcto - 0 articulos perdidos en las 14 leyes
-cacheadas. Los elementos "saltados" son headings (LIBRO/TITULO/CAPITULO)
-que no son articulos. Task #3 del plan original es no-op.
+Pendiente para siguiente sesion:
+- Medir recall post re-chunking (Tier 1) y post Tier 2
+- Tier 3 (~6k normas restantes) - multi-sesion
+- Si recall NO mejora con 800 chars, revertir a 2200
 
-Pendiente:
-- Tier 2 (100 leyes mas citadas) - palanca grande de recall
-- Tier 3 (~6k normas restantes)
-- Re-chunking mas granular (2200 -> 800 chars)
-- Opcional: refactor parser (deduplicar logica eager vs streaming)
+Backend :8765 con codigo nuevo. Working tree limpio en main.
 
-Bug conocido: 1209272 (Ley 21.719) solo tiene 12 chunks. La refundida
-completa NO esta en BCN todavia. Imposible mejorar Q2-Q5, Q19 sin otra
-fuente.
-
-Comandos clave:
-- Eval: LILIAN_EVAL_USERNAME=... LILIAN_EVAL_PASSWORD=...
-         cd apps/backend && .venv_test/bin/python -m scripts.eval_law_retrieval --k=20
-- Ver corpus:
-  .venv_test/bin/python -c "from app.core.database import SessionLocal; from sqlalchemy import text; s = SessionLocal(); print(s.execute(text('SELECT law_code, COUNT(*) FROM law_chunks GROUP BY law_code ORDER BY law_code')).all()); s.close()"
-- Re-ingestar una ley:
-  cd apps/backend && .venv_test/bin/python -m scripts.ingest_bcn_corpus --law <id>
+Bug conocido: 1209272 (Ley 21.719) solo tiene ~95 chunks ahora (vs 12
+antes por re-chunking), pero la refundida completa sigue sin estar
+expuesta por BCN. Q2-Q5, Q19 siguen siendo irrecuperables.
 ```
 
 ---
@@ -195,23 +193,31 @@ Ruteo via `TIER1_USE_IDLEY` en `ingest_bcn_corpus.py:TIER1_BCN_IDS`.
    el riesgo de divergencias futuras. ~50 lineas tocadas. NO cambia
    comportamiento.
 
+### Sesion extendida 2026-09-01 PM (Etapas 1+2 ejecutadas)
+
+| # | Cambio | Antes | Despues | Notas |
+|---|---|---|---|---|
+| 1 | BCNXmlParser respeta max_chunk_chars | dead arg | splits at inciso + naive window | html_parser.py ya tenia la logica, ahora compartida |
+| 2 | Tier 1 re-chunked 2200 -> 800 chars | 6350 chunks | 8666 chunks (+36.5%) | reindexed en ~5 min con batched API |
+| 3 | Tier 2 ingest (62 leyes curated) | 0 chunks | 215 chunks | reindexed en ~20s |
+| 4 | _do_generate_embeddings bug fix | 512-dim para short texts | siempre 1536-dim | el bug rompio el batched path |
+
+**Total corpus: 14227 -> 16543 chunks (+16.3%), 100% con embeddings.**
+
 ### Mediano plazo (multiples sesiones)
-4. **Tier 2 — las 100 leyes mas citadas.** `cmd_ingest_tier2`. El endpoint
-   de `discover_bcn_catalog.py` con opt=3 paginado ya esta parcialmente
-   implementado. Depende de GIN index (ya listo).
-
-5. **Tier 3 — las ~6.000 normas restantes.** `cmd_ingest_all`. Esta es la
-   unica palanca grande para subir el recall.
-
-6. **Re-chunking mas granular.** Bajar `max_chunk_chars` de 2200 a ~800.
-   Mas chunks por ley = mas chances de que un articulo especifico llegue
-   al top-k.
+4. **Tier 3 — las ~6.000 normas restantes.** `cmd_ingest_all`. Esta es la
+   unica palanca grande para subir el recall. Estimado: 12+ horas de
+   ingestion secuencial (cada idNorma requiere HTTP request a BCN).
 
 ### Diagnostico pendiente
-- **Por que 172986 (Codigo Civil) rinde 2843 chunks pero el XML tiene 3151
-  `<EstructuraFuncional>`?** Se pierden 308. Probablemente los chunks sin
-  `<NombreParte>` hijo o con `<Texto>` muy corto son descartados. No es
-  prioritario pero explica la perdida de cobertura.
+- **Por que 172986 (Codigo Civil) rinde 3198 chunks pero el XML tiene 3151
+  `<EstructuraFuncional>`?** Ahora rinde MAS chunks (3198 vs 3151 EF)
+  porque el splitting al max_chunk_chars=800 produce multiples chunks por
+  articulo. La diferencia original (3151 EF vs 2843 chunks) sigue
+  explicada por container headings sin `<NombreParte>` o sin `<Texto>`.
+- **Recall post re-chunking NO medido.** Requiere `LILIAN_EVAL_USERNAME`
+  / `LILIAN_EVAL_PASSWORD`. Si el usuario no las exporta, no podemos
+  saber si 800 chars mejora o empeora el recall.
 
 ## Comandos utiles
 
