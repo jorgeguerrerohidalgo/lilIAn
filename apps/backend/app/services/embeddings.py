@@ -135,16 +135,16 @@ class OpenAIEmbedding(EmbeddingProvider):
     def _do_generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Internal method that makes the actual API call."""
         truncated_texts = [(text[:8000] if text else "") for text in texts]
-        # If all texts are short, request the short dimensionality in one call.
-        all_short = all(
-            t and len(t) < self._short_threshold for t in texts
-        )
         body: dict = {
             "input": truncated_texts,
             "model": self.model,
         }
-        if all_short and self._dim_short != 1536:
-            body["dimensions"] = self._dim_short
+        # Always request the default dimensionality (1536) — the corpus
+        # pgvector column is fixed-size and rejects mismatched vectors.
+        # The single-text path enforces this via ``_dimensions_for``
+        # returning the default; the batched path used to switch to a
+        # 512-dim shortcut for short texts which broke inserts into
+        # ``law_chunks``. See STATUS notes from 2026-09-01.
 
         response = httpx.post(
             "https://api.openai.com/v1/embeddings",
