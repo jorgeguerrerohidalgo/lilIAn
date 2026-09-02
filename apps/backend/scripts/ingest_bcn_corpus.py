@@ -33,7 +33,6 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -135,7 +134,6 @@ def _ingest_one(
 ) -> int:
     """Ingest a single norm end-to-end. Returns the number of chunks written."""
     from scripts.db_writer import DBWriter
-    from scripts.html_parser import HierarchicalParser
 
     SessionLocal = _get_session_factory()
     try:
@@ -152,7 +150,7 @@ def _ingest_one(
     # (Diario Oficial PDFs converted to text, etc.) — see
     # ``ingest_law_21719.py`` for the historical text-dump path.
     from scripts.bcn_xml_parser import BCNXmlParser
-    parser = BCNXmlParser()
+    parser = BCNXmlParser(max_chunk_chars=max_chunk_chars)
     try:
         parsed = parser.parse(text)
     except Exception as exc:
@@ -263,6 +261,7 @@ def cmd_ingest_tier1(args) -> int:
     inline so operators can see what's actually happening.
     """
     import time
+
     from sqlalchemy import text
     SessionLocal = _get_session_factory()
     session = SessionLocal()
@@ -278,6 +277,26 @@ def cmd_ingest_tier1(args) -> int:
         }
     finally:
         session.close()
+
+    if args.force and already_ingested:
+        # Re-chunking path: wipe chunks for the targets before re-ingesting
+        # so the new (smaller) chunks don't collide on the
+        # (law_code, version_id, chunk_index) UNIQUE constraint. Norm +
+        # version rows are kept; only ``law_chunks`` is cleared.
+        del_session = SessionLocal()
+        try:
+            n_deleted = del_session.execute(
+                text("DELETE FROM law_chunks WHERE law_code = ANY(:ids)"),
+                {"ids": list(already_ingested)},
+            ).rowcount
+            del_session.commit()
+            logger.warning(
+                "--force: deleted %d existing chunks for %s",
+                n_deleted, sorted(already_ingested),
+            )
+        finally:
+            del_session.close()
+        already_ingested = set()
 
     targets = [bid for bid in TIER1_BCN_IDS if bid not in already_ingested]
     if not targets:
@@ -320,6 +339,99 @@ def cmd_ingest_tier1(args) -> int:
             logger.warning("  - %s: %s", bcn_id, reason)
 
     logger.info("done: %d total chunks across %d Tier 1 norms", total, len(targets))
+    return 0
+
+
+def cmd_ingest_tier2(args) -> int:
+    """Ingest every Tier 2 norm from the curated set in
+    ``scripts.discover_bcn_catalog``.
+
+    The list is curated (not auto-discovered) so the operator sees
+    exactly which laws are about to be ingested before running. See
+    ``scripts/discover_bcn_catalog.py::TIER2_BCN_IDS`` for the source
+    data. Idempotent: skips laws already present in the DB.
+    """
+    from scripts.discover_bcn_catalog import TIER2_BCN_IDS as RAW_TIER2
+
+    # Drop the (id, label, topic) tuple down to just ids and exclude
+    # any Tier 1 overlap (defensive — should already be empty).
+    tier2_ids = [bid for (bid, _label, _topic) in RAW_TIER2
+                 if bid not in TIER1_BCN_IDS]
+    if not tier2_ids:
+        logger.info("Tier 2 list is empty after Tier 1 exclusion — nothing to do")
+        return 0
+
+    import time
+
+    from sqlalchemy import text
+    SessionLocal = _get_session_factory()
+    session = SessionLocal()
+    try:
+        already_ingested = {
+            row[0]
+            for row in session.execute(text(
+                "SELECT DISTINCT nc.bcn_id FROM law_chunks lc "
+                "JOIN law_chunk_versions v ON v.id = lc.version_id "
+                "JOIN norm_catalog nc ON nc.id = v.norm_id "
+                "WHERE nc.bcn_id = ANY(:ids)"
+            ), {"ids": tier2_ids}).all()
+        }
+    finally:
+        session.close()
+
+    if args.force and already_ingested:
+        del_session = SessionLocal()
+        try:
+            n_deleted = del_session.execute(
+                text("DELETE FROM law_chunks WHERE law_code = ANY(:ids)"),
+                {"ids": list(already_ingested)},
+            ).rowcount
+            del_session.commit()
+            logger.warning(
+                "--force: deleted %d existing chunks for Tier 2 re-chunking",
+                n_deleted,
+            )
+        finally:
+            del_session.close()
+        already_ingested = set()
+
+    targets = [bid for bid in tier2_ids if bid not in already_ingested]
+    if not targets:
+        logger.info("all Tier 2 norms already ingested — nothing to do")
+        return 0
+
+    logger.info(
+        "ingesting %d Tier 2 norms (skipping %d already in DB)",
+        len(targets), len(already_ingested),
+    )
+    total = 0
+    failed: list[tuple[str, str]] = []
+    for bcn_id in targets:
+        t0 = time.monotonic()
+        try:
+            n = _ingest_one(
+                bcn_id=bcn_id,
+                catalog_rows={},
+                legal_area=args.legal_area,
+                max_chunk_chars=args.max_chunk_chars,
+                generate_embeddings=not args.no_embeddings,
+            )
+        except IngestError as exc:
+            logger.exception("ingest failed for %s: %s", bcn_id, exc)
+            failed.append((bcn_id, str(exc)))
+            continue
+        elapsed = time.monotonic() - t0
+        logger.info("  ✓ %s: %d chunks in %.1fs", bcn_id, n, elapsed)
+        total += n
+
+    if failed:
+        logger.warning(
+            "Tier 2 ingest: %d/%d norms failed", len(failed), len(targets),
+        )
+        for bcn_id, reason in failed:
+            logger.warning("  - %s: %s", bcn_id, reason)
+
+    logger.info("done: %d total chunks across %d Tier 2 norms", total, len(targets))
     return 0
 
 
@@ -385,7 +497,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_t1.add_argument("--legal-area", default="data_protection")
     p_t1.add_argument("--max-chunk-chars", type=int, default=2200)
     p_t1.add_argument("--no-embeddings", action="store_true")
+    p_t1.add_argument("--force", action="store_true",
+                      help="Delete existing chunks for the target before re-ingesting. "
+                           "Used to re-chunk with a different --max-chunk-chars value.")
     p_t1.set_defaults(func=cmd_ingest_tier1)
+
+    p_t2 = sub.add_parser("ingest-tier2", help="Ingest the curated Tier 2 norms (see discover_bcn_catalog.TIER2_BCN_IDS)")
+    p_t2.add_argument("--legal-area", default="data_protection")
+    p_t2.add_argument("--max-chunk-chars", type=int, default=2200)
+    p_t2.add_argument("--no-embeddings", action="store_true")
+    p_t2.add_argument("--force", action="store_true",
+                      help="Delete existing chunks for the target before re-ingesting.")
+    p_t2.set_defaults(func=cmd_ingest_tier2)
 
     p_sync = sub.add_parser("sync", help="Re-ingest norms changed since a date (alias for ingest-tier1 today)")
     p_sync.add_argument("--since", default="1970-01-01")

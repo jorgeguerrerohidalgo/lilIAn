@@ -51,7 +51,7 @@ from lxml import etree
 # class regardless of which parser produced it. Re-using the class
 # avoids an isinstance() mismatch where the XML parser's chunks are
 # rejected as "wrong type" by db_writer.upsert_chunks.
-from scripts.html_parser import ParsedChunk  # noqa: F401
+from scripts.html_parser import _INCISO_RE, ParsedChunk  # noqa: F401
 
 logger = logging.getLogger("lilian.bcn_xml_parser")
 
@@ -84,7 +84,7 @@ class BCNXmlParser:
 
     Usage::
 
-        parser = BCNXmlParser()
+        parser = BCNXmlParser(max_chunk_chars=2200)
         result = parser.parse(open("codigo_penal.xml").read())
         for chunk in result.chunks:
             print(chunk.hierarchy_path(), chunk.content[:80])
@@ -100,6 +100,77 @@ class BCNXmlParser:
     # we always use the streaming ``iterparse`` path even for
     # small-file callers — the cost is one extra branch.
     STREAMING_THRESHOLD_BYTES = 5 * 1024 * 1024
+
+    def __init__(self, *, max_chunk_chars: int = 2200) -> None:
+        self.max_chunk_chars = max_chunk_chars
+
+    def _split_oversized(
+        self,
+        *,
+        article_number: str,
+        libro: Optional[str],
+        titulo: Optional[str],
+        capitulo: Optional[str],
+        parent_hint: str,
+        body: str,
+        derogado: bool,
+        result: ParseResult,
+    ) -> list[ParsedChunk]:
+        """If ``body`` exceeds ``max_chunk_chars``, split at inciso
+        boundaries when available, else naive window. Mirrors the
+        logic in ``html_parser.HierarchicalParser._split_oversized``
+        so behaviour is consistent across both parsers."""
+        if len(body) <= self.max_chunk_chars:
+            return [ParsedChunk(
+                article_number=article_number,
+                libro=libro,
+                titulo=titulo,
+                capitulo=capitulo,
+                content=body.strip(),
+                parent_hint=parent_hint,
+                derogado=derogado,
+            )]
+
+        # First try to split at inciso boundaries (Latin American
+        # legal style: Inciso primero, Inciso segundo, ...).
+        inciso_matches = list(_INCISO_RE.finditer(body))
+        if len(inciso_matches) >= 2:
+            chunks = []
+            for i, m in enumerate(inciso_matches):
+                start = m.start()
+                end = inciso_matches[i + 1].start() if i + 1 < len(inciso_matches) else len(body)
+                sub = body[start:end].strip()
+                if sub:
+                    chunks.append(ParsedChunk(
+                        article_number=article_number,
+                        libro=libro,
+                        titulo=titulo,
+                        capitulo=capitulo,
+                        content=sub,
+                        parent_hint=parent_hint,
+                        derogado=derogado,
+                    ))
+            return chunks
+
+        # Naive window at max_chunk_chars, preserving word boundaries.
+        chunks = []
+        for k in range(0, len(body), self.max_chunk_chars):
+            sub = body[k:k + self.max_chunk_chars].rsplit(" ", 1)[0]
+            if sub:
+                chunks.append(ParsedChunk(
+                    article_number=article_number,
+                    libro=libro,
+                    titulo=titulo,
+                    capitulo=capitulo,
+                    content=sub,
+                    parent_hint=parent_hint,
+                    derogado=derogado,
+                ))
+        result.warnings.append(
+            f"article {article_number} exceeded max_chunk_chars "
+            f"({len(body)} chars); split naively"
+        )
+        return chunks
 
     def parse(self, xml_bytes: bytes | str) -> ParseResult:
         if isinstance(xml_bytes, str):
@@ -199,16 +270,16 @@ class BCNXmlParser:
                 filter(None, [current_libro, current_titulo, current_capitulo, titulo_parte])
             )
 
-            chunk = ParsedChunk(
+            result.chunks.extend(self._split_oversized(
                 article_number=article_num.strip(),
                 libro=current_libro,
                 titulo=current_titulo,
                 capitulo=current_capitulo,
-                content=texto.strip(),
                 parent_hint=parent_hint,
+                body=texto.strip(),
                 derogado=derogado,
-            )
-            result.chunks.append(chunk)
+                result=result,
+            ))
 
         # Number chunks globally (1-based) so the DB row order matches.
         for i, chunk in enumerate(result.chunks):
@@ -332,17 +403,16 @@ class BCNXmlParser:
             parent_hint = " ".join(
                 filter(None, [current_libro, current_titulo, current_capitulo, titulo_parte])
             )
-            result.chunks.append(
-                ParsedChunk(
-                    article_number=article_num.strip(),
-                    libro=current_libro,
-                    titulo=current_titulo,
-                    capitulo=current_capitulo,
-                    content=texto.strip(),
-                    parent_hint=parent_hint,
-                    derogado=derogado,
-                )
-            )
+            result.chunks.extend(self._split_oversized(
+                article_number=article_num.strip(),
+                libro=current_libro,
+                titulo=current_titulo,
+                capitulo=current_capitulo,
+                parent_hint=parent_hint,
+                body=texto.strip(),
+                derogado=derogado,
+                result=result,
+            ))
 
             # Release the element + its siblings so lxml can reuse the
             # memory. ``elem.getparent().clear()`` is a stronger
