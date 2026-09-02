@@ -435,6 +435,100 @@ def cmd_ingest_tier2(args) -> int:
     return 0
 
 
+def cmd_ingest_all(args) -> int:
+    """Ingest every norm that BCN publishes, minus the Tier 1 + Tier 2
+    sets already covered. This is Tier 3.
+
+    The list of bcn_ids comes from ``scripts.discover_bcn_catalog``
+    walking BCN's ``opt=3`` paginated catalog (typically ~6.700 rows).
+    Operators usually run it in two phases:
+
+    1. ``discover_bcn_catalog discover --output data/tier3_ids.json``
+       writes the candidate list (Tier 1 + Tier 2 already filtered out).
+    2. ``ingest_bcn_corpus ingest-all --from-file data/tier3_ids.json
+       --max-chunk-chars=800`` does the actual ingestion.
+
+    Estimated runtime at ~6 sec per BCN fetch + ~5 sec per parse is
+    10+ hours for the full ~6.000 corpus. Multi-session by design.
+    Idempotent: skips norms already present in the DB.
+    """
+    from scripts.discover_bcn_catalog import (
+        discover, TIER2_BCN_IDS as RAW_TIER2,
+    )
+    from scripts.ingest_bcn_corpus import TIER1_BCN_IDS
+
+    tier1 = set(TIER1_BCN_IDS)
+    tier2 = {bid for (bid, _l, _t) in RAW_TIER2}
+
+    if args.from_file:
+        import json
+        with open(args.from_file) as f:
+            payload = json.load(f)
+        ids = [e["bcn_id"] for e in payload if e.get("bcn_id")]
+        logger.info("loaded %d bcn_ids from %s", len(ids), args.from_file)
+    else:
+        from scripts.bcn_http_client import BCNHttpClient
+        client = BCNHttpClient()
+        entries = discover(client=client, page_size=100, max_pages=70)
+        ids = [e.bcn_id for e in entries]
+        logger.info("walked BCN catalog: %d candidates", len(ids))
+
+    targets = [bid for bid in ids if bid not in tier1 and bid not in tier2]
+    logger.info("after Tier 1+2 exclusion: %d norms to ingest", len(targets))
+
+    import time
+    from sqlalchemy import text
+    SessionLocal = _get_session_factory()
+    session = SessionLocal()
+    try:
+        already_ingested = {
+            row[0]
+            for row in session.execute(text(
+                "SELECT DISTINCT nc.bcn_id FROM law_chunks lc "
+                "JOIN law_chunk_versions v ON v.id = lc.version_id "
+                "JOIN norm_catalog nc ON nc.id = v.norm_id "
+                "WHERE nc.bcn_id = ANY(:ids)"
+            ), {"ids": targets[:5000]}).all()
+        }
+    finally:
+        session.close()
+
+    todo = [bid for bid in targets if bid not in already_ingested]
+    logger.info("after DB-existing exclusion: %d norms to ingest", len(todo))
+
+    if args.limit:
+        todo = todo[: args.limit]
+        logger.info("--limit: ingesting only first %d", len(todo))
+
+    total = 0
+    failed: list[tuple[str, str]] = []
+    for bcn_id in todo:
+        t0 = time.monotonic()
+        try:
+            n = _ingest_one(
+                bcn_id=bcn_id,
+                catalog_rows={},
+                legal_area=args.legal_area,
+                max_chunk_chars=args.max_chunk_chars,
+                generate_embeddings=not args.no_embeddings,
+            )
+        except IngestError as exc:
+            logger.warning("ingest failed for %s: %s", bcn_id, exc)
+            failed.append((bcn_id, str(exc)))
+            continue
+        elapsed = time.monotonic() - t0
+        logger.info("  ✓ %s: %d chunks in %.1fs", bcn_id, n, elapsed)
+        total += n
+
+    if failed:
+        logger.warning("Tier 3 ingest: %d/%d norms failed", len(failed), len(todo))
+        for bcn_id, reason in failed[:20]:
+            logger.warning("  - %s: %s", bcn_id, reason)
+
+    logger.info("done: %d total chunks across %d Tier 3 norms", total, len(todo))
+    return 0
+
+
 def cmd_sync(args) -> int:
     """Re-ingest norms whose ``last_synced_at`` is older than ``--since``.
 
@@ -509,6 +603,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_t2.add_argument("--force", action="store_true",
                       help="Delete existing chunks for the target before re-ingesting.")
     p_t2.set_defaults(func=cmd_ingest_tier2)
+
+    p_all = sub.add_parser(
+        "ingest-all",
+        help="Ingest every remaining norm (Tier 3). Multi-session by design.",
+    )
+    p_all.add_argument("--legal-area", default="data_protection")
+    p_all.add_argument("--max-chunk-chars", type=int, default=2200)
+    p_all.add_argument("--no-embeddings", action="store_true")
+    p_all.add_argument("--limit", type=int, default=None,
+                       help="Only ingest the first N norms (smoke test)")
+    p_all.add_argument("--from-file", default=None,
+                       help="Path to a JSON file produced by "
+                            "discover_bcn_catalog discover --output ... "
+                            "(skips the BCN catalog walk)")
+    p_all.set_defaults(func=cmd_ingest_all)
 
     p_sync = sub.add_parser("sync", help="Re-ingest norms changed since a date (alias for ingest-tier1 today)")
     p_sync.add_argument("--since", default="1970-01-01")

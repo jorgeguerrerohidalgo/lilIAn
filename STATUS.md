@@ -201,13 +201,32 @@ Ruteo via `TIER1_USE_IDLEY` en `ingest_bcn_corpus.py:TIER1_BCN_IDS`.
 | 2 | Tier 1 re-chunked 2200 -> 800 chars | 6350 chunks | 8666 chunks (+36.5%) | reindexed en ~5 min con batched API |
 | 3 | Tier 2 ingest (62 leyes curated) | 0 chunks | 215 chunks | reindexed en ~20s |
 | 4 | _do_generate_embeddings bug fix | 512-dim para short texts | siempre 1536-dim | el bug rompio el batched path |
+| 5 | `cmd_ingest_all` para Tier 3 implementado | n/a | ready | NO ejecutado: BCN opt=3 retorna 401 |
 
 **Total corpus: 14227 -> 16543 chunks (+16.3%), 100% con embeddings.**
 
+### Tier 3 — bloqueo de datos (2026-09-01 PM)
+
+`cmd_ingest_all` esta implementado pero **no se pudo ejecutar** en esta
+sesion. El problema:
+
+- BCN's `Consulta/obtxml?opt=3` (catalog feed) returns **HTTP 401**
+  desde este entorno.
+- `Consulta/obtxml?opt=7&idNorma=<N>` (single-norm XML) sigue
+  funcionando (200 OK).
+- Sin el catalog completo, no podemos enumerar los ~6.700 idNormas
+  necesarios para Tier 3.
+
+El script `cmd_ingest_all` acepta `--from-file <json>` que es la salida
+de `discover_bcn_catalog discover`. Si alguien puede exportar la lista
+completa desde un entorno con acceso a BCN, ese JSON se puede usar
+directamente.
+
 ### Mediano plazo (multiples sesiones)
-4. **Tier 3 — las ~6.000 normas restantes.** `cmd_ingest_all`. Esta es la
-   unica palanca grande para subir el recall. Estimado: 12+ horas de
-   ingestion secuencial (cada idNorma requiere HTTP request a BCN).
+4. **Tier 3 — las ~6.000 normas restantes.** `cmd_ingest_all` listo pero
+   requiere un JSON con la lista de idNormas (output de
+   `discover_bcn_catalog discover`). Ver "Tier 3 — bloqueo de datos"
+   arriba.
 
 ### Diagnostico pendiente
 - **Por que 172986 (Codigo Civil) rinde 3198 chunks pero el XML tiene 3151
